@@ -38,7 +38,9 @@
 
       /* Control bar */
       #bar { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #121216; border-top: 1px solid #25252b; flex-wrap: nowrap; }
-      #bar .brand { font-weight: 700; letter-spacing: 0.04em; color: #5eead4; font-size: 14px; }
+      #bar .brandwrap { display: flex; align-items: center; gap: 8px; }
+      #bar .brand-mark { height: 24px; width: auto; display: block; }
+      #bar .brand { font-weight: 700; letter-spacing: 0.04em; color: #e8e8ea; font-size: 14px; }
       #bar .play { width: 44px; height: 38px; font-size: 16px; }
       #scrub { flex: 1; min-width: 120px; accent-color: #5eead4; height: 6px; }
       #tc { font-variant-numeric: tabular-nums; font-size: 14px; color: #b9b9c0; min-width: 128px; text-align: center; }
@@ -84,7 +86,7 @@
       </div>
 
       <div id="bar">
-        <span class="brand">VELLUM</span>
+        <span class="brandwrap"><img class="brand-mark" alt="" /><span class="brand">VELLUM</span></span>
         <button id="prev-scene" title="Previous scene (↑)">⏮</button>
         <button class="play" id="play" title="Play / pause (space)">▶</button>
         <button id="next-scene" title="Next scene (↓)">⏭</button>
@@ -116,6 +118,16 @@
     <script type="module">
       const API = "/api/notes";
       const RUNTIME = "/node_modules/hyperframes/dist/hyperframe.runtime.iife.js";
+
+      // Vellum mark (stacked "vellum" sheets forming a V) — used as favicon + bar icon.
+      const MARK = "data:image/png;base64,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";
+      (() => {
+        const fav = document.createElement("link");
+        fav.rel = "icon"; fav.type = "image/png"; fav.href = MARK;
+        document.head.appendChild(fav);
+        const bm = document.querySelector(".brand-mark");
+        if (bm) bm.src = MARK;
+      })();
       const stage = document.getElementById("stage");
       const pins = document.getElementById("pins");
       const dragbox = document.getElementById("dragbox");

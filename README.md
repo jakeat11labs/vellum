@@ -1,6 +1,6 @@
 <div align="center">
 
-# Vellum
+<img src="assets/logo-banner.png" alt="Vellum" width="600" />
 
 ### A transparent review-and-annotate layer for [HyperFrames](https://hyperframes.heygen.com) videos.
 
