@@ -1,0 +1,24 @@
+install.sh
+  s_6ad70e01c175e0::t_d8450b30f65826 1-53
+package.json
+  s_6ad70e01c175e0::t_42d5b3569b9e03 26
+README.md
+  s_6ad70e01c175e0::t_52e3e4867870ff 52,54-63,73
+  s_6ad70e01c175e0::t_57fe374490ff97 82-84
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "8b78759181d7d6a640e3f1d5a69b961f18edd9c8",
+  "prompts": {},
+  "sessions": {
+    "s_6ad70e01c175e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9262bb91-6d6a-4c0f-b300-f4adc8002f27",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
