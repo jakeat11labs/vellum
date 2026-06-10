@@ -49,40 +49,49 @@ Because it mounts your actual composition, notes always line up with what's on s
 
 ## Install
 
-Vellum is distributed as a [shadcn GitHub registry](https://ui.shadcn.com/docs/registry/github) — install it straight from this repo into your HyperFrames project:
+Vellum is a couple of small, zero-dependency scripts plus an agent skill. Pick whichever fits your setup.
+
+### Option A — clone & run (works with any project)
 
 ```bash
-# the tool (server + player + review-packet builder)
-npx shadcn@latest add github:jakeat11labs/vellum/vellum
-
-# the agent skill — teaches Claude Code / Cursor how to apply your notes
-npx shadcn@latest add github:jakeat11labs/vellum/vellum-skill
+git clone https://github.com/jakeat11labs/vellum.git
+# then, from your HyperFrames project root:
+node /path/to/vellum/scripts/vellum-server.mjs
 ```
 
-Or run it with zero install via npm:
+Or just copy `scripts/` (and `skills/vellum/` for the agent) into your project. Nothing to build — the server is pure Node.
+
+### Option B — shadcn registry
+
+If your project already uses [shadcn/ui](https://ui.shadcn.com/docs/registry/github), pull Vellum straight from this repo:
 
 ```bash
-npx vellum-hf        # from your HyperFrames project root
+npx shadcn@latest add jakeat11labs/vellum/vellum         # the tool
+npx shadcn@latest add jakeat11labs/vellum/vellum-skill   # the agent skill
 ```
+
+> shadcn writes the files to the right targets, but expects a shadcn-style project — a `components.json` and a `jsconfig.json`/`tsconfig.json`. On a plain HTML project it offers to create `components.json` for you; if you don't already use shadcn, **Option A is simpler.**
 
 > **Requirements:** a HyperFrames project (an `index.html` composition and `node_modules/hyperframes` installed). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
 
 ### Try the included demo
 
-This repo ships a tiny self-contained composition at [`examples/demo/`](examples/demo/) — the one pictured above. With the HyperFrames runtime available (`node_modules/hyperframes`), point Vellum at it:
+This repo ships a tiny self-contained composition at [`examples/demo/`](examples/demo/) — the one pictured above. From a checkout with the HyperFrames runtime available (`npm i hyperframes`), point Vellum at it:
 
 ```bash
-VELLUM_DIR=examples/demo npx vellum-hf
+VELLUM_DIR=examples/demo node scripts/vellum-server.mjs
 ```
 
 ## Use
 
-From your HyperFrames project root:
+From your HyperFrames project root (adjust the path to where you cloned/copied Vellum):
 
 ```bash
-npx vellum                      # composition is ./index.html
-VELLUM_DIR=M01L01 npx vellum    # monorepo: composition is ./M01L01/index.html
+node scripts/vellum-server.mjs                    # composition is ./index.html
+VELLUM_DIR=M01L01 node scripts/vellum-server.mjs  # monorepo: ./M01L01/index.html
 ```
+
+> Installed Vellum as a package instead? The `vellum` and `vellum-review` bins run the same scripts.
 
 Open the printed URL (`http://localhost:4848/…`). Then:
 
@@ -113,7 +122,7 @@ Once you've left notes, tell your coding agent:
 With the `vellum-skill` installed, the agent will read `notes/annotations.md`, optionally render a **visual review packet** (each note's frame with the marker drawn on it)…
 
 ```bash
-npx vellum-review        # → notes/review/note-<id>.png + INDEX.md
+node scripts/vellum-review.mjs        # → notes/review/note-<id>.png + INDEX.md
 ```
 
 …and then edit the composition to satisfy each note, using the `hyperframes` / `hyperframes-cli` skills for the actual edit and verification. Vellum is the *what-and-where*; those skills are the *how*.

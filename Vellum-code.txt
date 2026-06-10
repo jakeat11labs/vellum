@@ -1,0 +1,1451 @@
+Directory structure:
+└── vellum/
+    ├── README.md
+    ├── LICENSE
+    ├── package.json
+    ├── registry.json
+    ├── examples/
+    │   └── demo/
+    │       └── index.html
+    ├── scripts/
+    │   ├── vellum-review.mjs
+    │   ├── vellum-server.mjs
+    │   └── vellum-template.html
+    └── skills/
+        └── vellum/
+            └── SKILL.md
+
+================================================
+FILE: README.md
+================================================
+<div align="center">
+
+# Vellum
+
+### A transparent review-and-annotate layer for [HyperFrames](https://hyperframes.heygen.com) videos.
+
+**Pin time-coded notes onto any frame of your composition — then your coding agent reads them back and makes the edits.**
+
+<img src="docs/screenshot-player.png" alt="Vellum review player — a HyperFrames composition with a pinned note and the notes drawer open" width="820" />
+
+<sub>Scrub the real composition · pin point or region notes on any frame · balance the audio mix live · hand the notes to your agent.</sub>
+
+</div>
+
+---
+
+## Why
+
+Reviewing a generated video is a visual, time-based act — *"this caption lands late," "make this bubble bigger," "cut two seconds here."* That feedback is hard to type into a chat box and even harder for an agent to act on, because it has no idea **where** or **when** you meant.
+
+Vellum closes that loop. It lays a transparent layer over your *real* HyperFrames composition (not a render — the live thing, driven by the HyperFrames runtime). You scrub, click a spot or drag a box, and type the note. Vellum captures the exact **composition time**, the **on-screen element** you pointed at (tag, class, text), and the **pin/box coordinates**, then writes it all to a file your coding agent can read.
+
+```
+   You (human)                    Vellum                      Your agent
+ ───────────────            ─────────────────           ──────────────────────
+  scrub + pin a    ──────▶   notes/annotations.md  ──────▶  reads the notes,
+  note on a frame            notes/annotations.json         edits index.html,
+                             notes/mix.json                 verifies the fix
+```
+
+## How it lays on top of HyperFrames
+
+Vellum never touches your composition. It loads your real `index.html` in an **iframe**, injects the HyperFrames runtime exactly as Studio and the renderer do, and floats an invisible pin layer over the top:
+
+```
+        ┌───────────────────────────────────────┐
+        │   PIN LAYER  (transparent overlay)     │  ← Vellum
+        │     • click = drop a pin 📍            │
+        │     • drag  = draw a region ▢          │
+        │   ┌───────────────────────────────┐   │
+        │   │  your real index.html, running │   │  ← unmodified HyperFrames
+        │   │  in an iframe via the runtime  │   │     (its own scripts, timeline,
+        │   │  + GSAP timeline               │   │      audio — exactly as authored)
+        │   └───────────────────────────────┘   │
+        └───────────────────────────────────────┘
+```
+
+Because it mounts your actual composition, notes always line up with what's on screen — and it works for **any** HyperFrames project with no per-project configuration. Scenes are read from the `data-start` attributes every composition already has.
+
+## Install
+
+Vellum is distributed as a [shadcn GitHub registry](https://ui.shadcn.com/docs/registry/github) — install it straight from this repo into your HyperFrames project:
+
+```bash
+# the tool (server + player + review-packet builder)
+npx shadcn@latest add github:jakeat11labs/vellum/vellum
+
+# the agent skill — teaches Claude Code / Cursor how to apply your notes
+npx shadcn@latest add github:jakeat11labs/vellum/vellum-skill
+```
+
+Or run it with zero install via npm:
+
+```bash
+npx vellum-hf        # from your HyperFrames project root
+```
+
+> **Requirements:** a HyperFrames project (an `index.html` composition and `node_modules/hyperframes` installed). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
+
+### Try the included demo
+
+This repo ships a tiny self-contained composition at [`examples/demo/`](examples/demo/) — the one pictured above. With the HyperFrames runtime available (`node_modules/hyperframes`), point Vellum at it:
+
+```bash
+VELLUM_DIR=examples/demo npx vellum-hf
+```
+
+## Use
+
+From your HyperFrames project root:
+
+```bash
+npx vellum                      # composition is ./index.html
+VELLUM_DIR=M01L01 npx vellum    # monorepo: composition is ./M01L01/index.html
+```
+
+Open the printed URL (`http://localhost:4848/…`). Then:
+
+| Action | How |
+|---|---|
+| Play / pause | `Space` or ▶ |
+| Scrub frame-by-frame | `←` / `→` (hold `Shift` for 1s steps) |
+| Jump between scenes | `↑` / `↓` |
+| **Add a note** | click **＋ Add note**, then click a spot (pin) or drag a box (region), and type |
+| Balance the mix | drag the 🎙 voice / 🎵 music sliders, then **Save mix** |
+| Review your notes | open the **Notes** drawer; click any note to jump to its frame |
+
+Everything you pin is written to:
+
+```
+<composition>/notes/
+├── annotations.md      # human-readable cue sheet (times, scenes, targets, text)
+├── annotations.json    # structured notes for tooling
+└── mix.json            # saved voice/music levels (if you hit "Save mix")
+```
+
+## Hand it to your agent
+
+Once you've left notes, tell your coding agent:
+
+> *"Address my Vellum review notes."*
+
+With the `vellum-skill` installed, the agent will read `notes/annotations.md`, optionally render a **visual review packet** (each note's frame with the marker drawn on it)…
+
+```bash
+npx vellum-review        # → notes/review/note-<id>.png + INDEX.md
+```
+
+…and then edit the composition to satisfy each note, using the `hyperframes` / `hyperframes-cli` skills for the actual edit and verification. Vellum is the *what-and-where*; those skills are the *how*.
+
+## Where Vellum sits in the toolchain
+
+| Skill / tool | Owns |
+|---|---|
+| `hyperframes` | building & editing the composition |
+| `hyperframes-cli` | `lint`, `preview`, `snapshot`, `render` |
+| **`vellum`** | receiving human review feedback and turning it into edits |
+
+Vellum is a **companion**, not a replacement — it defers to the HyperFrames skills for everything that changes the video.
+
+## How it works (for the curious)
+
+- **Zero runtime dependencies** — the server is pure Node built-ins; the player pulls only the HyperFrames runtime your project already has.
+- **Local-only by design** — binds to `127.0.0.1`, sends no CORS headers, and guards against path traversal. The notes API can't be reached from another origin.
+- **Faithful playback** — supports HTTP Range requests so audio/video seek correctly, and re-asserts each audio clip's state every frame so scrubbing into the middle of a clip still plays (the preview runtime only starts a clip when playback *crosses* its start).
+- **Scene-aware markers** — a pin only appears while its own scene is on screen, so markers don't float across the whole timeline.
+
+## License
+
+MIT © Jake Rains
+
+
+
+================================================
+FILE: LICENSE
+================================================
+MIT License
+
+Copyright (c) 2026 Jake Rains
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+
+================================================
+FILE: package.json
+================================================
+{
+  "name": "vellum-hf",
+  "version": "0.1.0",
+  "description": "A transparent review-and-annotate layer for HyperFrames videos — pin time-coded notes your coding agent can read.",
+  "type": "module",
+  "bin": {
+    "vellum": "scripts/vellum-server.mjs"
+  },
+  "scripts": {
+    "annotate": "node scripts/vellum-server.mjs",
+    "review": "node scripts/vellum-review.mjs"
+  },
+  "keywords": [
+    "hyperframes",
+    "video",
+    "annotation",
+    "review",
+    "agent",
+    "ai",
+    "feedback"
+  ],
+  "files": [
+    "scripts/",
+    "skills/",
+    "registry.json",
+    "README.md"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jakeat11labs/vellum.git"
+  },
+  "homepage": "https://github.com/jakeat11labs/vellum#readme",
+  "engines": {
+    "node": ">=18"
+  }
+}
+
+
+
+================================================
+FILE: registry.json
+================================================
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "vellum",
+  "homepage": "https://github.com/jakeat11labs/vellum",
+  "items": [
+    {
+      "name": "vellum",
+      "type": "registry:file",
+      "title": "Vellum — HyperFrames review & annotate",
+      "description": "A transparent review-and-annotate layer for HyperFrames videos. Pin time-coded notes on any frame; your coding agent reads them back. Installs the local server, the player, and the review-packet builder.",
+      "files": [
+        {
+          "path": "scripts/vellum-server.mjs",
+          "type": "registry:file",
+          "target": "scripts/vellum-server.mjs"
+        },
+        {
+          "path": "scripts/vellum-template.html",
+          "type": "registry:file",
+          "target": "scripts/vellum-template.html"
+        },
+        {
+          "path": "scripts/vellum-review.mjs",
+          "type": "registry:file",
+          "target": "scripts/vellum-review.mjs"
+        }
+      ]
+    },
+    {
+      "name": "vellum-skill",
+      "type": "registry:file",
+      "title": "Vellum agent skill",
+      "description": "Teaches a coding agent (Claude Code / Cursor) how to drive Vellum: start the server, read notes/annotations.md, render the review packet, and apply each note to the composition.",
+      "files": [
+        {
+          "path": "skills/vellum/SKILL.md",
+          "type": "registry:file",
+          "target": ".claude/skills/vellum/SKILL.md"
+        }
+      ]
+    }
+  ]
+}
+
+
+
+================================================
+FILE: examples/demo/index.html
+================================================
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Vellum demo composition</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      /* A small, self-contained HyperFrames composition used to demo Vellum.
+         No external brand kit — just inline styles so it runs anywhere. */
+      * { margin: 0; box-sizing: border-box; }
+      #root { font-family: "Inter", -apple-system, "Helvetica Neue", Arial, sans-serif; color: #fff; }
+      .scene { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      .bg { position: absolute; inset: 0; }
+      .grad-a { background: radial-gradient(1200px 700px at 30% 20%, #3b2f6b 0%, #1a1730 55%, #0e0c1c 100%); }
+      .grad-b { background: linear-gradient(135deg, #11101e 0%, #1b1840 100%); }
+      .grad-c { background: radial-gradient(900px 600px at 70% 60%, #2a2350 0%, #12101f 70%); }
+      .eyebrow { text-transform: uppercase; letter-spacing: 0.32em; font-size: 24px; font-weight: 600; color: #a89bff; margin-bottom: 28px; }
+      .title { font-size: 116px; font-weight: 700; line-height: 1.02; letter-spacing: -0.02em; text-align: center; }
+      .title .acc { color: #8b7dff; }
+      .subtitle { font-size: 34px; font-weight: 300; color: rgba(255,255,255,0.66); margin-top: 34px; text-align: center; }
+      .col { display: flex; flex-direction: column; align-items: center; padding: 0 120px; }
+      .cards { display: flex; gap: 40px; }
+      .card { width: 420px; padding: 52px 44px; border-radius: 22px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); }
+      .card .dot { width: 56px; height: 56px; border-radius: 14px; background: linear-gradient(135deg, #8b7dff, #5b4bd6); margin-bottom: 30px; }
+      .card h3 { font-size: 42px; font-weight: 600; margin-bottom: 16px; }
+      .card p { font-size: 24px; font-weight: 300; line-height: 1.5; color: rgba(255,255,255,0.6); }
+      .stat { font-size: 240px; font-weight: 700; letter-spacing: -0.03em; background: linear-gradient(135deg, #b9aefff0, #6f5fe6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .stat-label { font-size: 40px; font-weight: 300; color: rgba(255,255,255,0.7); margin-top: 8px; }
+      .wordmark { font-size: 72px; font-weight: 700; letter-spacing: -0.01em; }
+      .cta { margin-top: 40px; font-size: 30px; font-weight: 600; color: #0e0c1c; background: #8b7dff; padding: 22px 52px; border-radius: 999px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="21" data-width="1920" data-height="1080">
+      <!-- Scene 1 — title -->
+      <section id="title" class="scene clip" data-start="0" data-duration="6" data-track-index="1" style="z-index: 10">
+        <div class="bg grad-a"></div>
+        <div class="col">
+          <div class="eyebrow" data-anim="up">Product Tour</div>
+          <div class="title" data-anim="up">Build it once.<br /><span class="acc">Ship everywhere.</span></div>
+          <div class="subtitle" data-anim="up">A short story about moving faster.</div>
+        </div>
+      </section>
+
+      <!-- Scene 2 — features -->
+      <section id="features" class="scene clip" data-start="6" data-duration="6" data-track-index="2" style="z-index: 9">
+        <div class="bg grad-b"></div>
+        <div class="cards">
+          <div class="card" data-anim="up"><div class="dot"></div><h3>Fast</h3><p>Iterate in seconds, not days. Preview every change instantly.</p></div>
+          <div class="card" data-anim="up"><div class="dot"></div><h3>Flexible</h3><p>Compose anything. Bring your own components and data.</p></div>
+          <div class="card" data-anim="up"><div class="dot"></div><h3>Reliable</h3><p>Deterministic output you can render and trust, every time.</p></div>
+        </div>
+      </section>
+
+      <!-- Scene 3 — stat -->
+      <section id="stat" class="scene clip" data-start="12" data-duration="5" data-track-index="3" style="z-index: 8">
+        <div class="bg grad-c"></div>
+        <div class="col">
+          <div class="stat" data-anim="up">10&times;</div>
+          <div class="stat-label" data-anim="up">faster review cycles</div>
+        </div>
+      </section>
+
+      <!-- Scene 4 — outro -->
+      <section id="outro" class="scene clip" data-start="17" data-duration="4" data-track-index="4" style="z-index: 7">
+        <div class="bg grad-a"></div>
+        <div class="col">
+          <div class="wordmark" data-anim="up">Acme Studio</div>
+          <div class="cta" data-anim="up">Get started</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // Build a paused GSAP timeline and register it the way HyperFrames expects.
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const SCENES = [
+        { id: "title", start: 0 },
+        { id: "features", start: 6 },
+        { id: "stat", start: 12 },
+        { id: "outro", start: 17 },
+      ];
+      for (const s of SCENES) {
+        const items = document.querySelectorAll(`#${s.id} [data-anim="up"]`);
+        tl.fromTo(
+          items,
+          { opacity: 0, y: 40 },
+          { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease: "power3.out" },
+          s.start + 0.3
+        );
+      }
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>
+
+
+
+================================================
+FILE: scripts/vellum-review.mjs
+================================================
+#!/usr/bin/env node
+/**
+ * Vellum — build a visual review packet from the saved annotation notes.
+ *
+ * For each note it renders the authoritative composition frame at the note's time
+ * (via `hyperframes snapshot`) and draws the note's pin/region marker onto it
+ * (via ffmpeg drawbox), so a coding agent can SEE exactly what each note points at.
+ *
+ * Output: <comp>/notes/review/note-<id>.png  +  <comp>/notes/review/INDEX.md
+ *
+ * Run from your HyperFrames project root:  npx vellum-review   (or: node scripts/vellum-review.mjs)
+ *   VELLUM_DIR=M01L01 node scripts/vellum-review.mjs   # monorepo
+ *
+ * External processes are invoked with argument ARRAYS (no shell string interpolation);
+ * all marker coordinates are numbers derived from the note percentages.
+ */
+
+import fs from "node:fs";
+import path from "node:path";
+import { spawnSync } from "node:child_process";
+
+const ROOT = process.cwd();
+const COMP_DIR = (process.env.VELLUM_DIR || "").replace(/^\/+|\/+$/g, "");
+const COMP = path.join(ROOT, COMP_DIR);
+const NOTES_JSON = path.join(COMP, "notes", "annotations.json");
+const SNAP_DIR = path.join(COMP, "snapshots");
+const OUT_DIR = path.join(COMP, "notes", "review");
+const ACCENT = "0x5EEAD4";
+
+// Composition pixel size — read from index.html #root, default 1920x1080.
+function compSize() {
+  try {
+    const html = fs.readFileSync(path.join(COMP, "index.html"), "utf8");
+    const w = Number((/data-width="(\d+)"/.exec(html) || [])[1]) || 1920;
+    const h = Number((/data-height="(\d+)"/.exec(html) || [])[1]) || 1080;
+    return { W: w, H: h };
+  } catch {
+    return { W: 1920, H: 1080 };
+  }
+}
+const { W, H } = compSize();
+
+function fmt(t) {
+  const m = Math.floor(t / 60);
+  const s = t % 60;
+  return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+}
+
+function readNotes() {
+  try {
+    return JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+// Render the composition frame at time t; return the path to the produced PNG.
+function snapshot(t) {
+  const before = new Set(fs.existsSync(SNAP_DIR) ? fs.readdirSync(SNAP_DIR) : []);
+  const r = spawnSync("npx", ["hyperframes", "snapshot", "--at", String(t)], { cwd: COMP, encoding: "utf8" });
+  if (r.status !== 0) {
+    console.error(`  snapshot @ ${t}s failed: ${(r.stderr || r.stdout || "").trim().split("\n").pop()}`);
+    return null;
+  }
+  const pngs = fs.existsSync(SNAP_DIR) ? fs.readdirSync(SNAP_DIR).filter((f) => f.endsWith(".png")) : [];
+  const fresh = pngs.filter((f) => !before.has(f));
+  const pick = (fresh.length ? fresh : pngs)
+    .map((f) => ({ f, m: fs.statSync(path.join(SNAP_DIR, f)).mtimeMs }))
+    .sort((a, b) => b.m - a.m)[0];
+  return pick ? path.join(SNAP_DIR, pick.f) : null;
+}
+
+// Draw the note's marker (pin dot or region box) onto the snapshot.
+function drawMarker(srcPng, note, outPng) {
+  let filter;
+  if (note.w != null) {
+    const x = Math.round((note.x / 100) * W);
+    const y = Math.round((note.y / 100) * H);
+    const w = Math.round((note.w / 100) * W);
+    const h = Math.round((note.h / 100) * H);
+    filter = `drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${ACCENT}@1.0:t=5`;
+  } else if (note.x != null) {
+    const cx = Math.round((note.x / 100) * W);
+    const cy = Math.round((note.y / 100) * H);
+    const s = 40;
+    filter = `drawbox=x=${cx - s}:y=${cy - s}:w=${s * 2}:h=${s * 2}:color=${ACCENT}@1.0:t=5`;
+  } else {
+    // no coordinates — just copy the frame
+    fs.copyFileSync(srcPng, outPng);
+    return true;
+  }
+  const r = spawnSync("ffmpeg", ["-y", "-i", srcPng, "-vf", filter, outPng], { encoding: "utf8" });
+  if (r.status !== 0) {
+    console.error(`  ffmpeg draw failed for note ${note.id}: ${(r.stderr || "").trim().split("\n").pop()}`);
+    return false;
+  }
+  return true;
+}
+
+function main() {
+  const notes = readNotes().sort((a, b) => a.time - b.time);
+  if (!notes.length) {
+    console.log("No notes to render. Pin some in the Vellum player first.");
+    return;
+  }
+  fs.mkdirSync(OUT_DIR, { recursive: true });
+  const index = [`# Review packet${COMP_DIR ? ` — ${COMP_DIR}` : ""}`, "", `${notes.length} note(s).`, ""];
+
+  notes.forEach((n, i) => {
+    console.log(`[${i + 1}/${notes.length}] ${fmt(n.time)} — ${n.text.slice(0, 60)}`);
+    const snap = snapshot(n.time);
+    const out = path.join(OUT_DIR, `note-${n.id}.png`);
+    let drawn = false;
+    if (snap) drawn = drawMarker(snap, n, out);
+    const where = n.w != null ? `box ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%,${n.y}%` : "—";
+    const tgt = n.target ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`` : "";
+    index.push(`### ${i + 1}. ${fmt(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
+    index.push("");
+    index.push(`${n.text}`);
+    index.push("");
+    index.push(`_(${where}${tgt})_`);
+    if (drawn) index.push("", `![note ${n.id}](note-${n.id}.png)`);
+    index.push("");
+  });
+
+  fs.writeFileSync(path.join(OUT_DIR, "INDEX.md"), index.join("\n"));
+  console.log(`\nWrote ${notes.length} frame(s) → ${path.relative(ROOT, OUT_DIR)}/  (see INDEX.md)`);
+}
+
+main();
+
+
+
+================================================
+FILE: scripts/vellum-server.mjs
+================================================
+#!/usr/bin/env node
+/**
+ * Vellum — review/annotation server for HyperFrames compositions.
+ *
+ *  - Serves the user's project statically (index.html, assets, node_modules/hyperframes
+ *    runtime) so the review player can mount the real composition in an iframe.
+ *  - Collects time-coded review notes posted by the player and persists them to
+ *    <comp>/notes/annotations.json (+ a readable annotations.md) for a coding agent to read.
+ *  - Stores a saved voice/music mix to <comp>/notes/mix.json.
+ *
+ * Zero dependencies — Node built-ins only. Run from your HyperFrames project root:
+ *   npx vellum                 # composition is ./index.html
+ *   VELLUM_DIR=M01L01 npx vellum   # composition is ./M01L01/index.html (monorepo)
+ * Then open the printed URL.
+ *
+ * Local-only by design: binds to 127.0.0.1, no CORS headers, path-traversal guarded.
+ */
+
+import http from "node:http";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
+const COMP_DIR = (process.env.VELLUM_DIR || "").replace(/^\/+|\/+$/g, ""); // optional subdir
+const PORT = Number(process.env.VELLUM_PORT) || 4848;
+const COMP_ABS = path.join(ROOT, COMP_DIR);
+const NOTES_DIR = path.join(COMP_ABS, "notes");
+const NOTES_JSON = path.join(NOTES_DIR, "annotations.json");
+const NOTES_MD = path.join(NOTES_DIR, "annotations.md");
+const MIX_JSON = path.join(NOTES_DIR, "mix.json");
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const TEMPLATE_FILE = path.join(HERE, "vellum-template.html");
+// Path the player opens — "/annotate.html" at root, or "/<dir>/annotate.html" in a monorepo.
+const ANNOTATE_PATH = COMP_DIR ? `/${COMP_DIR}/annotate.html` : "/annotate.html";
+
+const MIME = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "text/javascript; charset=utf-8",
+  ".mjs": "text/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".webp": "image/webp",
+  ".gif": "image/gif",
+  ".mp3": "audio/mpeg",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
+  ".woff": "font/woff",
+  ".woff2": "font/woff2",
+  ".otf": "font/otf",
+  ".ttf": "font/ttf",
+};
+
+function fmtTime(t) {
+  const total = Math.max(0, Number(t) || 0);
+  const m = Math.floor(total / 60);
+  const s = total % 60;
+  return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+}
+
+function readNotes() {
+  try {
+    return JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
+  } catch {
+    return [];
+  }
+}
+
+function writeNotes(notes) {
+  fs.mkdirSync(NOTES_DIR, { recursive: true });
+  fs.writeFileSync(NOTES_JSON, `${JSON.stringify(notes, null, 2)}\n`);
+  const sorted = [...notes].sort((a, b) => a.time - b.time);
+  const md = [
+    `# Review notes${COMP_DIR ? ` — ${COMP_DIR}` : ""}`,
+    "",
+    `${notes.length} note(s). Times are composition-time (M:SS.ss).`,
+    "",
+    ...sorted.map((n) => {
+      const where = n.w != null ? `box ${n.x},${n.y} ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%, ${n.y}%` : "";
+      const tgt = n.target
+        ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`${n.target.text ? ` “${n.target.text}”` : ""}`
+        : "";
+      return `- **${fmtTime(n.time)}**${n.scene ? ` \`${n.scene}\`` : ""} — ${n.text}${where ? `  _(${where})_` : ""}${tgt}`;
+    }),
+    "",
+  ].join("\n");
+  fs.writeFileSync(NOTES_MD, md);
+}
+
+function sendJson(res, code, body) {
+  // No CORS headers: the player is served from this same origin, so cross-origin
+  // requests are rejected by the browser — keeps the notes API local-only.
+  res.writeHead(code, { "content-type": "application/json; charset=utf-8" });
+  res.end(JSON.stringify(body));
+}
+
+function readBody(req, res, limit, done) {
+  let body = "";
+  req.on("data", (c) => {
+    body += c;
+    if (body.length > limit) req.destroy();
+  });
+  req.on("end", () => {
+    let parsed;
+    try {
+      parsed = JSON.parse(body);
+    } catch {
+      return sendJson(res, 400, { error: "invalid json" });
+    }
+    done(parsed);
+  });
+}
+
+function handleNotes(req, res) {
+  if (req.method === "OPTIONS") return sendJson(res, 204, {});
+  if (req.method === "GET") return sendJson(res, 200, readNotes());
+  if (req.method === "DELETE") {
+    writeNotes([]);
+    return sendJson(res, 200, { ok: true, notes: [] });
+  }
+  if (req.method === "POST") {
+    return readBody(req, res, 1e6, (parsed) => {
+      const text = String(parsed.text ?? "").slice(0, 2000).trim();
+      if (!text) return sendJson(res, 400, { error: "empty note" });
+      const num = (v) => (v == null ? null : Math.round(Number(v) * 10) / 10);
+      let target = null;
+      if (parsed.target && typeof parsed.target === "object") {
+        target = {
+          tag: String(parsed.target.tag ?? "").slice(0, 20),
+          cls: String(parsed.target.cls ?? "").slice(0, 120),
+          text: String(parsed.target.text ?? "").slice(0, 120),
+        };
+      }
+      const notes = readNotes();
+      const note = {
+        id: notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1,
+        time: Number(parsed.time) || 0,
+        x: num(parsed.x),
+        y: num(parsed.y),
+        w: num(parsed.w),
+        h: num(parsed.h),
+        scene: parsed.scene ? String(parsed.scene).slice(0, 60) : null,
+        target,
+        text,
+        createdAt: new Date().toISOString(),
+      };
+      notes.push(note);
+      writeNotes(notes);
+      return sendJson(res, 201, note);
+    });
+  }
+  return sendJson(res, 405, { error: "method not allowed" });
+}
+
+function handleMix(req, res) {
+  if (req.method === "OPTIONS") return sendJson(res, 204, {});
+  if (req.method === "GET") {
+    try {
+      return sendJson(res, 200, JSON.parse(fs.readFileSync(MIX_JSON, "utf8")));
+    } catch {
+      return sendJson(res, 200, {});
+    }
+  }
+  if (req.method === "POST") {
+    return readBody(req, res, 1e5, (parsed) => {
+      const clamp = (v, d) => (v == null ? d : Math.min(1, Math.max(0, Number(v))));
+      const mix = { voice: clamp(parsed.voice, 1), music: clamp(parsed.music, 0.2), savedAt: new Date().toISOString() };
+      fs.mkdirSync(NOTES_DIR, { recursive: true });
+      fs.writeFileSync(MIX_JSON, `${JSON.stringify(mix, null, 2)}\n`);
+      return sendJson(res, 201, mix);
+    });
+  }
+  return sendJson(res, 405, { error: "method not allowed" });
+}
+
+function serveTemplate(res) {
+  let html;
+  try {
+    html = fs.readFileSync(TEMPLATE_FILE, "utf8");
+  } catch {
+    res.writeHead(500);
+    return res.end("vellum-template.html missing");
+  }
+  res.writeHead(200, { "content-type": "text/html; charset=utf-8", "cache-control": "no-cache" });
+  res.end(html);
+}
+
+function serveStatic(req, res) {
+  let pathname;
+  try {
+    pathname = decodeURIComponent(new URL(req.url, "http://localhost").pathname);
+  } catch {
+    res.writeHead(400);
+    return res.end("bad request");
+  }
+
+  // The player template — served for "/" and any "<dir>/annotate.html".
+  if (pathname === "/" || pathname === ANNOTATE_PATH || /\/annotate\.html$/.test(pathname)) {
+    return serveTemplate(res);
+  }
+
+  const full = path.normalize(path.join(ROOT, pathname));
+  // Path-traversal guard: the resolved path must stay within ROOT.
+  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) {
+    res.writeHead(403);
+    return res.end("forbidden");
+  }
+
+  fs.stat(full, (err, st) => {
+    if (err || !st.isFile()) {
+      res.writeHead(404);
+      return res.end("not found");
+    }
+    const type = MIME[path.extname(full).toLowerCase()] || "application/octet-stream";
+
+    // HTTP Range support — required for the browser to seek <audio>/<video>, which is
+    // how playback works anywhere but t=0 in the review player.
+    const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || "");
+    if (range && (range[1] || range[2])) {
+      let start = range[1] ? Number(range[1]) : null;
+      let end = range[2] ? Number(range[2]) : null;
+      if (start === null) {
+        start = Math.max(0, st.size - end);
+        end = st.size - 1;
+      } else if (end === null || end >= st.size) {
+        end = st.size - 1;
+      }
+      if (start > end || start >= st.size) {
+        res.writeHead(416, { "content-range": `bytes */${st.size}` });
+        return res.end();
+      }
+      res.writeHead(206, {
+        "content-type": type,
+        "content-range": `bytes ${start}-${end}/${st.size}`,
+        "content-length": end - start + 1,
+        "accept-ranges": "bytes",
+        "cache-control": "no-cache",
+      });
+      return fs.createReadStream(full, { start, end }).pipe(res);
+    }
+
+    res.writeHead(200, {
+      "content-type": type,
+      "content-length": st.size,
+      "accept-ranges": "bytes",
+      "cache-control": "no-cache",
+    });
+    fs.createReadStream(full).pipe(res);
+  });
+}
+
+const server = http.createServer((req, res) => {
+  const { pathname } = new URL(req.url, "http://localhost");
+  if (pathname === "/api/notes") return handleNotes(req, res);
+  if (pathname === "/api/mix") return handleMix(req, res);
+  return serveStatic(req, res);
+});
+
+server.listen(PORT, "127.0.0.1", () => {
+  fs.mkdirSync(NOTES_DIR, { recursive: true });
+  if (!fs.existsSync(NOTES_JSON)) writeNotes([]);
+  const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
+  if (!fs.existsSync(path.join(COMP_ABS, "index.html"))) {
+    console.warn(`⚠  No composition found at ${compRel}. Run vellum from your HyperFrames project root, or set VELLUM_DIR.`);
+  }
+  console.log(`\n  Vellum review server  ·  http://localhost:${PORT}${ANNOTATE_PATH}`);
+  console.log(`  Composition:  ${compRel}`);
+  console.log(`  Notes:        ${path.relative(ROOT, NOTES_JSON)}  (+ annotations.md)\n`);
+});
+
+
+
+================================================
+FILE: scripts/vellum-template.html
+================================================
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vellum — Review &amp; Annotate</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #0b0b0d; color: #e8e8ea; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+      #wrap { position: fixed; inset: 0; display: flex; flex-direction: column; }
+      #viewport { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+      /* Scaled composition stage — the real index.html runs inside #comp (an iframe). */
+      #stage { position: relative; }
+      #stage #comp { display: block; width: 1920px; height: 1080px; border: 0; transform-origin: top left; background: #000; box-shadow: 0 12px 60px rgba(0,0,0,0.6); }
+
+      /* Pin/region layer overlays the scaled iframe exactly */
+      #pins { position: absolute; inset: 0; pointer-events: none; }
+      #pins.arming { pointer-events: auto; cursor: crosshair; }
+      .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; width: 26px; height: 26px; border-radius: 50% 50% 50% 2px; background: #5eead4; border: 2px solid #0b0b0d; color: #06231f; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+      .pin:hover { background: #fff; }
+      .region { position: absolute; pointer-events: auto; border: 2px solid #5eead4; border-radius: 4px; background: rgba(94,234,212,0.12); cursor: pointer; }
+      .region:hover { background: rgba(94,234,212,0.22); }
+      .region .rbadge { position: absolute; top: -13px; left: -2px; background: #5eead4; color: #06231f; font-size: 12px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; }
+      #dragbox { position: absolute; border: 2px dashed #5eead4; background: rgba(94,234,212,0.12); display: none; pointer-events: none; }
+
+      /* Note composer popover */
+      #composer { position: absolute; z-index: 30; width: 340px; background: #17171b; border: 1px solid #2c2c32; border-radius: 12px; padding: 12px; box-shadow: 0 14px 50px rgba(0,0,0,0.6); display: none; }
+      #composer .meta { font-size: 12px; color: #8b8b93; margin-bottom: 4px; }
+      #composer .tgt { font-size: 12px; color: #5eead4; margin-bottom: 8px; word-break: break-word; }
+      #composer textarea { width: 100%; height: 78px; resize: vertical; background: #0e0e11; color: #e8e8ea; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px; font: inherit; font-size: 14px; }
+      #composer .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+      button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid #2c2c32; background: #1f1f25; color: #e8e8ea; padding: 7px 12px; }
+      button.primary { background: #5eead4; color: #06231f; border-color: #5eead4; font-weight: 600; }
+      button:hover { filter: brightness(1.12); }
+      button.active { background: #5eead4; color: #06231f; border-color: #5eead4; }
+
+      /* Control bar */
+      #bar { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #121216; border-top: 1px solid #25252b; flex-wrap: nowrap; }
+      #bar .brand { font-weight: 700; letter-spacing: 0.04em; color: #5eead4; font-size: 14px; }
+      #bar .play { width: 44px; height: 38px; font-size: 16px; }
+      #scrub { flex: 1; min-width: 120px; accent-color: #5eead4; height: 6px; }
+      #tc { font-variant-numeric: tabular-nums; font-size: 14px; color: #b9b9c0; min-width: 128px; text-align: center; }
+      #scene-tag { font-size: 12px; color: #5eead4; min-width: 110px; }
+      .amix { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #b9b9c0; }
+      .amix input { width: 70px; accent-color: #5eead4; }
+      .amix .val { font-variant-numeric: tabular-nums; width: 30px; color: #8b8b93; font-size: 11px; }
+
+      /* Notes drawer */
+      #notes { position: absolute; top: 0; right: 0; bottom: 0; width: 360px; background: #101014; border-left: 1px solid #25252b; transform: translateX(100%); transition: transform .2s ease; z-index: 25; display: flex; flex-direction: column; }
+      #notes.open { transform: none; }
+      #notes header { padding: 14px 16px; border-bottom: 1px solid #25252b; display: flex; align-items: center; justify-content: space-between; }
+      #notes header h2 { margin: 0; font-size: 15px; }
+      #note-list { flex: 1; overflow: auto; padding: 8px; }
+      .note-item { padding: 10px 12px; border: 1px solid #25252b; border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+      .note-item:hover { border-color: #5eead4; }
+      .note-item .nt { font-variant-numeric: tabular-nums; color: #5eead4; font-size: 12px; font-weight: 700; }
+      .note-item .ns { color: #8b8b93; font-size: 11px; }
+      .note-item .ntg { color: #6f8fa6; font-size: 11px; margin-top: 2px; word-break: break-word; }
+      .note-item .nx { font-size: 14px; margin-top: 3px; white-space: pre-wrap; }
+      .note-item .del { float: right; color: #8b8b93; border: none; background: none; padding: 0 2px; }
+      .note-item .del:hover { color: #ff6b6b; }
+      #status { position: absolute; left: 18px; bottom: 70px; z-index: 40; background: #17171b; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px 12px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 60%; }
+      #status.show { opacity: 1; }
+      .hint { font-size: 13px; color: #9a9aa4; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <div id="viewport">
+        <div id="stage"><div class="hint" style="padding:40px">Loading composition…</div></div>
+        <div id="pins"><div id="dragbox"></div></div>
+        <div id="composer">
+          <div class="meta" id="composer-meta"></div>
+          <div class="tgt" id="composer-tgt"></div>
+          <textarea id="composer-text" placeholder="What's the note? (e.g. make this bubble bigger, cut 2s here, caption lands late)"></textarea>
+          <div class="row">
+            <button id="composer-cancel">Cancel</button>
+            <button id="composer-save" class="primary">Save note</button>
+          </div>
+        </div>
+        <div id="status"></div>
+      </div>
+
+      <div id="bar">
+        <span class="brand">VELLUM</span>
+        <button id="prev-scene" title="Previous scene (↑)">⏮</button>
+        <button class="play" id="play" title="Play / pause (space)">▶</button>
+        <button id="next-scene" title="Next scene (↓)">⏭</button>
+        <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" />
+        <span id="tc">0:00.00 / 0:00.00</span>
+        <span id="scene-tag"></span>
+        <button id="copy-scene" title="Copy current scene name">⧉</button>
+        <span class="amix" title="Voiceover level">🎙<input id="voice-vol" type="range" min="0" max="1" step="0.01" value="1" /><span class="val" id="voice-val">100</span></span>
+        <span class="amix" title="Music bed level">🎵<input id="music-vol" type="range" min="0" max="1" step="0.01" value="0.2" /><span class="val" id="music-val">20</span></span>
+        <button id="save-mix" title="Save these levels so they can be baked into the render">Save mix</button>
+        <button id="arm" title="Click a spot or drag a box to pin a note at the current frame">＋ Add note</button>
+        <button id="toggle-notes">Notes (0)</button>
+        <button id="clear-all" title="Delete every note">🗑 Clear all</button>
+      </div>
+
+      <div id="notes">
+        <header>
+          <h2>Review notes</h2>
+          <div>
+            <button id="refresh-notes" title="Reload">⟳</button>
+            <button id="clear-notes" title="Clear all">Clear</button>
+            <button id="close-notes" title="Close panel">✕</button>
+          </div>
+        </header>
+        <div id="note-list"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      const API = "/api/notes";
+      const RUNTIME = "/node_modules/hyperframes/dist/hyperframe.runtime.iife.js";
+      const stage = document.getElementById("stage");
+      const pins = document.getElementById("pins");
+      const dragbox = document.getElementById("dragbox");
+      const composer = document.getElementById("composer");
+      const composerMeta = document.getElementById("composer-meta");
+      const composerTgt = document.getElementById("composer-tgt");
+      const composerText = document.getElementById("composer-text");
+      const playBtn = document.getElementById("play");
+      const scrub = document.getElementById("scrub");
+      const tc = document.getElementById("tc");
+      const sceneTag = document.getElementById("scene-tag");
+      const armBtn = document.getElementById("arm");
+      const toggleNotesBtn = document.getElementById("toggle-notes");
+      const notesPanel = document.getElementById("notes");
+      const noteList = document.getElementById("note-list");
+      const statusEl = document.getElementById("status");
+      const voiceSlider = document.getElementById("voice-vol");
+      const musicSlider = document.getElementById("music-vol");
+      const voiceVal = document.getElementById("voice-val");
+      const musicVal = document.getElementById("music-val");
+
+      let player = null;       // the HyperFrames player living inside the iframe
+      let compDoc = null;      // iframe.contentDocument
+      let scenes = [];         // [{ id, start, duration }] derived from the composition DOM
+      let duration = 0;
+      let arming = false;
+      let pending = null;
+      let notes = [];
+      let markerEls = [];      // { el, start, end } — markers shown only within their scene window
+      let voiceEls = [];
+      let musicEl = null;
+      let allAudioEls = [];
+      let voiceVol = 1;
+      let musicVol = 0.2;
+
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const fmt = (t) => {
+        t = Math.max(0, t || 0);
+        const m = Math.floor(t / 60);
+        const s = t % 60;
+        return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+      };
+      const flash = (msg) => {
+        statusEl.textContent = msg;
+        statusEl.classList.add("show");
+        clearTimeout(flash._t);
+        flash._t = setTimeout(() => statusEl.classList.remove("show"), 2000);
+      };
+
+      // ---- scenes (generic: read [data-start] direct children of #root) ----
+      function buildScenes(doc) {
+        const root = doc.getElementById("root") || doc.body;
+        const out = [];
+        for (const el of root.children) {
+          if (el.tagName === "AUDIO" || el.tagName === "SCRIPT") continue;
+          if (!el.hasAttribute("data-start")) continue;
+          out.push({
+            id: el.id || el.className.split(/\s+/)[0] || `scene-${out.length + 1}`,
+            start: Number(el.getAttribute("data-start")) || 0,
+            duration: el.hasAttribute("data-duration") ? Number(el.getAttribute("data-duration")) : null,
+          });
+        }
+        out.sort((a, b) => a.start - b.start);
+        return out;
+      }
+      const sceneAt = (t) => {
+        for (let i = scenes.length - 1; i >= 0; i--) if (t >= scenes[i].start) return scenes[i].id;
+        return scenes[0] ? scenes[0].id : null;
+      };
+      // The [start, end) window a note's marker shows in — its scene's span.
+      const sceneWindow = (note) => {
+        const i = scenes.findIndex((s) => s.id === note.scene);
+        if (i >= 0) {
+          const s = scenes[i];
+          const dur = s.duration != null ? s.duration : ((scenes[i + 1] && scenes[i + 1].start) || 1e9) - s.start;
+          return [s.start, s.start + dur];
+        }
+        return [note.time - 2, note.time + 4];
+      };
+      const updateMarkerVisibility = (t) => {
+        for (const m of markerEls) m.el.style.display = t >= m.start && t < m.end ? "" : "none";
+      };
+
+      function fitStage() {
+        const iframe = stage.querySelector("#comp");
+        if (!iframe) return;
+        const vp = document.getElementById("viewport").getBoundingClientRect();
+        const s = Math.min((vp.width - 40) / 1920, (vp.height - 40) / 1080);
+        iframe.style.transform = `scale(${s})`;
+        stage.style.width = `${1920 * s}px`;
+        stage.style.height = `${1080 * s}px`;
+        pins.style.width = stage.style.width;
+        pins.style.height = stage.style.height;
+        pins.style.left = `${(vp.width - 1920 * s) / 2}px`;
+        pins.style.top = `${(vp.height - 1080 * s) / 2}px`;
+      }
+      window.addEventListener("resize", fitStage);
+
+      async function mount() {
+        // Load the real composition in an iframe so the project's own scripts (deps +
+        // window.__timelines registration) run exactly as authored — no per-project config.
+        const iframe = document.createElement("iframe");
+        iframe.id = "comp";
+        iframe.src = "index.html"; // resolved against this page's URL (root or /<dir>/)
+        stage.innerHTML = "";
+        stage.appendChild(iframe);
+        await new Promise((res, rej) => {
+          iframe.onload = res;
+          iframe.onerror = () => rej(new Error("index.html failed to load"));
+        });
+        const win = iframe.contentWindow;
+        compDoc = iframe.contentDocument;
+        const root = compDoc.getElementById("root");
+        if (!root) throw new Error("no #root composition in index.html");
+
+        // Inject the HyperFrames runtime into the iframe — same script Studio/render use.
+        await new Promise((resolve, reject) => {
+          const sc = compDoc.createElement("script");
+          sc.src = RUNTIME;
+          sc.onload = resolve;
+          sc.onerror = () => reject(new Error("HyperFrames runtime failed to load (is node_modules/hyperframes installed?)"));
+          compDoc.body.appendChild(sc);
+        });
+
+        const t0 = Date.now();
+        while (!(win.__playerReady && win.__player)) {
+          if (Date.now() - t0 > 8000) throw new Error("player did not mount");
+          await sleep(50);
+        }
+        player = win.__player;
+        duration = player.getDuration() || Number(root.getAttribute("data-duration")) || 0;
+        scrub.max = duration;
+        scenes = buildScenes(compDoc);
+
+        // Audio: classify a music bed (id/looks like music) vs voice clips. Heuristic — a
+        // bed is usually named music/bg/bed, else the longest clip spanning the comp.
+        allAudioEls = [...compDoc.querySelectorAll("audio")];
+        musicEl = allAudioEls.find((a) => /music|\bbg\b|bed|score|track/i.test(a.id || "")) || null;
+        if (!musicEl && allAudioEls.length) {
+          musicEl = [...allAudioEls].sort(
+            (a, b) => (Number(b.getAttribute("data-duration")) || 0) - (Number(a.getAttribute("data-duration")) || 0)
+          )[0];
+        }
+        voiceEls = allAudioEls.filter((a) => a !== musicEl);
+
+        // Seed mix sliders from the saved mix, falling back to the composition's data-volume.
+        let savedMix = {};
+        try { savedMix = await (await fetch("/api/mix", { cache: "no-cache" })).json(); } catch (e) {}
+        const baseMusic = musicEl ? Number(musicEl.getAttribute("data-volume")) : NaN;
+        const baseVoice = voiceEls[0] ? Number(voiceEls[0].getAttribute("data-volume")) : NaN;
+        musicVol = Number.isFinite(savedMix.music) ? savedMix.music : Number.isFinite(baseMusic) ? baseMusic : 0.2;
+        voiceVol = Number.isFinite(savedMix.voice) ? savedMix.voice : Number.isFinite(baseVoice) ? baseVoice : 1;
+        musicSlider.value = musicVol; voiceSlider.value = voiceVol;
+        musicVal.textContent = Math.round(musicVol * 100);
+        voiceVal.textContent = Math.round(voiceVol * 100);
+
+        fitStage();
+        const timeKey = `vellum-time-${location.pathname}`;
+        const savedT = Number(localStorage.getItem(timeKey));
+        player.seek(savedT > 0 && savedT < duration ? savedT : 0);
+        player.pause();
+        setInterval(() => { try { localStorage.setItem(timeKey, String(player.getTime())); } catch (e) {} }, 500);
+        tick();
+        loadNotes();
+        flash(savedT > 0 ? `Resumed at ${fmt(savedT)}` : "Ready — scrub, then ＋ Add note (click a spot or drag a box)");
+      }
+
+      function applyMix() {
+        for (const a of voiceEls) a.volume = voiceVol;
+        if (musicEl) musicEl.volume = musicVol;
+      }
+
+      // The preview runtime only starts an <audio> clip when playback CROSSES its
+      // data-start. After seeking into the middle of a clip it stays silent — so enforce
+      // the correct state every frame. 0.3s drift tolerance avoids fighting the runtime.
+      function syncAudio() {
+        const t = player.getTime();
+        const playing = player.isPlaying();
+        for (const a of allAudioEls) {
+          const start = Number(a.getAttribute("data-start")) || 0;
+          const dur = Number(a.getAttribute("data-duration")) || 0;
+          const mediaStart = Number(a.getAttribute("data-media-start")) || 0;
+          const inWindow = t >= start && t < start + dur;
+          if (playing && inWindow) {
+            const want = t - start + mediaStart;
+            if (Math.abs((a.currentTime || 0) - want) > 0.3) {
+              try { a.currentTime = want; } catch (e) {}
+            }
+            if (a.paused) a.play().catch(() => {});
+          } else if (!a.paused) {
+            a.pause();
+          }
+        }
+      }
+
+      function tick() {
+        if (player) {
+          const t = player.getTime();
+          if (!scrub.matches(":active")) scrub.value = t;
+          tc.textContent = `${fmt(t)} / ${fmt(duration)}`;
+          sceneTag.textContent = sceneAt(t) || "";
+          playBtn.textContent = player.isPlaying() ? "❚❚" : "▶";
+          updateMarkerVisibility(t);
+          applyMix();
+          syncAudio();
+        }
+        requestAnimationFrame(tick);
+      }
+
+      // ---- transport ----
+      playBtn.onclick = () => (player.isPlaying() ? player.pause() : player.play());
+      scrub.oninput = () => { player.pause(); player.seek(Number(scrub.value)); };
+
+      function jumpScene(dir) {
+        const starts = scenes.map((s) => s.start).sort((a, b) => a - b);
+        if (!starts.length) return;
+        const t = player.getTime();
+        let target;
+        if (dir > 0) {
+          target = starts.find((s) => s > t + 0.05);
+          if (target == null) target = starts[starts.length - 1];
+        } else {
+          const prevs = starts.filter((s) => s < t - 0.6);
+          target = prevs.length ? prevs[prevs.length - 1] : 0;
+        }
+        const wasPlaying = player.isPlaying();
+        player.seek(target);
+        if (wasPlaying) player.play();
+        flash(`${sceneAt(target) || ""} — ${fmt(target)}`);
+      }
+      document.getElementById("prev-scene").onclick = () => jumpScene(-1);
+      document.getElementById("next-scene").onclick = () => jumpScene(1);
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Escape") { composer.style.display = "none"; pending = null; notesPanel.classList.remove("open"); return; }
+        if (e.target.tagName === "TEXTAREA") return;
+        if (e.code === "Space") { e.preventDefault(); player.isPlaying() ? player.pause() : player.play(); }
+        else if (e.code === "ArrowLeft") { player.pause(); player.seek(Math.max(0, player.getTime() - (e.shiftKey ? 1 : 0.1))); }
+        else if (e.code === "ArrowRight") { player.pause(); player.seek(Math.min(duration, player.getTime() + (e.shiftKey ? 1 : 0.1))); }
+        else if (e.code === "ArrowUp") { e.preventDefault(); jumpScene(-1); }
+        else if (e.code === "ArrowDown") { e.preventDefault(); jumpScene(1); }
+      });
+
+      // ---- audio mix ----
+      voiceSlider.oninput = () => { voiceVol = Number(voiceSlider.value); voiceVal.textContent = Math.round(voiceVol * 100); applyMix(); };
+      musicSlider.oninput = () => { musicVol = Number(musicSlider.value); musicVal.textContent = Math.round(musicVol * 100); applyMix(); };
+      document.getElementById("save-mix").onclick = async () => {
+        await fetch("/api/mix", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ voice: voiceVol, music: musicVol }) });
+        flash(`Mix saved — voice ${Math.round(voiceVol * 100)}%, music ${Math.round(musicVol * 100)}%`);
+      };
+      document.getElementById("copy-scene").onclick = async () => {
+        const name = sceneTag.textContent.trim();
+        if (!name) return;
+        try { await navigator.clipboard.writeText(name); flash(`Copied scene "${name}"`); }
+        catch (e) { flash("Copy failed — clipboard blocked"); }
+      };
+
+      // ---- annotation: point pin or drag region ----
+      armBtn.onclick = () => {
+        arming = !arming;
+        armBtn.classList.toggle("active", arming);
+        pins.classList.toggle("arming", arming);
+        flash(arming ? "Click a spot, or drag a box, to mark feedback" : "Add-note off");
+      };
+
+      // Identify the composition element under a screen point (inside the iframe doc).
+      function captureTarget(clientX, clientY) {
+        const iframe = stage.querySelector("#comp");
+        const r = iframe.getBoundingClientRect();
+        const s = r.width / 1920;
+        const ix = (clientX - r.left) / s;
+        const iy = (clientY - r.top) / s;
+        const el = compDoc.elementFromPoint(ix, iy);
+        const root = compDoc.getElementById("root");
+        if (!el || !root || !root.contains(el)) return null;
+        let node = el;
+        while (node && node !== root && !(typeof node.className === "string" && node.className.trim())) {
+          node = node.parentElement;
+        }
+        if (!node || node === root) node = el;
+        const cls = typeof node.className === "string" ? node.className.trim().split(/\s+/).slice(0, 3).join(".") : "";
+        const text = (node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
+        return { tag: node.tagName.toLowerCase(), cls, text };
+      }
+
+      let dragStart = null;
+      pins.addEventListener("mousedown", (e) => {
+        if (!arming) return;
+        const r = pins.getBoundingClientRect();
+        dragStart = { x: e.clientX - r.left, y: e.clientY - r.top, cx: e.clientX, cy: e.clientY };
+        dragbox.style.left = `${dragStart.x}px`;
+        dragbox.style.top = `${dragStart.y}px`;
+        dragbox.style.width = "0px";
+        dragbox.style.height = "0px";
+        dragbox.style.display = "block";
+      });
+      pins.addEventListener("mousemove", (e) => {
+        if (!dragStart) return;
+        const r = pins.getBoundingClientRect();
+        const cx = e.clientX - r.left, cy = e.clientY - r.top;
+        dragbox.style.left = `${Math.min(dragStart.x, cx)}px`;
+        dragbox.style.top = `${Math.min(dragStart.y, cy)}px`;
+        dragbox.style.width = `${Math.abs(cx - dragStart.x)}px`;
+        dragbox.style.height = `${Math.abs(cy - dragStart.y)}px`;
+      });
+      pins.addEventListener("mouseup", (e) => {
+        if (!arming || !dragStart) return;
+        const r = pins.getBoundingClientRect();
+        const ex = e.clientX - r.left, ey = e.clientY - r.top;
+        const dpx = Math.abs(ex - dragStart.x), dpy = Math.abs(ey - dragStart.y);
+        dragbox.style.display = "none";
+        const time = player.getTime();
+        const target = captureTarget(dragStart.cx, dragStart.cy);
+        const toPct = (v, dim) => Math.round((v / dim) * 1000) / 10;
+
+        if (dpx < 6 && dpy < 6) {
+          pending = { time, x: toPct(dragStart.x, r.width), y: toPct(dragStart.y, r.height), scene: sceneAt(time), target };
+        } else {
+          const left = Math.min(dragStart.x, ex), top = Math.min(dragStart.y, ey);
+          pending = {
+            time, scene: sceneAt(time), target,
+            x: toPct(left, r.width), y: toPct(top, r.height),
+            w: toPct(dpx, r.width), h: toPct(dpy, r.height),
+          };
+        }
+        openComposer(e.clientX, e.clientY);
+        dragStart = null;
+        arming = false;
+        armBtn.classList.remove("active");
+        pins.classList.remove("arming");
+      });
+
+      function openComposer(clientX, clientY) {
+        const region = pending.w != null;
+        composerMeta.textContent = `${fmt(pending.time)} · ${pending.scene || ""} · ${region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`}`;
+        composerTgt.textContent = pending.target
+          ? `on ${pending.target.tag}${pending.target.cls ? "." + pending.target.cls : ""}${pending.target.text ? ` — “${pending.target.text}”` : ""}`
+          : "";
+        composerText.value = "";
+        const vp = document.getElementById("viewport").getBoundingClientRect();
+        composer.style.left = `${Math.min(clientX - vp.left, vp.width - 360)}px`;
+        composer.style.top = `${Math.min(clientY - vp.top + 14, vp.height - 220)}px`;
+        composer.style.display = "block";
+        composerText.focus();
+      }
+
+      document.getElementById("composer-cancel").onclick = () => { composer.style.display = "none"; pending = null; };
+      document.getElementById("composer-save").onclick = async () => {
+        const text = composerText.value.trim();
+        if (!text || !pending) { composer.style.display = "none"; return; }
+        await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...pending, text }) });
+        composer.style.display = "none";
+        pending = null;
+        flash("Note saved");
+        loadNotes();
+      };
+
+      // ---- notes list + markers ----
+      async function loadNotes() {
+        try { notes = await (await fetch(API, { cache: "no-cache" })).json(); } catch { notes = []; }
+        notes.sort((a, b) => a.time - b.time);
+        toggleNotesBtn.textContent = `Notes (${notes.length})`;
+        renderMarkers();
+        renderList();
+      }
+      function renderMarkers() {
+        pins.querySelectorAll(".pin, .region").forEach((p) => p.remove());
+        markerEls = [];
+        notes.forEach((n, i) => {
+          if (n.x == null) return;
+          let marker;
+          if (n.w != null) {
+            marker = document.createElement("div");
+            marker.className = "region";
+            marker.style.left = `${n.x}%`;
+            marker.style.top = `${n.y}%`;
+            marker.style.width = `${n.w}%`;
+            marker.style.height = `${n.h}%`;
+            const badge = document.createElement("div");
+            badge.className = "rbadge";
+            badge.textContent = i + 1;
+            marker.appendChild(badge);
+          } else {
+            marker = document.createElement("div");
+            marker.className = "pin";
+            marker.style.left = `${n.x}%`;
+            marker.style.top = `${n.y}%`;
+            marker.textContent = i + 1;
+          }
+          marker.title = `${fmt(n.time)} — ${n.text}`;
+          marker.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
+          pins.appendChild(marker);
+          const [start, end] = sceneWindow(n);
+          markerEls.push({ el: marker, start, end });
+        });
+        updateMarkerVisibility(player ? player.getTime() : 0);
+      }
+      function renderList() {
+        noteList.innerHTML = "";
+        notes.forEach((n, i) => {
+          const item = document.createElement("div");
+          item.className = "note-item";
+          const del = document.createElement("button");
+          del.className = "del"; del.title = "Delete"; del.textContent = "✕";
+          const nt = document.createElement("span");
+          nt.className = "nt"; nt.textContent = `${i + 1}. ${fmt(n.time)}`;
+          const ns = document.createElement("span");
+          ns.className = "ns"; ns.textContent = " " + (n.scene || "");
+          const nx = document.createElement("div");
+          nx.className = "nx"; nx.textContent = n.text; // textContent — never innerHTML for user notes
+          item.append(del, nt, ns);
+          if (n.target) {
+            const tg = document.createElement("div");
+            tg.className = "ntg";
+            tg.textContent = `on ${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}${n.target.text ? ` — “${n.target.text}”` : ""}`;
+            item.append(tg);
+          }
+          item.append(nx);
+          item.onclick = () => { player.pause(); player.seek(n.time); };
+          del.onclick = async (ev) => {
+            ev.stopPropagation();
+            const remaining = notes.filter((m) => m.id !== n.id);
+            await fetch(API, { method: "DELETE" });
+            for (const m of remaining) await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(m) });
+            loadNotes();
+          };
+          noteList.appendChild(item);
+        });
+      }
+      toggleNotesBtn.onclick = () => notesPanel.classList.toggle("open");
+      document.getElementById("close-notes").onclick = () => notesPanel.classList.remove("open");
+      document.getElementById("refresh-notes").onclick = loadNotes;
+      async function clearAllNotes() {
+        if (!notes.length) { flash("No notes to clear"); return; }
+        if (!confirm(`Clear all ${notes.length} note(s)? This can't be undone.`)) return;
+        await fetch(API, { method: "DELETE" });
+        flash("All notes cleared");
+        loadNotes();
+      }
+      document.getElementById("clear-notes").onclick = clearAllNotes;
+      document.getElementById("clear-all").onclick = clearAllNotes;
+
+      mount().catch((err) => {
+        stage.innerHTML = `<div class="hint" style="padding:40px;max-width:620px">Failed to mount: ${err.message}<br><br>Run Vellum from your HyperFrames project root (the folder with <code>index.html</code> and <code>node_modules/hyperframes</code>):<br><br><code>npx vellum</code><br><br>For a monorepo, point at the lesson subdir:<br><code>VELLUM_DIR=M01L01 npx vellum</code></div>`;
+        console.error(err);
+      });
+    </script>
+  </body>
+</html>
+
+
+
+================================================
+FILE: skills/vellum/SKILL.md
+================================================
+---
+name: vellum
+description: Apply human review feedback to a HyperFrames video composition. Use after a user has reviewed a HyperFrames video with Vellum and left time-coded notes — i.e. when the user says "address my review notes", "apply the Vellum notes", "I left feedback on the video", "check the annotations", or points you at notes/annotations.md. Vellum is a local review player that mounts the real index.html composition and lets a human pin point/region notes onto specific frames; each note carries the composition time, the on-screen element it points at, and the feedback text. This skill is the receiving end: read those notes and edit the composition to satisfy them. Defer to the `hyperframes` skill for composition-editing patterns and `hyperframes-cli` for lint/preview/render commands.
+---
+
+# Vellum — apply review feedback to a HyperFrames composition
+
+Vellum is a companion tool, not a builder. The human runs it, scrubs the video, and pins
+feedback onto frames. **Your job is to read that feedback and make the edits.**
+
+## How Vellum fits with the HyperFrames skills
+
+| Skill | Owns |
+|---|---|
+| `hyperframes` | building/editing the composition (scenes, captions, animation) |
+| `hyperframes-cli` | CLI: `lint`, `inspect`, `preview`, `snapshot`, `render` |
+| **`vellum`** (this) | receiving human review notes and turning them into edits |
+
+When a note requires a composition change, follow the `hyperframes` skill's patterns for the
+actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>`).
+
+## The workflow
+
+1. **Locate the notes.** They live at `<comp>/notes/annotations.md` (readable) and
+   `annotations.json` (structured). In a single-composition project that's `./notes/`; in a
+   monorepo it's under the lesson subdir (e.g. `M01L01/notes/`).
+
+2. **Read them.** `annotations.md` lists each note as:
+   `- **M:SS.ss** \`scene-id\` — <feedback>  _(pin x%, y% | box …)_ · on \`tag.class\` "text"`
+   The `time`, `scene`, and `target` tell you *exactly* where in the composition the note lands.
+
+3. **See what each note points at (optional but recommended for visual notes).** Run the
+   review-packet builder to render the actual frame with the marker drawn on it:
+   ```bash
+   node scripts/vellum-review.mjs          # or: VELLUM_DIR=<subdir> node scripts/vellum-review.mjs
+   ```
+   Then read `<comp>/notes/review/INDEX.md` and the `note-<id>.png` images — they show the
+   frame at the note's time with the pin/box overlaid.
+
+4. **Translate each note to an edit.**
+   - The note's `time` is composition-time in seconds. Map it to the owning scene's
+     `data-start`/`data-duration` in `index.html`, and to any timeline cue.
+   - The `target` (tag + class + text) identifies the on-screen element to change.
+   - Timing notes ("cut 2s here", "caption lands late") usually mean adjusting `data-start` /
+     `data-duration` and re-syncing dependent cues — follow the `hyperframes` timing rules.
+
+5. **Verify.** After edits, run the project's lint, then snapshot at the note's time to confirm
+   the fix (`npx hyperframes snapshot --at <time>`). Re-read the note and check it's satisfied.
+
+6. **Report back per note.** Tell the user, note by note, what you changed (or why you didn't).
+
+## Saved audio mix
+
+If `<comp>/notes/mix.json` exists, the human balanced voice vs music levels in the player and
+saved them. Apply by setting the matching `data-volume` on the relevant `<audio>` clips
+(voice clips → `voice`, the music bed → `music`).
+
+## Running Vellum (to tell the user)
+
+Vellum is started by the human, not by you — it opens a browser review player:
+```bash
+npx vellum                      # composition is ./index.html
+VELLUM_DIR=M01L01 npx vellum    # composition is ./M01L01/index.html
+```
+If they haven't reviewed yet and ask you to, point them at the command above, then wait for the
+notes to appear before acting.
+
+## Don'ts
+
+- Don't invent feedback the notes don't contain.
+- Don't start or assume the server is running — read the notes files from disk.
+- Don't bypass the `hyperframes` editing patterns; a note is *what* to change, that skill is *how*.
+
+
