@@ -4,13 +4,15 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=1920, height=1080" />
     <title>Vellum demo composition</title>
-    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
     <style>
       /* A small, self-contained HyperFrames composition used to demo Vellum.
          No external brand kit — just inline styles so it runs anywhere. */
       * { margin: 0; box-sizing: border-box; }
       #root { font-family: "Inter", -apple-system, "Helvetica Neue", Arial, sans-serif; color: #fff; }
-      .scene { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      /* Scene visibility is timeline-driven (opacity crossfades) so static snapshots
+         and review packets — which don't toggle clip visibility — match the player. */
+      .scene { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; opacity: 0; }
       .bg { position: absolute; inset: 0; }
       .grad-a { background: radial-gradient(1200px 700px at 30% 20%, #3b2f6b 0%, #1a1730 55%, #0e0c1c 100%); }
       .grad-b { background: linear-gradient(135deg, #11101e 0%, #1b1840 100%); }
@@ -74,23 +76,25 @@
 
     <script>
       // Build a paused GSAP timeline and register it the way HyperFrames expects.
+      // Selectors are hardcoded strings — template-literal selectors crash the
+      // HTML bundler used by snapshot/render (caught by `hyperframes lint`).
+      // Scene opacity is crossfaded on the timeline (not left to runtime clip
+      // toggling) so snapshots and review packets show the correct scene.
       window.__timelines = window.__timelines || {};
       const tl = gsap.timeline({ paused: true });
-      const SCENES = [
-        { id: "title", start: 0 },
-        { id: "features", start: 6 },
-        { id: "stat", start: 12 },
-        { id: "outro", start: 17 },
-      ];
-      for (const s of SCENES) {
-        const items = document.querySelectorAll(`#${s.id} [data-anim="up"]`);
-        tl.fromTo(
-          items,
-          { opacity: 0, y: 40 },
-          { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease: "power3.out" },
-          s.start + 0.3
-        );
-      }
+      // scene crossfades
+      tl.set("#title", { opacity: 1 }, 0);
+      tl.to("#title", { opacity: 0, duration: 0.7, ease: "power2.inOut" }, 6);
+      tl.fromTo("#features", { opacity: 0 }, { opacity: 1, duration: 0.7, ease: "power2.inOut" }, 6);
+      tl.to("#features", { opacity: 0, duration: 0.7, ease: "power2.inOut" }, 12);
+      tl.fromTo("#stat", { opacity: 0 }, { opacity: 1, duration: 0.7, ease: "power2.inOut" }, 12);
+      tl.to("#stat", { opacity: 0, duration: 0.7, ease: "power2.inOut" }, 17);
+      tl.fromTo("#outro", { opacity: 0 }, { opacity: 1, duration: 0.7, ease: "power2.inOut" }, 17);
+      // content entrances
+      tl.fromTo('#title [data-anim="up"]',    { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease: "power3.out" }, 0.3);
+      tl.fromTo('#features [data-anim="up"]', { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease: "power3.out" }, 6.3);
+      tl.fromTo('#stat [data-anim="up"]',     { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease: "power3.out" }, 12.3);
+      tl.fromTo('#outro [data-anim="up"]',    { opacity: 0, y: 40 }, { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease: "power3.out" }, 17.3);
       window.__timelines["main"] = tl;
     </script>
   </body>

@@ -4,7 +4,8 @@
   "description": "A transparent review-and-annotate layer for HyperFrames videos — pin time-coded notes your coding agent can read.",
   "type": "module",
   "bin": {
-    "vellum": "scripts/vellum-server.mjs"
+    "vellum": "scripts/vellum-server.mjs",
+    "vellum-review": "scripts/vellum-review.mjs"
   },
   "scripts": {
     "annotate": "node scripts/vellum-server.mjs",

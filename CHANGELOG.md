@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Promo video** (`promo/`) — a 52.5s marketing spot built *as a HyperFrames composition* (dogfooding: Vellum's ad is reviewable with Vellum). ElevenLabs voiceover + music bed, the player UI rebuilt pixel-faithfully in DOM, rendered to `promo/vellum-promo.mp4`.
+- `vellum-review` bin entry in `package.json`, so package installs expose both commands.
+- Subresource Integrity (SRI) hashes on the CDN GSAP script tags in the demo and promo compositions.
+
+### Changed
+- **README overhauled**: hook-first hero ("You see the problem. Your agent can't."), truthful badge row, quickstart above the fold, a "What your agent sees" sample of `annotations.md`, merged agent-handoff section, and an "Under the hood" section with the security/playback guarantees.
+- README keyboard table now correctly describes arrow-key scrubbing as 0.1s steps (Shift = 1s).
+
+### Fixed
+- `examples/demo` scene visibility is now timeline-driven (opacity crossfades), so `hyperframes snapshot` and `vellum-review` packets show the correct scene — the static-render path does not toggle `data-start` clip visibility. Also documented this as a heads-up in the README.
+
 ## [0.1.0] - June 10, 2026
 
 Initial release — a transparent review-and-annotate layer for HyperFrames videos.
