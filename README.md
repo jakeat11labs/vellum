@@ -49,9 +49,18 @@ Because it mounts your actual composition, notes always line up with what's on s
 
 ## Install
 
-Vellum is a couple of small, zero-dependency scripts plus an agent skill. Pick whichever fits your setup.
+**One command, from the root of your HyperFrames project:**
 
-### Option A — clone & run (works with any project)
+```bash
+curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
+```
+
+That drops the review tool into `scripts/`, the agent skill into `.claude/skills/vellum/`, and adds `npm run vellum` if you have a `package.json`. Re-runnable and dependency-free (just `curl`). Prefer to read it first? [`install.sh`](install.sh) — or `curl -fsSL …/install.sh -o install.sh && sh install.sh`.
+
+<details>
+<summary>Other ways to install</summary>
+
+### Clone & run
 
 ```bash
 git clone https://github.com/jakeat11labs/vellum.git
@@ -61,7 +70,7 @@ node /path/to/vellum/scripts/vellum-server.mjs
 
 Or just copy `scripts/` (and `skills/vellum/` for the agent) into your project. Nothing to build — the server is pure Node.
 
-### Option B — shadcn registry
+### shadcn registry
 
 If your project already uses [shadcn/ui](https://ui.shadcn.com/docs/registry/github), pull Vellum straight from this repo:
 
@@ -70,7 +79,9 @@ npx shadcn@latest add jakeat11labs/vellum/vellum         # the tool
 npx shadcn@latest add jakeat11labs/vellum/vellum-skill   # the agent skill
 ```
 
-> shadcn writes the files to the right targets, but expects a shadcn-style project — a `components.json` and a `jsconfig.json`/`tsconfig.json`. On a plain HTML project it offers to create `components.json` for you; if you don't already use shadcn, **Option A is simpler.**
+> shadcn writes the files to the right targets, but expects a shadcn-style project — a `components.json` and a `jsconfig.json`/`tsconfig.json`. On a plain HTML project it offers to create `components.json` for you; if you don't already use shadcn, the one-liner above is simpler.
+
+</details>
 
 > **Requirements:** a HyperFrames project (an `index.html` composition and `node_modules/hyperframes` installed). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
 
