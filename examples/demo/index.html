@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1920, height=1080" />
+    <title>Vellum demo composition</title>
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      /* A small, self-contained HyperFrames composition used to demo Vellum.
+         No external brand kit — just inline styles so it runs anywhere. */
+      * { margin: 0; box-sizing: border-box; }
+      #root { font-family: "Inter", -apple-system, "Helvetica Neue", Arial, sans-serif; color: #fff; }
+      .scene { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+      .bg { position: absolute; inset: 0; }
+      .grad-a { background: radial-gradient(1200px 700px at 30% 20%, #3b2f6b 0%, #1a1730 55%, #0e0c1c 100%); }
+      .grad-b { background: linear-gradient(135deg, #11101e 0%, #1b1840 100%); }
+      .grad-c { background: radial-gradient(900px 600px at 70% 60%, #2a2350 0%, #12101f 70%); }
+      .eyebrow { text-transform: uppercase; letter-spacing: 0.32em; font-size: 24px; font-weight: 600; color: #a89bff; margin-bottom: 28px; }
+      .title { font-size: 116px; font-weight: 700; line-height: 1.02; letter-spacing: -0.02em; text-align: center; }
+      .title .acc { color: #8b7dff; }
+      .subtitle { font-size: 34px; font-weight: 300; color: rgba(255,255,255,0.66); margin-top: 34px; text-align: center; }
+      .col { display: flex; flex-direction: column; align-items: center; padding: 0 120px; }
+      .cards { display: flex; gap: 40px; }
+      .card { width: 420px; padding: 52px 44px; border-radius: 22px; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.12); }
+      .card .dot { width: 56px; height: 56px; border-radius: 14px; background: linear-gradient(135deg, #8b7dff, #5b4bd6); margin-bottom: 30px; }
+      .card h3 { font-size: 42px; font-weight: 600; margin-bottom: 16px; }
+      .card p { font-size: 24px; font-weight: 300; line-height: 1.5; color: rgba(255,255,255,0.6); }
+      .stat { font-size: 240px; font-weight: 700; letter-spacing: -0.03em; background: linear-gradient(135deg, #b9aefff0, #6f5fe6); -webkit-background-clip: text; background-clip: text; color: transparent; }
+      .stat-label { font-size: 40px; font-weight: 300; color: rgba(255,255,255,0.7); margin-top: 8px; }
+      .wordmark { font-size: 72px; font-weight: 700; letter-spacing: -0.01em; }
+      .cta { margin-top: 40px; font-size: 30px; font-weight: 600; color: #0e0c1c; background: #8b7dff; padding: 22px 52px; border-radius: 999px; }
+    </style>
+  </head>
+  <body>
+    <div id="root" data-composition-id="main" data-start="0" data-duration="21" data-width="1920" data-height="1080">
+      <!-- Scene 1 — title -->
+      <section id="title" class="scene clip" data-start="0" data-duration="6" data-track-index="1" style="z-index: 10">
+        <div class="bg grad-a"></div>
+        <div class="col">
+          <div class="eyebrow" data-anim="up">Product Tour</div>
+          <div class="title" data-anim="up">Build it once.<br /><span class="acc">Ship everywhere.</span></div>
+          <div class="subtitle" data-anim="up">A short story about moving faster.</div>
+        </div>
+      </section>
+
+      <!-- Scene 2 — features -->
+      <section id="features" class="scene clip" data-start="6" data-duration="6" data-track-index="2" style="z-index: 9">
+        <div class="bg grad-b"></div>
+        <div class="cards">
+          <div class="card" data-anim="up"><div class="dot"></div><h3>Fast</h3><p>Iterate in seconds, not days. Preview every change instantly.</p></div>
+          <div class="card" data-anim="up"><div class="dot"></div><h3>Flexible</h3><p>Compose anything. Bring your own components and data.</p></div>
+          <div class="card" data-anim="up"><div class="dot"></div><h3>Reliable</h3><p>Deterministic output you can render and trust, every time.</p></div>
+        </div>
+      </section>
+
+      <!-- Scene 3 — stat -->
+      <section id="stat" class="scene clip" data-start="12" data-duration="5" data-track-index="3" style="z-index: 8">
+        <div class="bg grad-c"></div>
+        <div class="col">
+          <div class="stat" data-anim="up">10&times;</div>
+          <div class="stat-label" data-anim="up">faster review cycles</div>
+        </div>
+      </section>
+
+      <!-- Scene 4 — outro -->
+      <section id="outro" class="scene clip" data-start="17" data-duration="4" data-track-index="4" style="z-index: 7">
+        <div class="bg grad-a"></div>
+        <div class="col">
+          <div class="wordmark" data-anim="up">Acme Studio</div>
+          <div class="cta" data-anim="up">Get started</div>
+        </div>
+      </section>
+    </div>
+
+    <script>
+      // Build a paused GSAP timeline and register it the way HyperFrames expects.
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const SCENES = [
+        { id: "title", start: 0 },
+        { id: "features", start: 6 },
+        { id: "stat", start: 12 },
+        { id: "outro", start: 17 },
+      ];
+      for (const s of SCENES) {
+        const items = document.querySelectorAll(`#${s.id} [data-anim="up"]`);
+        tl.fromTo(
+          items,
+          { opacity: 0, y: 40 },
+          { opacity: 1, y: 0, duration: 0.6, stagger: 0.12, ease: "power3.out" },
+          s.start + 0.3
+        );
+      }
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

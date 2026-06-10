@@ -67,6 +67,14 @@ npx vellum-hf        # from your HyperFrames project root
 
 > **Requirements:** a HyperFrames project (an `index.html` composition and `node_modules/hyperframes` installed). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
 
+### Try the included demo
+
+This repo ships a tiny self-contained composition at [`examples/demo/`](examples/demo/) — the one pictured above. With the HyperFrames runtime available (`node_modules/hyperframes`), point Vellum at it:
+
+```bash
+VELLUM_DIR=examples/demo npx vellum-hf
+```
+
 ## Use
 
 From your HyperFrames project root:
