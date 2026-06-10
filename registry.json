@@ -1,0 +1,43 @@
+{
+  "$schema": "https://ui.shadcn.com/schema/registry.json",
+  "name": "vellum",
+  "homepage": "https://github.com/jakerains/vellum",
+  "items": [
+    {
+      "name": "vellum",
+      "type": "registry:file",
+      "title": "Vellum — HyperFrames review & annotate",
+      "description": "A transparent review-and-annotate layer for HyperFrames videos. Pin time-coded notes on any frame; your coding agent reads them back. Installs the local server, the player, and the review-packet builder.",
+      "files": [
+        {
+          "path": "scripts/vellum-server.mjs",
+          "type": "registry:file",
+          "target": "scripts/vellum-server.mjs"
+        },
+        {
+          "path": "scripts/vellum-template.html",
+          "type": "registry:file",
+          "target": "scripts/vellum-template.html"
+        },
+        {
+          "path": "scripts/vellum-review.mjs",
+          "type": "registry:file",
+          "target": "scripts/vellum-review.mjs"
+        }
+      ]
+    },
+    {
+      "name": "vellum-skill",
+      "type": "registry:file",
+      "title": "Vellum agent skill",
+      "description": "Teaches a coding agent (Claude Code / Cursor) how to drive Vellum: start the server, read notes/annotations.md, render the review packet, and apply each note to the composition.",
+      "files": [
+        {
+          "path": "skills/vellum/SKILL.md",
+          "type": "registry:file",
+          "target": ".claude/skills/vellum/SKILL.md"
+        }
+      ]
+    }
+  ]
+}

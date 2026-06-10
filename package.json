@@ -1,0 +1,32 @@
+{
+  "name": "vellum-hf",
+  "version": "0.1.0",
+  "description": "A transparent review-and-annotate layer for HyperFrames videos — pin time-coded notes your coding agent can read.",
+  "type": "module",
+  "bin": {
+    "vellum": "scripts/vellum-server.mjs"
+  },
+  "scripts": {
+    "annotate": "node scripts/vellum-server.mjs",
+    "review": "node scripts/vellum-review.mjs"
+  },
+  "keywords": [
+    "hyperframes",
+    "video",
+    "annotation",
+    "review",
+    "agent",
+    "ai",
+    "feedback"
+  ],
+  "files": [
+    "scripts/",
+    "skills/",
+    "registry.json",
+    "README.md"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

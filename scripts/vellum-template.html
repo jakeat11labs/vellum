@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Vellum — Review &amp; Annotate</title>
+    <style>
+      :root { color-scheme: dark; }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; background: #0b0b0d; color: #e8e8ea; font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+      #wrap { position: fixed; inset: 0; display: flex; flex-direction: column; }
+      #viewport { position: relative; flex: 1; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+
+      /* Scaled composition stage — the real index.html runs inside #comp (an iframe). */
+      #stage { position: relative; }
+      #stage #comp { display: block; width: 1920px; height: 1080px; border: 0; transform-origin: top left; background: #000; box-shadow: 0 12px 60px rgba(0,0,0,0.6); }
+
+      /* Pin/region layer overlays the scaled iframe exactly */
+      #pins { position: absolute; inset: 0; pointer-events: none; }
+      #pins.arming { pointer-events: auto; cursor: crosshair; }
+      .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; width: 26px; height: 26px; border-radius: 50% 50% 50% 2px; background: #5eead4; border: 2px solid #0b0b0d; color: #06231f; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
+      .pin:hover { background: #fff; }
+      .region { position: absolute; pointer-events: auto; border: 2px solid #5eead4; border-radius: 4px; background: rgba(94,234,212,0.12); cursor: pointer; }
+      .region:hover { background: rgba(94,234,212,0.22); }
+      .region .rbadge { position: absolute; top: -13px; left: -2px; background: #5eead4; color: #06231f; font-size: 12px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; }
+      #dragbox { position: absolute; border: 2px dashed #5eead4; background: rgba(94,234,212,0.12); display: none; pointer-events: none; }
+
+      /* Note composer popover */
+      #composer { position: absolute; z-index: 30; width: 340px; background: #17171b; border: 1px solid #2c2c32; border-radius: 12px; padding: 12px; box-shadow: 0 14px 50px rgba(0,0,0,0.6); display: none; }
+      #composer .meta { font-size: 12px; color: #8b8b93; margin-bottom: 4px; }
+      #composer .tgt { font-size: 12px; color: #5eead4; margin-bottom: 8px; word-break: break-word; }
+      #composer textarea { width: 100%; height: 78px; resize: vertical; background: #0e0e11; color: #e8e8ea; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px; font: inherit; font-size: 14px; }
+      #composer .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+      button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid #2c2c32; background: #1f1f25; color: #e8e8ea; padding: 7px 12px; }
+      button.primary { background: #5eead4; color: #06231f; border-color: #5eead4; font-weight: 600; }
+      button:hover { filter: brightness(1.12); }
+      button.active { background: #5eead4; color: #06231f; border-color: #5eead4; }
+
+      /* Control bar */
+      #bar { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #121216; border-top: 1px solid #25252b; flex-wrap: nowrap; }
+      #bar .brand { font-weight: 700; letter-spacing: 0.04em; color: #5eead4; font-size: 14px; }
+      #bar .play { width: 44px; height: 38px; font-size: 16px; }
+      #scrub { flex: 1; min-width: 120px; accent-color: #5eead4; height: 6px; }
+      #tc { font-variant-numeric: tabular-nums; font-size: 14px; color: #b9b9c0; min-width: 128px; text-align: center; }
+      #scene-tag { font-size: 12px; color: #5eead4; min-width: 110px; }
+      .amix { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #b9b9c0; }
+      .amix input { width: 70px; accent-color: #5eead4; }
+      .amix .val { font-variant-numeric: tabular-nums; width: 30px; color: #8b8b93; font-size: 11px; }
+
+      /* Notes drawer */
+      #notes { position: absolute; top: 0; right: 0; bottom: 0; width: 360px; background: #101014; border-left: 1px solid #25252b; transform: translateX(100%); transition: transform .2s ease; z-index: 25; display: flex; flex-direction: column; }
+      #notes.open { transform: none; }
+      #notes header { padding: 14px 16px; border-bottom: 1px solid #25252b; display: flex; align-items: center; justify-content: space-between; }
+      #notes header h2 { margin: 0; font-size: 15px; }
+      #note-list { flex: 1; overflow: auto; padding: 8px; }
+      .note-item { padding: 10px 12px; border: 1px solid #25252b; border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
+      .note-item:hover { border-color: #5eead4; }
+      .note-item .nt { font-variant-numeric: tabular-nums; color: #5eead4; font-size: 12px; font-weight: 700; }
+      .note-item .ns { color: #8b8b93; font-size: 11px; }
+      .note-item .ntg { color: #6f8fa6; font-size: 11px; margin-top: 2px; word-break: break-word; }
+      .note-item .nx { font-size: 14px; margin-top: 3px; white-space: pre-wrap; }
+      .note-item .del { float: right; color: #8b8b93; border: none; background: none; padding: 0 2px; }
+      .note-item .del:hover { color: #ff6b6b; }
+      #status { position: absolute; left: 18px; bottom: 70px; z-index: 40; background: #17171b; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px 12px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 60%; }
+      #status.show { opacity: 1; }
+      .hint { font-size: 13px; color: #9a9aa4; line-height: 1.5; }
+    </style>
+  </head>
+  <body>
+    <div id="wrap">
+      <div id="viewport">
+        <div id="stage"><div class="hint" style="padding:40px">Loading composition…</div></div>
+        <div id="pins"><div id="dragbox"></div></div>
+        <div id="composer">
+          <div class="meta" id="composer-meta"></div>
+          <div class="tgt" id="composer-tgt"></div>
+          <textarea id="composer-text" placeholder="What's the note? (e.g. make this bubble bigger, cut 2s here, caption lands late)"></textarea>
+          <div class="row">
+            <button id="composer-cancel">Cancel</button>
+            <button id="composer-save" class="primary">Save note</button>
+          </div>
+        </div>
+        <div id="status"></div>
+      </div>
+
+      <div id="bar">
+        <span class="brand">VELLUM</span>
+        <button id="prev-scene" title="Previous scene (↑)">⏮</button>
+        <button class="play" id="play" title="Play / pause (space)">▶</button>
+        <button id="next-scene" title="Next scene (↓)">⏭</button>
+        <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" />
+        <span id="tc">0:00.00 / 0:00.00</span>
+        <span id="scene-tag"></span>
+        <button id="copy-scene" title="Copy current scene name">⧉</button>
+        <span class="amix" title="Voiceover level">🎙<input id="voice-vol" type="range" min="0" max="1" step="0.01" value="1" /><span class="val" id="voice-val">100</span></span>
+        <span class="amix" title="Music bed level">🎵<input id="music-vol" type="range" min="0" max="1" step="0.01" value="0.2" /><span class="val" id="music-val">20</span></span>
+        <button id="save-mix" title="Save these levels so they can be baked into the render">Save mix</button>
+        <button id="arm" title="Click a spot or drag a box to pin a note at the current frame">＋ Add note</button>
+        <button id="toggle-notes">Notes (0)</button>
+        <button id="clear-all" title="Delete every note">🗑 Clear all</button>
+      </div>
+
+      <div id="notes">
+        <header>
+          <h2>Review notes</h2>
+          <div>
+            <button id="refresh-notes" title="Reload">⟳</button>
+            <button id="clear-notes" title="Clear all">Clear</button>
+            <button id="close-notes" title="Close panel">✕</button>
+          </div>
+        </header>
+        <div id="note-list"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      const API = "/api/notes";
+      const RUNTIME = "/node_modules/hyperframes/dist/hyperframe.runtime.iife.js";
+      const stage = document.getElementById("stage");
+      const pins = document.getElementById("pins");
+      const dragbox = document.getElementById("dragbox");
+      const composer = document.getElementById("composer");
+      const composerMeta = document.getElementById("composer-meta");
+      const composerTgt = document.getElementById("composer-tgt");
+      const composerText = document.getElementById("composer-text");
+      const playBtn = document.getElementById("play");
+      const scrub = document.getElementById("scrub");
+      const tc = document.getElementById("tc");
+      const sceneTag = document.getElementById("scene-tag");
+      const armBtn = document.getElementById("arm");
+      const toggleNotesBtn = document.getElementById("toggle-notes");
+      const notesPanel = document.getElementById("notes");
+      const noteList = document.getElementById("note-list");
+      const statusEl = document.getElementById("status");
+      const voiceSlider = document.getElementById("voice-vol");
+      const musicSlider = document.getElementById("music-vol");
+      const voiceVal = document.getElementById("voice-val");
+      const musicVal = document.getElementById("music-val");
+
+      let player = null;       // the HyperFrames player living inside the iframe
+      let compDoc = null;      // iframe.contentDocument
+      let scenes = [];         // [{ id, start, duration }] derived from the composition DOM
+      let duration = 0;
+      let arming = false;
+      let pending = null;
+      let notes = [];
+      let markerEls = [];      // { el, start, end } — markers shown only within their scene window
+      let voiceEls = [];
+      let musicEl = null;
+      let allAudioEls = [];
+      let voiceVol = 1;
+      let musicVol = 0.2;
+
+      const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+      const fmt = (t) => {
+        t = Math.max(0, t || 0);
+        const m = Math.floor(t / 60);
+        const s = t % 60;
+        return `${m}:${s.toFixed(2).padStart(5, "0")}`;
+      };
+      const flash = (msg) => {
+        statusEl.textContent = msg;
+        statusEl.classList.add("show");
+        clearTimeout(flash._t);
+        flash._t = setTimeout(() => statusEl.classList.remove("show"), 2000);
+      };
+
+      // ---- scenes (generic: read [data-start] direct children of #root) ----
+      function buildScenes(doc) {
+        const root = doc.getElementById("root") || doc.body;
+        const out = [];
+        for (const el of root.children) {
+          if (el.tagName === "AUDIO" || el.tagName === "SCRIPT") continue;
+          if (!el.hasAttribute("data-start")) continue;
+          out.push({
+            id: el.id || el.className.split(/\s+/)[0] || `scene-${out.length + 1}`,
+            start: Number(el.getAttribute("data-start")) || 0,
+            duration: el.hasAttribute("data-duration") ? Number(el.getAttribute("data-duration")) : null,
+          });
+        }
+        out.sort((a, b) => a.start - b.start);
+        return out;
+      }
+      const sceneAt = (t) => {
+        for (let i = scenes.length - 1; i >= 0; i--) if (t >= scenes[i].start) return scenes[i].id;
+        return scenes[0] ? scenes[0].id : null;
+      };
+      // The [start, end) window a note's marker shows in — its scene's span.
+      const sceneWindow = (note) => {
+        const i = scenes.findIndex((s) => s.id === note.scene);
+        if (i >= 0) {
+          const s = scenes[i];
+          const dur = s.duration != null ? s.duration : ((scenes[i + 1] && scenes[i + 1].start) || 1e9) - s.start;
+          return [s.start, s.start + dur];
+        }
+        return [note.time - 2, note.time + 4];
+      };
+      const updateMarkerVisibility = (t) => {
+        for (const m of markerEls) m.el.style.display = t >= m.start && t < m.end ? "" : "none";
+      };
+
+      function fitStage() {
+        const iframe = stage.querySelector("#comp");
+        if (!iframe) return;
+        const vp = document.getElementById("viewport").getBoundingClientRect();
+        const s = Math.min((vp.width - 40) / 1920, (vp.height - 40) / 1080);
+        iframe.style.transform = `scale(${s})`;
+        stage.style.width = `${1920 * s}px`;
+        stage.style.height = `${1080 * s}px`;
+        pins.style.width = stage.style.width;
+        pins.style.height = stage.style.height;
+        pins.style.left = `${(vp.width - 1920 * s) / 2}px`;
+        pins.style.top = `${(vp.height - 1080 * s) / 2}px`;
+      }
+      window.addEventListener("resize", fitStage);
+
+      async function mount() {
+        // Load the real composition in an iframe so the project's own scripts (deps +
+        // window.__timelines registration) run exactly as authored — no per-project config.
+        const iframe = document.createElement("iframe");
+        iframe.id = "comp";
+        iframe.src = "index.html"; // resolved against this page's URL (root or /<dir>/)
+        stage.innerHTML = "";
+        stage.appendChild(iframe);
+        await new Promise((res, rej) => {
+          iframe.onload = res;
+          iframe.onerror = () => rej(new Error("index.html failed to load"));
+        });
+        const win = iframe.contentWindow;
+        compDoc = iframe.contentDocument;
+        const root = compDoc.getElementById("root");
+        if (!root) throw new Error("no #root composition in index.html");
+
+        // Inject the HyperFrames runtime into the iframe — same script Studio/render use.
+        await new Promise((resolve, reject) => {
+          const sc = compDoc.createElement("script");
+          sc.src = RUNTIME;
+          sc.onload = resolve;
+          sc.onerror = () => reject(new Error("HyperFrames runtime failed to load (is node_modules/hyperframes installed?)"));
+          compDoc.body.appendChild(sc);
+        });
+
+        const t0 = Date.now();
+        while (!(win.__playerReady && win.__player)) {
+          if (Date.now() - t0 > 8000) throw new Error("player did not mount");
+          await sleep(50);
+        }
+        player = win.__player;
+        duration = player.getDuration() || Number(root.getAttribute("data-duration")) || 0;
+        scrub.max = duration;
+        scenes = buildScenes(compDoc);
+
+        // Audio: classify a music bed (id/looks like music) vs voice clips. Heuristic — a
+        // bed is usually named music/bg/bed, else the longest clip spanning the comp.
+        allAudioEls = [...compDoc.querySelectorAll("audio")];
+        musicEl = allAudioEls.find((a) => /music|\bbg\b|bed|score|track/i.test(a.id || "")) || null;
+        if (!musicEl && allAudioEls.length) {
+          musicEl = [...allAudioEls].sort(
+            (a, b) => (Number(b.getAttribute("data-duration")) || 0) - (Number(a.getAttribute("data-duration")) || 0)
+          )[0];
+        }
+        voiceEls = allAudioEls.filter((a) => a !== musicEl);
+
+        // Seed mix sliders from the saved mix, falling back to the composition's data-volume.
+        let savedMix = {};
+        try { savedMix = await (await fetch("/api/mix", { cache: "no-cache" })).json(); } catch (e) {}
+        const baseMusic = musicEl ? Number(musicEl.getAttribute("data-volume")) : NaN;
+        const baseVoice = voiceEls[0] ? Number(voiceEls[0].getAttribute("data-volume")) : NaN;
+        musicVol = Number.isFinite(savedMix.music) ? savedMix.music : Number.isFinite(baseMusic) ? baseMusic : 0.2;
+        voiceVol = Number.isFinite(savedMix.voice) ? savedMix.voice : Number.isFinite(baseVoice) ? baseVoice : 1;
+        musicSlider.value = musicVol; voiceSlider.value = voiceVol;
+        musicVal.textContent = Math.round(musicVol * 100);
+        voiceVal.textContent = Math.round(voiceVol * 100);
+
+        fitStage();
+        const timeKey = `vellum-time-${location.pathname}`;
+        const savedT = Number(localStorage.getItem(timeKey));
+        player.seek(savedT > 0 && savedT < duration ? savedT : 0);
+        player.pause();
+        setInterval(() => { try { localStorage.setItem(timeKey, String(player.getTime())); } catch (e) {} }, 500);
+        tick();
+        loadNotes();
+        flash(savedT > 0 ? `Resumed at ${fmt(savedT)}` : "Ready — scrub, then ＋ Add note (click a spot or drag a box)");
+      }
+
+      function applyMix() {
+        for (const a of voiceEls) a.volume = voiceVol;
+        if (musicEl) musicEl.volume = musicVol;
+      }
+
+      // The preview runtime only starts an <audio> clip when playback CROSSES its
+      // data-start. After seeking into the middle of a clip it stays silent — so enforce
+      // the correct state every frame. 0.3s drift tolerance avoids fighting the runtime.
+      function syncAudio() {
+        const t = player.getTime();
+        const playing = player.isPlaying();
+        for (const a of allAudioEls) {
+          const start = Number(a.getAttribute("data-start")) || 0;
+          const dur = Number(a.getAttribute("data-duration")) || 0;
+          const mediaStart = Number(a.getAttribute("data-media-start")) || 0;
+          const inWindow = t >= start && t < start + dur;
+          if (playing && inWindow) {
+            const want = t - start + mediaStart;
+            if (Math.abs((a.currentTime || 0) - want) > 0.3) {
+              try { a.currentTime = want; } catch (e) {}
+            }
+            if (a.paused) a.play().catch(() => {});
+          } else if (!a.paused) {
+            a.pause();
+          }
+        }
+      }
+
+      function tick() {
+        if (player) {
+          const t = player.getTime();
+          if (!scrub.matches(":active")) scrub.value = t;
+          tc.textContent = `${fmt(t)} / ${fmt(duration)}`;
+          sceneTag.textContent = sceneAt(t) || "";
+          playBtn.textContent = player.isPlaying() ? "❚❚" : "▶";
+          updateMarkerVisibility(t);
+          applyMix();
+          syncAudio();
+        }
+        requestAnimationFrame(tick);
+      }
+
+      // ---- transport ----
+      playBtn.onclick = () => (player.isPlaying() ? player.pause() : player.play());
+      scrub.oninput = () => { player.pause(); player.seek(Number(scrub.value)); };
+
+      function jumpScene(dir) {
+        const starts = scenes.map((s) => s.start).sort((a, b) => a - b);
+        if (!starts.length) return;
+        const t = player.getTime();
+        let target;
+        if (dir > 0) {
+          target = starts.find((s) => s > t + 0.05);
+          if (target == null) target = starts[starts.length - 1];
+        } else {
+          const prevs = starts.filter((s) => s < t - 0.6);
+          target = prevs.length ? prevs[prevs.length - 1] : 0;
+        }
+        const wasPlaying = player.isPlaying();
+        player.seek(target);
+        if (wasPlaying) player.play();
+        flash(`${sceneAt(target) || ""} — ${fmt(target)}`);
+      }
+      document.getElementById("prev-scene").onclick = () => jumpScene(-1);
+      document.getElementById("next-scene").onclick = () => jumpScene(1);
+
+      window.addEventListener("keydown", (e) => {
+        if (e.code === "Escape") { composer.style.display = "none"; pending = null; notesPanel.classList.remove("open"); return; }
+        if (e.target.tagName === "TEXTAREA") return;
+        if (e.code === "Space") { e.preventDefault(); player.isPlaying() ? player.pause() : player.play(); }
+        else if (e.code === "ArrowLeft") { player.pause(); player.seek(Math.max(0, player.getTime() - (e.shiftKey ? 1 : 0.1))); }
+        else if (e.code === "ArrowRight") { player.pause(); player.seek(Math.min(duration, player.getTime() + (e.shiftKey ? 1 : 0.1))); }
+        else if (e.code === "ArrowUp") { e.preventDefault(); jumpScene(-1); }
+        else if (e.code === "ArrowDown") { e.preventDefault(); jumpScene(1); }
+      });
+
+      // ---- audio mix ----
+      voiceSlider.oninput = () => { voiceVol = Number(voiceSlider.value); voiceVal.textContent = Math.round(voiceVol * 100); applyMix(); };
+      musicSlider.oninput = () => { musicVol = Number(musicSlider.value); musicVal.textContent = Math.round(musicVol * 100); applyMix(); };
+      document.getElementById("save-mix").onclick = async () => {
+        await fetch("/api/mix", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ voice: voiceVol, music: musicVol }) });
+        flash(`Mix saved — voice ${Math.round(voiceVol * 100)}%, music ${Math.round(musicVol * 100)}%`);
+      };
+      document.getElementById("copy-scene").onclick = async () => {
+        const name = sceneTag.textContent.trim();
+        if (!name) return;
+        try { await navigator.clipboard.writeText(name); flash(`Copied scene "${name}"`); }
+        catch (e) { flash("Copy failed — clipboard blocked"); }
+      };
+
+      // ---- annotation: point pin or drag region ----
+      armBtn.onclick = () => {
+        arming = !arming;
+        armBtn.classList.toggle("active", arming);
+        pins.classList.toggle("arming", arming);
+        flash(arming ? "Click a spot, or drag a box, to mark feedback" : "Add-note off");
+      };
+
+      // Identify the composition element under a screen point (inside the iframe doc).
+      function captureTarget(clientX, clientY) {
+        const iframe = stage.querySelector("#comp");
+        const r = iframe.getBoundingClientRect();
+        const s = r.width / 1920;
+        const ix = (clientX - r.left) / s;
+        const iy = (clientY - r.top) / s;
+        const el = compDoc.elementFromPoint(ix, iy);
+        const root = compDoc.getElementById("root");
+        if (!el || !root || !root.contains(el)) return null;
+        let node = el;
+        while (node && node !== root && !(typeof node.className === "string" && node.className.trim())) {
+          node = node.parentElement;
+        }
+        if (!node || node === root) node = el;
+        const cls = typeof node.className === "string" ? node.className.trim().split(/\s+/).slice(0, 3).join(".") : "";
+        const text = (node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
+        return { tag: node.tagName.toLowerCase(), cls, text };
+      }
+
+      let dragStart = null;
+      pins.addEventListener("mousedown", (e) => {
+        if (!arming) return;
+        const r = pins.getBoundingClientRect();
+        dragStart = { x: e.clientX - r.left, y: e.clientY - r.top, cx: e.clientX, cy: e.clientY };
+        dragbox.style.left = `${dragStart.x}px`;
+        dragbox.style.top = `${dragStart.y}px`;
+        dragbox.style.width = "0px";
+        dragbox.style.height = "0px";
+        dragbox.style.display = "block";
+      });
+      pins.addEventListener("mousemove", (e) => {
+        if (!dragStart) return;
+        const r = pins.getBoundingClientRect();
+        const cx = e.clientX - r.left, cy = e.clientY - r.top;
+        dragbox.style.left = `${Math.min(dragStart.x, cx)}px`;
+        dragbox.style.top = `${Math.min(dragStart.y, cy)}px`;
+        dragbox.style.width = `${Math.abs(cx - dragStart.x)}px`;
+        dragbox.style.height = `${Math.abs(cy - dragStart.y)}px`;
+      });
+      pins.addEventListener("mouseup", (e) => {
+        if (!arming || !dragStart) return;
+        const r = pins.getBoundingClientRect();
+        const ex = e.clientX - r.left, ey = e.clientY - r.top;
+        const dpx = Math.abs(ex - dragStart.x), dpy = Math.abs(ey - dragStart.y);
+        dragbox.style.display = "none";
+        const time = player.getTime();
+        const target = captureTarget(dragStart.cx, dragStart.cy);
+        const toPct = (v, dim) => Math.round((v / dim) * 1000) / 10;
+
+        if (dpx < 6 && dpy < 6) {
+          pending = { time, x: toPct(dragStart.x, r.width), y: toPct(dragStart.y, r.height), scene: sceneAt(time), target };
+        } else {
+          const left = Math.min(dragStart.x, ex), top = Math.min(dragStart.y, ey);
+          pending = {
+            time, scene: sceneAt(time), target,
+            x: toPct(left, r.width), y: toPct(top, r.height),
+            w: toPct(dpx, r.width), h: toPct(dpy, r.height),
+          };
+        }
+        openComposer(e.clientX, e.clientY);
+        dragStart = null;
+        arming = false;
+        armBtn.classList.remove("active");
+        pins.classList.remove("arming");
+      });
+
+      function openComposer(clientX, clientY) {
+        const region = pending.w != null;
+        composerMeta.textContent = `${fmt(pending.time)} · ${pending.scene || ""} · ${region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`}`;
+        composerTgt.textContent = pending.target
+          ? `on ${pending.target.tag}${pending.target.cls ? "." + pending.target.cls : ""}${pending.target.text ? ` — “${pending.target.text}”` : ""}`
+          : "";
+        composerText.value = "";
+        const vp = document.getElementById("viewport").getBoundingClientRect();
+        composer.style.left = `${Math.min(clientX - vp.left, vp.width - 360)}px`;
+        composer.style.top = `${Math.min(clientY - vp.top + 14, vp.height - 220)}px`;
+        composer.style.display = "block";
+        composerText.focus();
+      }
+
+      document.getElementById("composer-cancel").onclick = () => { composer.style.display = "none"; pending = null; };
+      document.getElementById("composer-save").onclick = async () => {
+        const text = composerText.value.trim();
+        if (!text || !pending) { composer.style.display = "none"; return; }
+        await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...pending, text }) });
+        composer.style.display = "none";
+        pending = null;
+        flash("Note saved");
+        loadNotes();
+      };
+
+      // ---- notes list + markers ----
+      async function loadNotes() {
+        try { notes = await (await fetch(API, { cache: "no-cache" })).json(); } catch { notes = []; }
+        notes.sort((a, b) => a.time - b.time);
+        toggleNotesBtn.textContent = `Notes (${notes.length})`;
+        renderMarkers();
+        renderList();
+      }
+      function renderMarkers() {
+        pins.querySelectorAll(".pin, .region").forEach((p) => p.remove());
+        markerEls = [];
+        notes.forEach((n, i) => {
+          if (n.x == null) return;
+          let marker;
+          if (n.w != null) {
+            marker = document.createElement("div");
+            marker.className = "region";
+            marker.style.left = `${n.x}%`;
+            marker.style.top = `${n.y}%`;
+            marker.style.width = `${n.w}%`;
+            marker.style.height = `${n.h}%`;
+            const badge = document.createElement("div");
+            badge.className = "rbadge";
+            badge.textContent = i + 1;
+            marker.appendChild(badge);
+          } else {
+            marker = document.createElement("div");
+            marker.className = "pin";
+            marker.style.left = `${n.x}%`;
+            marker.style.top = `${n.y}%`;
+            marker.textContent = i + 1;
+          }
+          marker.title = `${fmt(n.time)} — ${n.text}`;
+          marker.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
+          pins.appendChild(marker);
+          const [start, end] = sceneWindow(n);
+          markerEls.push({ el: marker, start, end });
+        });
+        updateMarkerVisibility(player ? player.getTime() : 0);
+      }
+      function renderList() {
+        noteList.innerHTML = "";
+        notes.forEach((n, i) => {
+          const item = document.createElement("div");
+          item.className = "note-item";
+          const del = document.createElement("button");
+          del.className = "del"; del.title = "Delete"; del.textContent = "✕";
+          const nt = document.createElement("span");
+          nt.className = "nt"; nt.textContent = `${i + 1}. ${fmt(n.time)}`;
+          const ns = document.createElement("span");
+          ns.className = "ns"; ns.textContent = " " + (n.scene || "");
+          const nx = document.createElement("div");
+          nx.className = "nx"; nx.textContent = n.text; // textContent — never innerHTML for user notes
+          item.append(del, nt, ns);
+          if (n.target) {
+            const tg = document.createElement("div");
+            tg.className = "ntg";
+            tg.textContent = `on ${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}${n.target.text ? ` — “${n.target.text}”` : ""}`;
+            item.append(tg);
+          }
+          item.append(nx);
+          item.onclick = () => { player.pause(); player.seek(n.time); };
+          del.onclick = async (ev) => {
+            ev.stopPropagation();
+            const remaining = notes.filter((m) => m.id !== n.id);
+            await fetch(API, { method: "DELETE" });
+            for (const m of remaining) await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(m) });
+            loadNotes();
+          };
+          noteList.appendChild(item);
+        });
+      }
+      toggleNotesBtn.onclick = () => notesPanel.classList.toggle("open");
+      document.getElementById("close-notes").onclick = () => notesPanel.classList.remove("open");
+      document.getElementById("refresh-notes").onclick = loadNotes;
+      async function clearAllNotes() {
+        if (!notes.length) { flash("No notes to clear"); return; }
+        if (!confirm(`Clear all ${notes.length} note(s)? This can't be undone.`)) return;
+        await fetch(API, { method: "DELETE" });
+        flash("All notes cleared");
+        loadNotes();
+      }
+      document.getElementById("clear-notes").onclick = clearAllNotes;
+      document.getElementById("clear-all").onclick = clearAllNotes;
+
+      mount().catch((err) => {
+        stage.innerHTML = `<div class="hint" style="padding:40px;max-width:620px">Failed to mount: ${err.message}<br><br>Run Vellum from your HyperFrames project root (the folder with <code>index.html</code> and <code>node_modules/hyperframes</code>):<br><br><code>npx vellum</code><br><br>For a monorepo, point at the lesson subdir:<br><code>VELLUM_DIR=M01L01 npx vellum</code></div>`;
+        console.error(err);
+      });
+    </script>
+  </body>
+</html>
