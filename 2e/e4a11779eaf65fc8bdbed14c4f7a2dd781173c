@@ -1,0 +1,22 @@
+README.md
+  s_6ad70e01c175e0::t_7cf63d02f3e063 52,54,56-59,62-66,69-70,73
+  s_6ad70e01c175e0::t_871964c2ac6906 87,90-91,94
+  s_6ad70e01c175e0::t_88feb6ce2c0c9d 79,82
+  s_6ad70e01c175e0::t_d5f02a40b7fd4d 125
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "2ee4a11779eaf65fc8bdbed14c4f7a2dd781173c",
+  "prompts": {},
+  "sessions": {
+    "s_6ad70e01c175e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9262bb91-6d6a-4c0f-b300-f4adc8002f27",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
