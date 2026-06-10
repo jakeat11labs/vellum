@@ -26,6 +26,11 @@
     "README.md"
   ],
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jakeat11labs/vellum.git"
+  },
+  "homepage": "https://github.com/jakeat11labs/vellum#readme",
   "engines": {
     "node": ">=18"
   }

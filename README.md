@@ -53,10 +53,10 @@ Vellum is distributed as a [shadcn GitHub registry](https://ui.shadcn.com/docs/r
 
 ```bash
 # the tool (server + player + review-packet builder)
-npx shadcn@latest add github:jakerains/vellum/vellum
+npx shadcn@latest add github:jakeat11labs/vellum/vellum
 
 # the agent skill — teaches Claude Code / Cursor how to apply your notes
-npx shadcn@latest add github:jakerains/vellum/vellum-skill
+npx shadcn@latest add github:jakeat11labs/vellum/vellum-skill
 ```
 
 Or run it with zero install via npm:

@@ -1,7 +1,7 @@
 {
   "$schema": "https://ui.shadcn.com/schema/registry.json",
   "name": "vellum",
-  "homepage": "https://github.com/jakerains/vellum",
+  "homepage": "https://github.com/jakeat11labs/vellum",
   "items": [
     {
       "name": "vellum",
