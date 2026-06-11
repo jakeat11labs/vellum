@@ -548,6 +548,7 @@ if [ "$WANT_TOOL" -eq 1 ]; then
   download "$BASE/scripts/vellum-server.mjs" "$SCRIPTS_DIR/vellum-server.mjs" || fail "could not download vellum-server.mjs"
   download "$BASE/scripts/vellum-template.html" "$SCRIPTS_DIR/vellum-template.html" || fail "could not download vellum-template.html"
   download "$BASE/scripts/vellum-review.mjs" "$SCRIPTS_DIR/vellum-review.mjs" || fail "could not download vellum-review.mjs"
+  download "$BASE/scripts/vellum-update.mjs" "$SCRIPTS_DIR/vellum-update.mjs" || fail "could not download vellum-update.mjs"
   chmod +x "$SCRIPTS_DIR/vellum" "$SCRIPTS_DIR/vellum-shim" 2>/dev/null || true
   ok "installed $SCRIPTS_DIR/vellum"
   ok "installed $SCRIPTS_DIR/vellum-shim"
@@ -555,6 +556,7 @@ if [ "$WANT_TOOL" -eq 1 ]; then
   ok "installed $SCRIPTS_DIR/vellum-server.mjs"
   ok "installed $SCRIPTS_DIR/vellum-template.html"
   ok "installed $SCRIPTS_DIR/vellum-review.mjs"
+  ok "installed $SCRIPTS_DIR/vellum-update.mjs"
 fi
 
 install_agent_skills
@@ -629,6 +631,9 @@ elif [ -f "$SCRIPTS_DIR/vellum" ]; then
   say "    ${bold}./$SCRIPTS_DIR/vellum${reset}   ${dim}← opens your browser to the review player${reset}"
 elif [ "$HAS_VELLUM_SCRIPT" = "1" ]; then
   say "    ${bold}npm run vellum${reset}          ${dim}← opens your browser to the review player${reset}"
+fi
+if [ "$HAS_VELLUM_CMD" = "1" ]; then
+  say "    ${bold}vellum update${reset}           ${dim}← check for and install the latest version${reset}"
 fi
 say ""
 say "  ${dim}Pin notes on any frame, then tell your agent:${reset}"

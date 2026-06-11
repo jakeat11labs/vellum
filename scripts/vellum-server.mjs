@@ -22,11 +22,22 @@ import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { fmtTime, normalizeNoteStatus, resolveComposition } from "./vellum-shared.mjs";
+import { fmtTime, normalizeNoteStatus, resolveComposition, VERSION } from "./vellum-shared.mjs";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
 const PORT = Number(process.env.VELLUM_PORT) || 4848;
 const argv = process.argv.slice(2);
+
+// Subcommands handled before the server boots, so they skip composition/runtime setup.
+if (argv[0] === "update") {
+  const { runUpdate } = await import("./vellum-update.mjs");
+  await runUpdate(argv.slice(1));
+  process.exit(process.exitCode || 0);
+}
+if (argv[0] === "version" || argv.includes("--version") || argv.includes("-v")) {
+  console.log(`vellum ${VERSION}`);
+  process.exit(0);
+}
 
 function shouldOpenBrowser() {
   if (argv.includes("--no-open") || process.env.VELLUM_OPEN === "0") return false;
