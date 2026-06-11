@@ -25,7 +25,7 @@ pin time-coded notes onto any frame, and your coding agent reads them back and m
 ```bash
 # from your HyperFrames project root
 curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
-npm run vellum
+vellum            # opens the review player in your browser
 ```
 
 <sub>Then pin your notes and tell your agent: <i>“Address my Vellum review notes.”</i> · <a href="#install">More install options</a></sub>
@@ -60,17 +60,17 @@ It works on **any** HyperFrames project with no per-project configuration — sc
 curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
 ```
 
-That drops the review tool into `scripts/`, the agent skill into `.claude/skills/vellum/`, and adds the `vellum` + `vellum:review` npm scripts if you have a `package.json`. The server is dependency-free and binds to `127.0.0.1` only. Re-runnable; it never overwrites your existing scripts. Prefer to read it first? [`install.sh`](install.sh).
+That drops the review tool into `scripts/`, the agent skill into `.agents/skills/vellum/` (Cursor, Codex, and most agents pick this up automatically), installs a `vellum` command to `~/.local/bin` (so you can just type `vellum` from anywhere in the project), and adds npm scripts if you have a `package.json`. The installer asks which coding agent you use. The skill always lives in `.agents/skills/vellum/`; if you pick Claude Code or Both, `.claude/skills/vellum/` is a symlink to that copy so both agents stay in sync. The server is dependency-free and binds to `127.0.0.1` only. Re-runnable; it never overwrites your existing scripts. Prefer to read it first? [`install.sh`](install.sh).
 
 > **Requirements:** a HyperFrames project (an `index.html` composition and `node_modules/hyperframes` installed). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
 
-For lesson folders or monorepos, wire the default composition during install:
+If your composition lives in a subfolder (not `./index.html`), wire it during install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh -s -- --dir M01L01
+curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh -s -- --dir compositions/hero
 ```
 
-Installer options: `--dir <path>`, `--port <number>`, `--tool-only`, `--skill-only`, `--no-prompt`, and `--no-package`. For reproducible installs, pin a release or ref:
+Installer options: `--dir <path>`, `--port <number>`, `--start` (launch the player when install finishes), `--tool-only`, `--skill-only`, `--no-prompt`, and `--no-package`. For reproducible installs, pin a release or ref:
 
 ```bash
 VELLUM_REF=v0.1.0 curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
@@ -106,25 +106,28 @@ npx shadcn@latest add jakeat11labs/vellum/vellum-skill   # the agent skill
 
 ## Use
 
-From your HyperFrames project root:
+From your HyperFrames project root (or any subfolder, after install):
 
 ```bash
-npm run vellum                       # composition is ./index.html
-VELLUM_DIR=M01L01 npm run vellum     # monorepo: ./M01L01/index.html
+vellum                               # composition is ./index.html
+vellum-review                        # build the visual review packet for your agent
 ```
 
-(No `package.json`? `node scripts/vellum-server.mjs` starts the same server.)
+Composition in a subfolder? The installer writes `.vellum.env` with your default `VELLUM_DIR`, so plain `vellum` still works. Override anytime: `VELLUM_DIR=compositions/hero vellum`.
 
-Open the printed URL (`http://localhost:4848/…`). Then:
+Fallbacks if you skipped the global command (`--no-bin`): `npm run vellum` or `./scripts/vellum`.
+
+Your browser opens automatically to the review player (`http://localhost:4848/…`). Pass `--no-open` or set `VELLUM_OPEN=0` if you prefer the URL in the terminal only. Then:
 
 | Action | How |
 |---|---|
 | Play / pause | `Space` or ▶ |
 | Scrub in 0.1s steps | `←` / `→` (hold `Shift` for 1s steps) |
 | Jump between scenes | `↑` / `↓` |
-| **Add a note** | click **＋ Add note**, then click a spot (pin) or drag a box (region), and type |
+| **Add a note** | **N** or **＋ Add note**, then click a spot (pin) or drag a box (region), and type |
 | Balance the mix | drag the 🎙 voice / 🎵 music sliders, then **Save mix** |
-| Review your notes | open the **Notes** drawer; click any note to jump to its frame |
+| Review your notes | open the **Notes** drawer; click any note to jump to its frame; cycle status or edit inline |
+| Hand off to your agent | **Copy prompt** copies the exact phrase to paste into your coding agent |
 
 ## What your agent sees
 
@@ -135,7 +138,7 @@ Every pin becomes one line in `notes/annotations.md` — the time, the scene, wh
 
 3 note(s). Times are composition-time (M:SS.ss).
 
-- **0:02.40** `title` — Hold this a beat longer before the crossfade  _(pin 50.0%, 41.2%)_ · on `div.title` “Build it once. Ship everywhere.”
+- **note-1** · **0:02.40** `title` — Hold this a beat longer before the crossfade  _(pin 50.0%, 41.2%)_ · on `div.title` “Build it once. Ship everywhere.”
 - **0:08.10** `features` — “Reliable” lands late — bring this card in 0.5s earlier  _(pin 74.6%, 52.3%)_ · on `div.card` “Reliable”
 - **0:13.90** `stat` — make this number count up instead of fading in  _(box 24.1 × 30.0%)_ · on `div.stat` “10×”
 ```
@@ -144,7 +147,7 @@ Alongside it: `annotations.json` (the same notes, structured) and `mix.json` (sa
 
 ## Hand it to your agent
 
-The installer already dropped the agent skill into `.claude/skills/vellum/` — Claude Code picks it up automatically, and Cursor can read the same `SKILL.md`. When you're done reviewing, just say:
+The installer drops the agent skill into `.agents/skills/vellum/` (with a `.claude/skills/vellum/` symlink when you use Claude Code). When you're done reviewing, just say:
 
 > *"Address my Vellum review notes."*
 

@@ -1,0 +1,7 @@
+#!/bin/sh
+# Vellum — start the review player for this HyperFrames project.
+# Run from your project root:  npm run vellum   or   ./scripts/vellum
+set -e
+ROOT="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
+cd "$ROOT"
+exec node "$(dirname "$0")/vellum-server.mjs" "$@"

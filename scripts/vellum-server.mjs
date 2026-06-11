@@ -10,8 +10,8 @@
  *
  * Zero dependencies — Node built-ins only. Run from your HyperFrames project root:
  *   npx vellum                 # composition is ./index.html
- *   VELLUM_DIR=M01L01 npx vellum   # composition is ./M01L01/index.html (monorepo)
- * Then open the printed URL.
+ *   VELLUM_DIR=compositions/hero npx vellum   # composition is ./compositions/hero/index.html
+ * Opens your browser to the review player automatically (disable with --no-open or VELLUM_OPEN=0).
  *
  * Local-only by design: binds to 127.0.0.1, no CORS headers, path-traversal guarded.
  */
@@ -19,38 +19,37 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
+import { fmtTime, normalizeNoteStatus, resolveComposition } from "./vellum-shared.mjs";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
 const PORT = Number(process.env.VELLUM_PORT) || 4848;
+const argv = process.argv.slice(2);
 
-function cleanCompDir(value) {
-  const raw = String(value || "").replace(/^[/\\]+|[/\\]+$/g, "");
-  if (!raw || raw === ".") return "";
-  const normalized = path.normalize(raw);
-  if (
-    path.isAbsolute(normalized) ||
-    normalized === ".." ||
-    normalized.startsWith(`..${path.sep}`) ||
-    normalized.split(path.sep).includes("..")
-  ) {
-    console.error(`VELLUM_DIR must stay inside the project root: ${value}`);
-    process.exit(1);
-  }
-  return normalized;
+function shouldOpenBrowser() {
+  if (argv.includes("--no-open") || process.env.VELLUM_OPEN === "0") return false;
+  if (argv.includes("--open") || process.env.VELLUM_OPEN === "1") return true;
+  return true;
 }
+
+const OPEN_BROWSER = shouldOpenBrowser();
+
+function openInBrowser(url) {
+  const platform = process.platform;
+  const cmd = platform === "darwin" ? "open" : platform === "win32" ? "cmd" : "xdg-open";
+  const args = platform === "win32" ? ["/c", "start", "", url] : [url];
+  const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+  child.on("error", () => console.log(`  Open manually → ${url}`));
+  child.unref();
+}
+
+const { compDir: COMP_DIR, compAbs: COMP_ABS } = resolveComposition(ROOT);
 
 function resolveInside(base, target) {
   const full = path.resolve(base, target);
   if (full !== base && !full.startsWith(base + path.sep)) return null;
   return full;
-}
-
-const COMP_DIR = cleanCompDir(process.env.VELLUM_DIR); // optional subdir
-const COMP_ABS = resolveInside(ROOT, COMP_DIR || ".");
-if (!COMP_ABS) {
-  console.error(`VELLUM_DIR must stay inside the project root: ${process.env.VELLUM_DIR}`);
-  process.exit(1);
 }
 const NOTES_DIR = path.join(COMP_ABS, "notes");
 const NOTES_JSON = path.join(NOTES_DIR, "annotations.json");
@@ -59,7 +58,7 @@ const MIX_JSON = path.join(NOTES_DIR, "mix.json");
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_FILE = path.join(HERE, "vellum-template.html");
-// Path the player opens — "/annotate.html" at root, or "/<dir>/annotate.html" in a monorepo.
+// Path the player opens — "/annotate.html" at root, or "/<dir>/annotate.html" for a subfolder composition.
 const ANNOTATE_PATH = COMP_DIR
   ? `/${COMP_DIR.split(path.sep).map(encodeURIComponent).join("/")}/annotate.html`
   : "/annotate.html";
@@ -84,13 +83,6 @@ const MIME = {
   ".otf": "font/otf",
   ".ttf": "font/ttf",
 };
-
-function fmtTime(t) {
-  const total = Math.max(0, Number(t) || 0);
-  const m = Math.floor(total / 60);
-  const s = total % 60;
-  return `${m}:${s.toFixed(2).padStart(5, "0")}`;
-}
 
 function readNotes() {
   try {
@@ -163,7 +155,9 @@ function writeNotes(notes) {
       const tgt = n.target
         ? ` · on \`${escapeMd(n.target.tag)}${n.target.cls ? "." + escapeMd(n.target.cls) : ""}\`${targetText}`
         : "";
-      return `- **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}`;
+      const status = normalizeNoteStatus(n.status);
+      const statusTag = status !== "open" ? ` · _(${status})_` : "";
+      return `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${statusTag}`;
     }),
     "",
   ].join("\n");
@@ -217,17 +211,44 @@ function noteId(value) {
   return Number.isInteger(id) && id > 0 ? id : null;
 }
 
+function applyNotePatch(note, parsed) {
+  if (parsed.text != null) {
+    const text = String(parsed.text).slice(0, 2000).trim();
+    if (!text) return { error: "empty note" };
+    note.text = text;
+  }
+  if (parsed.status != null) note.status = normalizeNoteStatus(parsed.status, note.status || "open");
+  note.updatedAt = new Date().toISOString();
+  return { note };
+}
+
 function handleNoteById(req, res, idValue) {
   const id = noteId(idValue);
   if (!id) return sendJson(res, 400, { error: "invalid note id" });
-  if (req.method !== "DELETE") return sendJson(res, 405, { error: "method not allowed" });
 
-  return withNotes(res, (notes) => {
-    const next = notes.filter((n) => n.id !== id);
-    if (next.length === notes.length) return sendJson(res, 404, { error: "note not found" });
-    if (!recoverableWriteNotes(res, next)) return;
-    return sendJson(res, 200, { ok: true, notes: next });
-  });
+  if (req.method === "DELETE") {
+    return withNotes(res, (notes) => {
+      const next = notes.filter((n) => n.id !== id);
+      if (next.length === notes.length) return sendJson(res, 404, { error: "note not found" });
+      if (!recoverableWriteNotes(res, next)) return;
+      return sendJson(res, 200, { ok: true, notes: next });
+    });
+  }
+
+  if (req.method === "PATCH") {
+    return readBody(req, res, 1e6, (parsed) =>
+      withNotes(res, (notes) => {
+        const note = notes.find((n) => n.id === id);
+        if (!note) return sendJson(res, 404, { error: "note not found" });
+        const result = applyNotePatch(note, parsed);
+        if (result.error) return sendJson(res, 400, { error: result.error });
+        if (!recoverableWriteNotes(res, notes)) return;
+        return sendJson(res, 200, result.note);
+      })
+    );
+  }
+
+  return sendJson(res, 405, { error: "method not allowed" });
 }
 
 function handleNotes(req, res) {
@@ -261,6 +282,7 @@ function handleNotes(req, res) {
           scene: parsed.scene ? String(parsed.scene).slice(0, 60) : null,
           target,
           text,
+          status: "open",
           createdAt: new Date().toISOString(),
         };
         notes.push(note);
@@ -390,10 +412,18 @@ server.listen(PORT, "127.0.0.1", () => {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
   if (!fs.existsSync(NOTES_JSON)) writeNotes(emptyNotesOnMissing());
   const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
+  const url = `http://127.0.0.1:${PORT}${ANNOTATE_PATH}`;
   if (!fs.existsSync(path.join(COMP_ABS, "index.html"))) {
     console.warn(`⚠  No composition found at ${compRel}. Run vellum from your HyperFrames project root, or set VELLUM_DIR.`);
   }
-  console.log(`\n  Vellum review server  ·  http://localhost:${PORT}${ANNOTATE_PATH}`);
+  console.log(`\n  Vellum review server  ·  ${url}`);
   console.log(`  Composition:  ${compRel}`);
-  console.log(`  Notes:        ${path.relative(ROOT, NOTES_JSON)}  (+ annotations.md)\n`);
+  console.log(`  Notes:        ${path.relative(ROOT, NOTES_JSON)}  (+ annotations.md)`);
+  if (OPEN_BROWSER) {
+    openInBrowser(url);
+    console.log(`  Browser opened — pin notes on any frame, then tell your agent: "address my Vellum review notes"`);
+  } else {
+    console.log(`  Open → ${url}`);
+  }
+  console.log(`  Press Ctrl+C to stop.\n`);
 });

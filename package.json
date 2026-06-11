@@ -1,6 +1,6 @@
 {
   "name": "vellum-hf",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A transparent review-and-annotate layer for HyperFrames videos — pin time-coded notes your coding agent can read.",
   "type": "module",
   "bin": {
@@ -25,6 +25,7 @@
   ],
   "files": [
     "scripts/",
+    ".github/workflows/test.yml",
     "skills/",
     "assets/",
     "docs/",
@@ -42,5 +43,8 @@
   "homepage": "https://github.com/jakeat11labs/vellum#readme",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "hyperframes": "^0.6.91"
   }
 }

@@ -37,7 +37,7 @@
       button.active { background: #5eead4; color: #06231f; border-color: #5eead4; }
 
       /* Control bar */
-      #bar { display: flex; align-items: center; gap: 12px; padding: 12px 18px; background: #121216; border-top: 1px solid #25252b; flex-wrap: nowrap; }
+      #bar { display: flex; align-items: center; gap: 10px; row-gap: 8px; padding: 12px 18px; background: #121216; border-top: 1px solid #25252b; flex-wrap: wrap; }
       #bar .brandwrap { display: flex; align-items: center; gap: 8px; }
       #bar .brand-mark { height: 24px; width: auto; display: block; }
       #bar .brand { font-weight: 700; letter-spacing: 0.04em; color: #e8e8ea; font-size: 14px; }
@@ -57,6 +57,14 @@
       #note-list { flex: 1; overflow: auto; padding: 8px; }
       .note-item { padding: 10px 12px; border: 1px solid #25252b; border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
       .note-item:hover { border-color: #5eead4; }
+      .note-item.resolved { opacity: 0.72; }
+      .note-item.wontfix { opacity: 0.55; }
+      .note-item .actions { float: right; display: flex; gap: 4px; align-items: center; }
+      .note-item .status { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid #2c2c32; border-radius: 999px; padding: 2px 7px; color: #8b8b93; background: #17171b; }
+      .note-item .status.resolved { color: #5eead4; border-color: #2d4f49; }
+      .note-item .status.wontfix { color: #b9b9c0; }
+      .note-item .edit { color: #8b8b93; border: none; background: none; padding: 0 2px; }
+      .note-item .edit:hover { color: #5eead4; }
       .note-item .nt { font-variant-numeric: tabular-nums; color: #5eead4; font-size: 12px; font-weight: 700; }
       .note-item .ns { color: #8b8b93; font-size: 11px; }
       .note-item .ntg { color: #6f8fa6; font-size: 11px; margin-top: 2px; word-break: break-word; }
@@ -97,8 +105,9 @@
         <span class="amix" title="Voiceover level">🎙<input id="voice-vol" type="range" min="0" max="1" step="0.01" value="1" /><span class="val" id="voice-val">100</span></span>
         <span class="amix" title="Music bed level">🎵<input id="music-vol" type="range" min="0" max="1" step="0.01" value="0.2" /><span class="val" id="music-val">20</span></span>
         <button id="save-mix" title="Save these levels so they can be baked into the render">Save mix</button>
-        <button id="arm" title="Click a spot or drag a box to pin a note at the current frame">＋ Add note</button>
+        <button id="arm" title="Add note — N, then click or drag">＋ Add note</button>
         <button id="toggle-notes">Notes (0)</button>
+        <button id="copy-prompt" title="Copy the agent handoff prompt">Copy prompt</button>
         <button id="clear-all" title="Delete every note">🗑 Clear all</button>
       </div>
 
@@ -371,6 +380,7 @@
         if (e.code === "Escape") { composer.style.display = "none"; pending = null; notesPanel.classList.remove("open"); return; }
         if (e.target.tagName === "TEXTAREA") return;
         if (e.code === "Space") { e.preventDefault(); player.isPlaying() ? player.pause() : player.play(); }
+        else if (e.code === "KeyN") { e.preventDefault(); if (!arming) armBtn.click(); }
         else if (e.code === "ArrowLeft") { player.pause(); player.seek(Math.max(0, player.getTime() - (e.shiftKey ? 1 : 0.1))); }
         else if (e.code === "ArrowRight") { player.pause(); player.seek(Math.min(duration, player.getTime() + (e.shiftKey ? 1 : 0.1))); }
         else if (e.code === "ArrowUp") { e.preventDefault(); jumpScene(-1); }
@@ -388,6 +398,11 @@
         const name = sceneTag.textContent.trim();
         if (!name) return;
         try { await navigator.clipboard.writeText(name); flash(`Copied scene "${name}"`); }
+        catch (e) { flash("Copy failed — clipboard blocked"); }
+      };
+      document.getElementById("copy-prompt").onclick = async () => {
+        const prompt = 'Address my Vellum review notes in notes/annotations.md';
+        try { await navigator.clipboard.writeText(prompt); flash("Copied agent prompt"); }
         catch (e) { flash("Copy failed — clipboard blocked"); }
       };
 
@@ -466,13 +481,17 @@
         pins.classList.remove("arming");
       });
 
+      const composerSaveBtn = document.getElementById("composer-save");
+
       function openComposer(clientX, clientY) {
         const region = pending.w != null;
-        composerMeta.textContent = `${fmt(pending.time)} · ${pending.scene || ""} · ${region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`}`;
+        const editLabel = pending.editId ? `note-${pending.editId} · edit` : "new note";
+        composerMeta.textContent = `${editLabel} · ${fmt(pending.time)} · ${pending.scene || ""} · ${region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`}`;
         composerTgt.textContent = pending.target
           ? `on ${pending.target.tag}${pending.target.cls ? "." + pending.target.cls : ""}${pending.target.text ? ` — “${pending.target.text}”` : ""}`
           : "";
-        composerText.value = "";
+        composerText.value = pending.text || "";
+        composerSaveBtn.textContent = pending.editId ? "Save changes" : "Save note";
         const vp = document.getElementById("viewport").getBoundingClientRect();
         composer.style.left = `${Math.min(clientX - vp.left, vp.width - 360)}px`;
         composer.style.top = `${Math.min(clientY - vp.top + 14, vp.height - 220)}px`;
@@ -480,16 +499,44 @@
         composerText.focus();
       }
 
+      function openComposerForEdit(note, clientX, clientY) {
+        pending = { ...note, editId: note.id };
+        openComposer(clientX, clientY);
+      }
+
       document.getElementById("composer-cancel").onclick = () => { composer.style.display = "none"; pending = null; };
-      document.getElementById("composer-save").onclick = async () => {
+      composerSaveBtn.onclick = async () => {
         const text = composerText.value.trim();
         if (!text || !pending) { composer.style.display = "none"; return; }
-        await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...pending, text }) });
+        if (pending.editId) {
+          const res = await fetch(`${API}/${encodeURIComponent(pending.editId)}`, {
+            method: "PATCH",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ text }),
+          });
+          if (!res.ok) { flash("Update failed"); return; }
+        } else {
+          await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...pending, text }) });
+        }
         composer.style.display = "none";
         pending = null;
         flash("Note saved");
         loadNotes();
       };
+
+      const STATUS_CYCLE = ["open", "resolved", "wontfix"];
+      async function cycleStatus(note, ev) {
+        ev.stopPropagation();
+        const idx = STATUS_CYCLE.indexOf(note.status || "open");
+        const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+        const res = await fetch(`${API}/${encodeURIComponent(note.id)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ status: next }),
+        });
+        if (!res.ok) flash("Status update failed");
+        loadNotes();
+      }
 
       // ---- notes list + markers ----
       async function loadNotes() {
@@ -502,7 +549,7 @@
       function renderMarkers() {
         pins.querySelectorAll(".pin, .region").forEach((p) => p.remove());
         markerEls = [];
-        notes.forEach((n, i) => {
+        notes.forEach((n) => {
           if (n.x == null) return;
           let marker;
           if (n.w != null) {
@@ -514,14 +561,14 @@
             marker.style.height = `${n.h}%`;
             const badge = document.createElement("div");
             badge.className = "rbadge";
-            badge.textContent = i + 1;
+            badge.textContent = n.id;
             marker.appendChild(badge);
           } else {
             marker = document.createElement("div");
             marker.className = "pin";
             marker.style.left = `${n.x}%`;
             marker.style.top = `${n.y}%`;
-            marker.textContent = i + 1;
+            marker.textContent = n.id;
           }
           marker.title = `${fmt(n.time)} — ${n.text}`;
           marker.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
@@ -533,18 +580,40 @@
       }
       function renderList() {
         noteList.innerHTML = "";
-        notes.forEach((n, i) => {
+        notes.forEach((n) => {
+          const status = n.status || "open";
           const item = document.createElement("div");
-          item.className = "note-item";
+          item.className = `note-item${status !== "open" ? ` ${status}` : ""}`;
+          const actions = document.createElement("div");
+          actions.className = "actions";
+          const statusBtn = document.createElement("button");
+          statusBtn.className = `status${status !== "open" ? ` ${status}` : ""}`;
+          statusBtn.title = "Cycle status";
+          statusBtn.textContent = status;
+          statusBtn.onclick = (ev) => cycleStatus(n, ev);
+          const edit = document.createElement("button");
+          edit.className = "edit"; edit.title = "Edit note"; edit.textContent = "✎";
+          edit.onclick = (ev) => {
+            ev.stopPropagation();
+            const r = item.getBoundingClientRect();
+            openComposerForEdit(n, r.left, r.top);
+          };
           const del = document.createElement("button");
           del.className = "del"; del.title = "Delete"; del.textContent = "✕";
+          del.onclick = async (ev) => {
+            ev.stopPropagation();
+            const res = await fetch(`${API}/${encodeURIComponent(n.id)}`, { method: "DELETE" });
+            if (!res.ok) flash("Delete failed");
+            loadNotes();
+          };
+          actions.append(statusBtn, edit, del);
           const nt = document.createElement("span");
-          nt.className = "nt"; nt.textContent = `${i + 1}. ${fmt(n.time)}`;
+          nt.className = "nt"; nt.textContent = `note-${n.id} · ${fmt(n.time)}`;
           const ns = document.createElement("span");
           ns.className = "ns"; ns.textContent = " " + (n.scene || "");
           const nx = document.createElement("div");
-          nx.className = "nx"; nx.textContent = n.text; // textContent — never innerHTML for user notes
-          item.append(del, nt, ns);
+          nx.className = "nx"; nx.textContent = n.text;
+          item.append(actions, nt, ns);
           if (n.target) {
             const tg = document.createElement("div");
             tg.className = "ntg";
@@ -553,12 +622,6 @@
           }
           item.append(nx);
           item.onclick = () => { player.pause(); player.seek(n.time); };
-          del.onclick = async (ev) => {
-            ev.stopPropagation();
-            const res = await fetch(`${API}/${encodeURIComponent(n.id)}`, { method: "DELETE" });
-            if (!res.ok) flash("Delete failed");
-            loadNotes();
-          };
           noteList.appendChild(item);
         });
       }
@@ -576,7 +639,7 @@
       document.getElementById("clear-all").onclick = clearAllNotes;
 
       mount().catch((err) => {
-        stage.innerHTML = `<div class="hint" style="padding:40px;max-width:620px">Failed to mount: ${err.message}<br><br>Run Vellum from your HyperFrames project root (the folder with <code>index.html</code> and <code>node_modules/hyperframes</code>):<br><br><code>npx vellum</code><br><br>For a monorepo, point at the lesson subdir:<br><code>VELLUM_DIR=M01L01 npx vellum</code></div>`;
+        stage.innerHTML = `<div class="hint" style="padding:40px;max-width:620px">Failed to mount: ${err.message}<br><br>Run Vellum from your HyperFrames project root (the folder with <code>index.html</code> and <code>node_modules/hyperframes</code>):<br><br><code>vellum</code><br><br>Composition in a subfolder?<br><code>VELLUM_DIR=compositions/hero vellum</code></div>`;
         console.error(err);
       });
     </script>
