@@ -19,6 +19,7 @@
 import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { fmtTime, normalizeNoteStatus, resolveComposition } from "./vellum-shared.mjs";
@@ -50,6 +51,79 @@ function resolveInside(base, target) {
   const full = path.resolve(base, target);
   if (full !== base && !full.startsWith(base + path.sep)) return null;
   return full;
+}
+
+// HyperFrames runtime resolution. Academy / npx-style projects run `npx hyperframes@X`
+// and have no local node_modules/hyperframes, so the runtime the player injects
+// (/node_modules/hyperframes/dist/hyperframe.runtime.iife.js) is served from the npx
+// download cache when a matching version is found, otherwise redirected to the jsDelivr
+// CDN. A real local install always wins.
+const HF_BASE = "/node_modules/hyperframes";
+
+function detectHyperframesVersion() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+    const dep =
+      (pkg.dependencies && pkg.dependencies.hyperframes) ||
+      (pkg.devDependencies && pkg.devDependencies.hyperframes);
+    const fromDep = dep && String(dep).match(/\d+\.\d+\.\d+/);
+    if (fromDep) return fromDep[0];
+    const fromScripts = JSON.stringify(pkg.scripts || {}).match(/hyperframes@(\d+\.\d+\.\d+)/);
+    if (fromScripts) return fromScripts[1];
+  } catch {}
+  return "latest";
+}
+
+function findNpxRuntimeDir(version) {
+  try {
+    const base = path.join(os.homedir(), ".npm", "_npx");
+    for (const sub of fs.readdirSync(base)) {
+      const hf = path.join(base, sub, "node_modules", "hyperframes");
+      try {
+        const v = JSON.parse(fs.readFileSync(path.join(hf, "package.json"), "utf8")).version;
+        if (
+          (version === "latest" || v === version) &&
+          fs.existsSync(path.join(hf, "dist", "hyperframe.runtime.iife.js"))
+        ) {
+          return hf;
+        }
+      } catch {}
+    }
+  } catch {}
+  return null;
+}
+
+const HF_VERSION = detectHyperframesVersion();
+const HF_LOCAL = fs.existsSync(
+  path.join(ROOT, "node_modules", "hyperframes", "dist", "hyperframe.runtime.iife.js")
+);
+const HF_NPX_DIR = HF_LOCAL ? null : findNpxRuntimeDir(HF_VERSION);
+
+function serveHyperframesRuntime(req, res, pathname) {
+  const rest = pathname.slice(HF_BASE.length); // "" or "/dist/hyperframe.runtime.iife.js"
+  if (HF_NPX_DIR) {
+    const cacheFull = resolveInside(HF_NPX_DIR, `.${rest}`);
+    if (cacheFull) {
+      try {
+        const st = fs.statSync(cacheFull);
+        if (st.isFile()) {
+          const type = MIME[path.extname(cacheFull).toLowerCase()] || "application/octet-stream";
+          res.writeHead(200, {
+            "content-type": type,
+            "content-length": st.size,
+            "cache-control": "no-cache",
+          });
+          const stream = fs.createReadStream(cacheFull);
+          stream.on("error", () => res.destroy());
+          return stream.pipe(res);
+        }
+      } catch {}
+    }
+  }
+  const verTag = HF_VERSION === "latest" ? "" : `@${HF_VERSION}`;
+  const cdn = `https://cdn.jsdelivr.net/npm/hyperframes${verTag}${rest}`;
+  res.writeHead(302, { location: cdn, "cache-control": "no-cache" });
+  return res.end();
 }
 const NOTES_DIR = path.join(COMP_ABS, "notes");
 const NOTES_JSON = path.join(NOTES_DIR, "annotations.json");
@@ -353,6 +427,11 @@ function serveStatic(req, res) {
 
   fs.stat(full, (err, st) => {
     if (err || !st.isFile()) {
+      // npx-style HyperFrames projects have no local node_modules/hyperframes; resolve the
+      // injected runtime from the npx cache or the CDN instead of 404ing.
+      if (pathname === HF_BASE || pathname.startsWith(`${HF_BASE}/`)) {
+        return serveHyperframesRuntime(req, res, pathname);
+      }
       res.writeHead(404);
       return res.end("not found");
     }
@@ -416,8 +495,14 @@ server.listen(PORT, "127.0.0.1", () => {
   if (!fs.existsSync(path.join(COMP_ABS, "index.html"))) {
     console.warn(`⚠  No composition found at ${compRel}. Run vellum from your HyperFrames project root, or set VELLUM_DIR.`);
   }
+  const hfSource = HF_LOCAL
+    ? "node_modules/hyperframes"
+    : HF_NPX_DIR
+      ? `npx cache (hyperframes@${HF_VERSION})`
+      : `jsDelivr CDN (hyperframes@${HF_VERSION})`;
   console.log(`\n  Vellum review server  ·  ${url}`);
   console.log(`  Composition:  ${compRel}`);
+  console.log(`  Runtime:      ${hfSource}`);
   console.log(`  Notes:        ${path.relative(ROOT, NOTES_JSON)}  (+ annotations.md)`);
   if (OPEN_BROWSER) {
     openInBrowser(url);
