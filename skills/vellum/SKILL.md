@@ -32,7 +32,11 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
 3. **See what each note points at (optional but recommended for visual notes).** Run the
    review-packet builder to render the actual frame with the marker drawn on it:
    ```bash
-   node scripts/vellum-review.mjs          # or: VELLUM_DIR=<subdir> node scripts/vellum-review.mjs
+   npm run vellum:review                  # installer path
+   node scripts/vellum-review.mjs         # clone/manual path
+   npx vellum-review                      # package/bin path
+   # monorepo:
+   VELLUM_DIR=<subdir> node scripts/vellum-review.mjs
    ```
    Then read `<comp>/notes/review/INDEX.md` and the `note-<id>.png` images — they show the
    frame at the note's time with the pin/box overlaid.
@@ -45,7 +49,9 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
      `data-duration` and re-syncing dependent cues — follow the `hyperframes` timing rules.
 
 5. **Verify.** After edits, run the project's lint, then snapshot at the note's time to confirm
-   the fix (`npx hyperframes snapshot --at <time>`). Re-read the note and check it's satisfied.
+   the fix (`npx hyperframes snapshot --at <time>`). Prefer `annotations.json` for exact
+   coordinates/timing, inspect review images for visual notes, re-snapshot after each fix, and
+   re-read the original note before marking it satisfied.
 
 6. **Report back per note.** Tell the user, note by note, what you changed (or why you didn't).
 

@@ -22,9 +22,36 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
-const COMP_DIR = (process.env.VELLUM_DIR || "").replace(/^\/+|\/+$/g, ""); // optional subdir
 const PORT = Number(process.env.VELLUM_PORT) || 4848;
-const COMP_ABS = path.join(ROOT, COMP_DIR);
+
+function cleanCompDir(value) {
+  const raw = String(value || "").replace(/^[/\\]+|[/\\]+$/g, "");
+  if (!raw || raw === ".") return "";
+  const normalized = path.normalize(raw);
+  if (
+    path.isAbsolute(normalized) ||
+    normalized === ".." ||
+    normalized.startsWith(`..${path.sep}`) ||
+    normalized.split(path.sep).includes("..")
+  ) {
+    console.error(`VELLUM_DIR must stay inside the project root: ${value}`);
+    process.exit(1);
+  }
+  return normalized;
+}
+
+function resolveInside(base, target) {
+  const full = path.resolve(base, target);
+  if (full !== base && !full.startsWith(base + path.sep)) return null;
+  return full;
+}
+
+const COMP_DIR = cleanCompDir(process.env.VELLUM_DIR); // optional subdir
+const COMP_ABS = resolveInside(ROOT, COMP_DIR || ".");
+if (!COMP_ABS) {
+  console.error(`VELLUM_DIR must stay inside the project root: ${process.env.VELLUM_DIR}`);
+  process.exit(1);
+}
 const NOTES_DIR = path.join(COMP_ABS, "notes");
 const NOTES_JSON = path.join(NOTES_DIR, "annotations.json");
 const NOTES_MD = path.join(NOTES_DIR, "annotations.md");
@@ -33,7 +60,9 @@ const MIX_JSON = path.join(NOTES_DIR, "mix.json");
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_FILE = path.join(HERE, "vellum-template.html");
 // Path the player opens — "/annotate.html" at root, or "/<dir>/annotate.html" in a monorepo.
-const ANNOTATE_PATH = COMP_DIR ? `/${COMP_DIR}/annotate.html` : "/annotate.html";
+const ANNOTATE_PATH = COMP_DIR
+  ? `/${COMP_DIR.split(path.sep).map(encodeURIComponent).join("/")}/annotate.html`
+  : "/annotate.html";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -65,10 +94,57 @@ function fmtTime(t) {
 
 function readNotes() {
   try {
-    return JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
+    const notes = JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
+    if (!Array.isArray(notes)) throw new Error("annotations.json must contain an array");
+    return notes;
+  } catch (err) {
+    if (err && err.code === "ENOENT") return [];
+    throw new Error(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message}`);
+  }
+}
+
+function withNotes(res, fn) {
+  let notes;
+  try {
+    notes = readNotes();
+  } catch (err) {
+    return sendJson(res, 500, { error: err.message });
+  }
+  return fn(notes);
+}
+
+function sendNotes(res, code, notes) {
+  return sendJson(res, code, notes);
+}
+
+function sendNotesObject(res, code, body) {
+  return sendJson(res, code, body);
+}
+
+function recoverableWriteNotes(res, notes) {
+  try {
+    writeNotes(notes);
+    return true;
+  } catch (err) {
+    sendJson(res, 500, { error: `Could not write notes: ${err.message}` });
+    return false;
+  }
+}
+
+function emptyNotesOnMissing() {
+  try {
+    return readNotes();
   } catch {
     return [];
   }
+}
+
+function escapeMd(value) {
+  return String(value ?? "")
+    .replace(/\r?\n/g, " ")
+    .replace(/`/g, "\\`")
+    .replace(/\|/g, "\\|")
+    .trim();
 }
 
 function writeNotes(notes) {
@@ -82,10 +158,12 @@ function writeNotes(notes) {
     "",
     ...sorted.map((n) => {
       const where = n.w != null ? `box ${n.x},${n.y} ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%, ${n.y}%` : "";
+      const noteText = escapeMd(n.text);
+      const targetText = n.target && n.target.text ? ` "${escapeMd(n.target.text)}"` : "";
       const tgt = n.target
-        ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`${n.target.text ? ` “${n.target.text}”` : ""}`
+        ? ` · on \`${escapeMd(n.target.tag)}${n.target.cls ? "." + escapeMd(n.target.cls) : ""}\`${targetText}`
         : "";
-      return `- **${fmtTime(n.time)}**${n.scene ? ` \`${n.scene}\`` : ""} — ${n.text}${where ? `  _(${where})_` : ""}${tgt}`;
+      return `- **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}`;
     }),
     "",
   ].join("\n");
@@ -101,11 +179,18 @@ function sendJson(res, code, body) {
 
 function readBody(req, res, limit, done) {
   let body = "";
+  let tooLarge = false;
   req.on("data", (c) => {
+    if (tooLarge) return;
     body += c;
-    if (body.length > limit) req.destroy();
+    if (body.length > limit) {
+      tooLarge = true;
+      sendJson(res, 413, { error: "request body too large" });
+      req.resume();
+    }
   });
   req.on("end", () => {
+    if (tooLarge) return;
     let parsed;
     try {
       parsed = JSON.parse(body);
@@ -114,20 +199,49 @@ function readBody(req, res, limit, done) {
     }
     done(parsed);
   });
+  req.on("error", () => {
+    if (!res.headersSent) sendJson(res, 400, { error: "request failed" });
+  });
+}
+
+function boundedNumber(value, fallback, { min = -Infinity, max = Infinity, decimals = 10 } = {}) {
+  if (value == null || value === "") return fallback;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return fallback;
+  const bounded = Math.min(max, Math.max(min, n));
+  return Math.round(bounded * decimals) / decimals;
+}
+
+function noteId(value) {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+function handleNoteById(req, res, idValue) {
+  const id = noteId(idValue);
+  if (!id) return sendJson(res, 400, { error: "invalid note id" });
+  if (req.method !== "DELETE") return sendJson(res, 405, { error: "method not allowed" });
+
+  return withNotes(res, (notes) => {
+    const next = notes.filter((n) => n.id !== id);
+    if (next.length === notes.length) return sendJson(res, 404, { error: "note not found" });
+    if (!recoverableWriteNotes(res, next)) return;
+    return sendJson(res, 200, { ok: true, notes: next });
+  });
 }
 
 function handleNotes(req, res) {
   if (req.method === "OPTIONS") return sendJson(res, 204, {});
-  if (req.method === "GET") return sendJson(res, 200, readNotes());
+  if (req.method === "GET") return withNotes(res, (notes) => sendNotes(res, 200, notes));
   if (req.method === "DELETE") {
-    writeNotes([]);
-    return sendJson(res, 200, { ok: true, notes: [] });
+    if (!recoverableWriteNotes(res, [])) return;
+    return sendNotesObject(res, 200, { ok: true, notes: [] });
   }
   if (req.method === "POST") {
     return readBody(req, res, 1e6, (parsed) => {
       const text = String(parsed.text ?? "").slice(0, 2000).trim();
       if (!text) return sendJson(res, 400, { error: "empty note" });
-      const num = (v) => (v == null ? null : Math.round(Number(v) * 10) / 10);
+      const pct = (v) => boundedNumber(v, null, { min: 0, max: 100 });
       let target = null;
       if (parsed.target && typeof parsed.target === "object") {
         target = {
@@ -136,22 +250,23 @@ function handleNotes(req, res) {
           text: String(parsed.target.text ?? "").slice(0, 120),
         };
       }
-      const notes = readNotes();
-      const note = {
-        id: notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1,
-        time: Number(parsed.time) || 0,
-        x: num(parsed.x),
-        y: num(parsed.y),
-        w: num(parsed.w),
-        h: num(parsed.h),
-        scene: parsed.scene ? String(parsed.scene).slice(0, 60) : null,
-        target,
-        text,
-        createdAt: new Date().toISOString(),
-      };
-      notes.push(note);
-      writeNotes(notes);
-      return sendJson(res, 201, note);
+      return withNotes(res, (notes) => {
+        const note = {
+          id: notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1,
+          time: boundedNumber(parsed.time, 0, { min: 0, decimals: 100 }),
+          x: pct(parsed.x),
+          y: pct(parsed.y),
+          w: pct(parsed.w),
+          h: pct(parsed.h),
+          scene: parsed.scene ? String(parsed.scene).slice(0, 60) : null,
+          target,
+          text,
+          createdAt: new Date().toISOString(),
+        };
+        notes.push(note);
+        if (!recoverableWriteNotes(res, notes)) return;
+        return sendJson(res, 201, note);
+      });
     });
   }
   return sendJson(res, 405, { error: "method not allowed" });
@@ -168,8 +283,11 @@ function handleMix(req, res) {
   }
   if (req.method === "POST") {
     return readBody(req, res, 1e5, (parsed) => {
-      const clamp = (v, d) => (v == null ? d : Math.min(1, Math.max(0, Number(v))));
-      const mix = { voice: clamp(parsed.voice, 1), music: clamp(parsed.music, 0.2), savedAt: new Date().toISOString() };
+      const mix = {
+        voice: boundedNumber(parsed.voice, 1, { min: 0, max: 1, decimals: 100 }),
+        music: boundedNumber(parsed.music, 0.2, { min: 0, max: 1, decimals: 100 }),
+        savedAt: new Date().toISOString(),
+      };
       fs.mkdirSync(NOTES_DIR, { recursive: true });
       fs.writeFileSync(MIX_JSON, `${JSON.stringify(mix, null, 2)}\n`);
       return sendJson(res, 201, mix);
@@ -199,14 +317,14 @@ function serveStatic(req, res) {
     return res.end("bad request");
   }
 
-  // The player template — served for "/" and any "<dir>/annotate.html".
-  if (pathname === "/" || pathname === ANNOTATE_PATH || /\/annotate\.html$/.test(pathname)) {
+  // The player template is served only at the configured review URL. This keeps
+  // iframe composition paths aligned with the notes directory.
+  if (pathname === "/" || pathname === ANNOTATE_PATH) {
     return serveTemplate(res);
   }
 
-  const full = path.normalize(path.join(ROOT, pathname));
-  // Path-traversal guard: the resolved path must stay within ROOT.
-  if (full !== ROOT && !full.startsWith(ROOT + path.sep)) {
+  const full = resolveInside(ROOT, `.${pathname}`);
+  if (!full) {
     res.writeHead(403);
     return res.end("forbidden");
   }
@@ -225,7 +343,8 @@ function serveStatic(req, res) {
       let start = range[1] ? Number(range[1]) : null;
       let end = range[2] ? Number(range[2]) : null;
       if (start === null) {
-        start = Math.max(0, st.size - end);
+        const suffixLength = end || 0;
+        start = Math.max(0, st.size - suffixLength);
         end = st.size - 1;
       } else if (end === null || end >= st.size) {
         end = st.size - 1;
@@ -241,7 +360,9 @@ function serveStatic(req, res) {
         "accept-ranges": "bytes",
         "cache-control": "no-cache",
       });
-      return fs.createReadStream(full, { start, end }).pipe(res);
+      const stream = fs.createReadStream(full, { start, end });
+      stream.on("error", () => res.destroy());
+      return stream.pipe(res);
     }
 
     res.writeHead(200, {
@@ -250,12 +371,16 @@ function serveStatic(req, res) {
       "accept-ranges": "bytes",
       "cache-control": "no-cache",
     });
-    fs.createReadStream(full).pipe(res);
+    const stream = fs.createReadStream(full);
+    stream.on("error", () => res.destroy());
+    stream.pipe(res);
   });
 }
 
 const server = http.createServer((req, res) => {
   const { pathname } = new URL(req.url, "http://localhost");
+  const noteMatch = /^\/api\/notes\/(\d+)$/.exec(pathname);
+  if (noteMatch) return handleNoteById(req, res, noteMatch[1]);
   if (pathname === "/api/notes") return handleNotes(req, res);
   if (pathname === "/api/mix") return handleMix(req, res);
   return serveStatic(req, res);
@@ -263,7 +388,7 @@ const server = http.createServer((req, res) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
-  if (!fs.existsSync(NOTES_JSON)) writeNotes([]);
+  if (!fs.existsSync(NOTES_JSON)) writeNotes(emptyNotesOnMissing());
   const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
   if (!fs.existsSync(path.join(COMP_ABS, "index.html"))) {
     console.warn(`⚠  No composition found at ${compRel}. Run vellum from your HyperFrames project root, or set VELLUM_DIR.`);

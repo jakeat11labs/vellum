@@ -1,0 +1,175 @@
+#!/usr/bin/env node
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import net from "node:net";
+import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath, pathToFileURL } from "node:url";
+
+const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const SERVER = path.join(REPO, "scripts", "vellum-server.mjs");
+const INSTALLER = path.join(REPO, "install.sh");
+
+function makeTempProject(name) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), `vellum-${name}-`));
+  fs.writeFileSync(
+    path.join(dir, "index.html"),
+    `<!doctype html><html><body>
+      <div id="root" data-composition-id="main" data-start="0" data-duration="5" data-width="1080" data-height="1920">
+        <section id="intro" data-start="0" data-duration="5" data-track-index="1">Hello</section>
+      </div>
+    </body></html>`
+  );
+  return dir;
+}
+
+async function freePort() {
+  const server = net.createServer();
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const port = server.address().port;
+  await new Promise((resolve) => server.close(resolve));
+  return port;
+}
+
+async function waitFor(url, child) {
+  const started = Date.now();
+  while (Date.now() - started < 5000) {
+    if (child.exitCode != null) break;
+    try {
+      const res = await fetch(url);
+      if (res.ok) return;
+    } catch {}
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+  throw new Error(`server did not start; stdout=${child.stdoutText || ""} stderr=${child.stderrText || ""}`);
+}
+
+async function withServer(cwd, env, fn) {
+  const port = await freePort();
+  const child = spawn(process.execPath, [SERVER], {
+    cwd,
+    env: { ...process.env, ...env, VELLUM_PORT: String(port) },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  child.stdoutText = "";
+  child.stderrText = "";
+  child.stdout.on("data", (chunk) => (child.stdoutText += chunk));
+  child.stderr.on("data", (chunk) => (child.stderrText += chunk));
+  try {
+    await waitFor(`http://127.0.0.1:${port}/annotate.html`, child);
+    await fn(`http://127.0.0.1:${port}`);
+  } finally {
+    child.kill("SIGTERM");
+    await new Promise((resolve) => child.once("exit", resolve));
+  }
+}
+
+async function testServerApi() {
+  const dir = makeTempProject("api");
+  fs.writeFileSync(path.join(dir, "media.bin"), "0123456789");
+
+  await withServer(dir, {}, async (base) => {
+    let res = await fetch(`${base}/api/notes`);
+    assert.deepEqual(await res.json(), []);
+
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: -1, x: 140, y: -10, text: "line one\n`line two`" }),
+    });
+    assert.equal(res.status, 201);
+    const note = await res.json();
+    assert.equal(note.time, 0);
+    assert.equal(note.x, 100);
+    assert.equal(note.y, 0);
+
+    const md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /line one \\`line two\\`/);
+
+    res = await fetch(`${base}/api/notes/${note.id}`, { method: "DELETE" });
+    assert.equal(res.status, 200);
+    assert.deepEqual((await res.json()).notes, []);
+
+    res = await fetch(`${base}/api/mix`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ voice: 2, music: -1 }),
+    });
+    assert.equal(res.status, 201);
+    assert.deepEqual({ voice: (await res.json()).voice, music: (await (await fetch(`${base}/api/mix`)).json()).music }, { voice: 1, music: 0 });
+
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "x".repeat(1_100_000) }),
+    });
+    assert.equal(res.status, 413);
+
+    res = await fetch(`${base}/media.bin`, { headers: { range: "bytes=-4" } });
+    assert.equal(res.status, 206);
+    assert.equal(res.headers.get("content-range"), "bytes 6-9/10");
+    assert.equal(await res.text(), "6789");
+
+    res = await fetch(`${base}/other/annotate.html`);
+    assert.equal(res.status, 404);
+  });
+}
+
+async function testMalformedNotesArePreserved() {
+  const dir = makeTempProject("bad-notes");
+  fs.mkdirSync(path.join(dir, "notes"));
+  const notesPath = path.join(dir, "notes", "annotations.json");
+  fs.writeFileSync(notesPath, "{not json");
+
+  await withServer(dir, {}, async (base) => {
+    let res = await fetch(`${base}/api/notes`);
+    assert.equal(res.status, 500);
+
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ text: "do not overwrite" }),
+    });
+    assert.equal(res.status, 500);
+    assert.equal(fs.readFileSync(notesPath, "utf8"), "{not json");
+  });
+}
+
+function testVellumDirGuard() {
+  const dir = makeTempProject("guard");
+  const result = spawnSync(process.execPath, [SERVER], {
+    cwd: dir,
+    env: { ...process.env, VELLUM_DIR: "..", VELLUM_PORT: "49999" },
+    encoding: "utf8",
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /VELLUM_DIR must stay inside/);
+}
+
+function testInstallerSubdirScripts() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vellum-install-"));
+  fs.mkdirSync(path.join(dir, "lesson"));
+  fs.writeFileSync(path.join(dir, "lesson", "index.html"), "<!doctype html><div id=\"root\"></div>");
+  fs.writeFileSync(path.join(dir, "package.json"), "{\n  \"scripts\": {}\n}\n");
+
+  const result = spawnSync("sh", [INSTALLER, "--no-prompt", "--dir", "lesson"], {
+    cwd: dir,
+    env: { ...process.env, VELLUM_BASE_URL: pathToFileURL(REPO).href },
+    encoding: "utf8",
+  });
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.ok(fs.existsSync(path.join(dir, "scripts", "vellum-server.mjs")));
+  assert.ok(fs.existsSync(path.join(dir, ".claude", "skills", "vellum", "SKILL.md")));
+
+  const pkg = JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
+  assert.match(pkg.scripts.vellum, /VELLUM_DIR='lesson'/);
+  assert.match(pkg.scripts["vellum:review"], /vellum-review\.mjs/);
+}
+
+await testServerApi();
+await testMalformedNotesArePreserved();
+testVellumDirGuard();
+testInstallerSubdirScripts();
+
+console.log("Vellum smoke tests passed");

@@ -13,7 +13,7 @@
 
       /* Scaled composition stage — the real index.html runs inside #comp (an iframe). */
       #stage { position: relative; }
-      #stage #comp { display: block; width: 1920px; height: 1080px; border: 0; transform-origin: top left; background: #000; box-shadow: 0 12px 60px rgba(0,0,0,0.6); }
+      #stage #comp { display: block; border: 0; transform-origin: top left; background: #000; box-shadow: 0 12px 60px rgba(0,0,0,0.6); }
 
       /* Pin/region layer overlays the scaled iframe exactly */
       #pins { position: absolute; inset: 0; pointer-events: none; }
@@ -162,6 +162,8 @@
       let allAudioEls = [];
       let voiceVol = 1;
       let musicVol = 0.2;
+      let compW = 1920;
+      let compH = 1080;
 
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const fmt = (t) => {
@@ -215,14 +217,14 @@
         const iframe = stage.querySelector("#comp");
         if (!iframe) return;
         const vp = document.getElementById("viewport").getBoundingClientRect();
-        const s = Math.min((vp.width - 40) / 1920, (vp.height - 40) / 1080);
+        const s = Math.min((vp.width - 40) / compW, (vp.height - 40) / compH);
         iframe.style.transform = `scale(${s})`;
-        stage.style.width = `${1920 * s}px`;
-        stage.style.height = `${1080 * s}px`;
+        stage.style.width = `${compW * s}px`;
+        stage.style.height = `${compH * s}px`;
         pins.style.width = stage.style.width;
         pins.style.height = stage.style.height;
-        pins.style.left = `${(vp.width - 1920 * s) / 2}px`;
-        pins.style.top = `${(vp.height - 1080 * s) / 2}px`;
+        pins.style.left = `${(vp.width - compW * s) / 2}px`;
+        pins.style.top = `${(vp.height - compH * s) / 2}px`;
       }
       window.addEventListener("resize", fitStage);
 
@@ -242,6 +244,10 @@
         compDoc = iframe.contentDocument;
         const root = compDoc.getElementById("root");
         if (!root) throw new Error("no #root composition in index.html");
+        compW = Number(root.getAttribute("data-width")) || root.offsetWidth || 1920;
+        compH = Number(root.getAttribute("data-height")) || root.offsetHeight || 1080;
+        iframe.style.width = `${compW}px`;
+        iframe.style.height = `${compH}px`;
 
         // Inject the HyperFrames runtime into the iframe — same script Studio/render use.
         await new Promise((resolve, reject) => {
@@ -397,7 +403,7 @@
       function captureTarget(clientX, clientY) {
         const iframe = stage.querySelector("#comp");
         const r = iframe.getBoundingClientRect();
-        const s = r.width / 1920;
+        const s = r.width / compW;
         const ix = (clientX - r.left) / s;
         const iy = (clientY - r.top) / s;
         const el = compDoc.elementFromPoint(ix, iy);
@@ -549,9 +555,8 @@
           item.onclick = () => { player.pause(); player.seek(n.time); };
           del.onclick = async (ev) => {
             ev.stopPropagation();
-            const remaining = notes.filter((m) => m.id !== n.id);
-            await fetch(API, { method: "DELETE" });
-            for (const m of remaining) await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(m) });
+            const res = await fetch(`${API}/${encodeURIComponent(n.id)}`, { method: "DELETE" });
+            if (!res.ok) flash("Delete failed");
             loadNotes();
           };
           noteList.appendChild(item);

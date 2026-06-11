@@ -8,16 +8,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Promo video** (`promo/`) — a 52.5s marketing spot built *as a HyperFrames composition* (dogfooding: Vellum's ad is reviewable with Vellum). ElevenLabs voiceover + music bed, the player UI rebuilt pixel-faithfully in DOM, rendered to `promo/vellum-promo.mp4`.
 - `vellum-review` bin entry in `package.json`, so package installs expose both commands.
-- Subresource Integrity (SRI) hashes on the CDN GSAP script tags in the demo and promo compositions.
+- Subresource Integrity (SRI) hashes on the CDN GSAP script tags in the demo composition.
+- Guided installer options: `--dir`, `--port`, `--tool-only`, `--skill-only`, `--no-prompt`, and `--no-package`, plus subdir-aware npm script generation.
+- Smoke tests for the server API, range requests, `VELLUM_DIR` guard, and installer subdir wiring.
+
+### Removed
+- **Promo video** (`promo/`) — the embedded HyperFrames marketing composition and its assets (voiceover, music bed, fonts, rendered MP4) were removed from this repo to keep the package focused on the review tooling and demo composition.
 
 ### Changed
 - **README overhauled**: hook-first hero ("You see the problem. Your agent can't."), truthful badge row, quickstart above the fold, a "What your agent sees" sample of `annotations.md`, merged agent-handoff section, and an "Under the hood" section with the security/playback guarantees.
 - README keyboard table now correctly describes arrow-key scrubbing as 0.1s steps (Shift = 1s).
+- Package scripts now include `vellum`, `vellum:review`, and `test`, with `annotate` / `review` kept as aliases.
+- The review player now reads `data-width` / `data-height` from the composition instead of assuming 1920x1080.
 
 ### Fixed
 - `examples/demo` scene visibility is now timeline-driven (opacity crossfades), so `hyperframes snapshot` and `vellum-review` packets show the correct scene — the static-render path does not toggle `data-start` clip visibility. Also documented this as a heads-up in the README.
+- Single-note delete now uses `DELETE /api/notes/:id` instead of clearing and reposting all notes.
+- Hardened `VELLUM_DIR` path handling, oversized request responses, note/mix numeric bounds, suffix range requests, and review-packet failure exits.
 
 ## [0.1.0] - June 10, 2026
 

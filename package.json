@@ -8,8 +8,11 @@
     "vellum-review": "scripts/vellum-review.mjs"
   },
   "scripts": {
+    "vellum": "node scripts/vellum-server.mjs",
+    "vellum:review": "node scripts/vellum-review.mjs",
     "annotate": "node scripts/vellum-server.mjs",
-    "review": "node scripts/vellum-review.mjs"
+    "review": "node scripts/vellum-review.mjs",
+    "test": "node scripts/vellum-smoke-test.mjs"
   },
   "keywords": [
     "hyperframes",
@@ -23,9 +26,13 @@
   "files": [
     "scripts/",
     "skills/",
+    "assets/",
+    "docs/",
+    "examples/",
     "registry.json",
     "install.sh",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "license": "MIT",
   "repository": {

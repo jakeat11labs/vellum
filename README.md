@@ -14,10 +14,6 @@ pin time-coded notes onto any frame, and your coding agent reads them back and m
 
 </div>
 
-<!-- PROMO VIDEO: after uploading promo/vellum-promo.mp4 via the GitHub web editor
-     (drag the file into the README editor or an issue comment), paste the bare
-     https://github.com/user-attachments/assets/... URL on its own line right here. -->
-
 <div align="center">
 
 <img src="docs/screenshot-player.png" alt="Vellum review player — a HyperFrames composition with a pinned note and the notes drawer open" width="820" />
@@ -68,6 +64,18 @@ That drops the review tool into `scripts/`, the agent skill into `.claude/skills
 
 > **Requirements:** a HyperFrames project (an `index.html` composition and `node_modules/hyperframes` installed). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
 
+For lesson folders or monorepos, wire the default composition during install:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh -s -- --dir M01L01
+```
+
+Installer options: `--dir <path>`, `--port <number>`, `--tool-only`, `--skill-only`, `--no-prompt`, and `--no-package`. For reproducible installs, pin a release or ref:
+
+```bash
+VELLUM_REF=v0.1.0 curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
+```
+
 <details>
 <summary>Other ways to install</summary>
 
@@ -91,6 +99,8 @@ npx shadcn@latest add jakeat11labs/vellum/vellum-skill   # the agent skill
 ```
 
 > shadcn writes the files to the right targets, but expects a shadcn-style project — a `components.json` and a `jsconfig.json`/`tsconfig.json`. On a plain HTML project it offers to create `components.json` for you; if you don't already use shadcn, the one-liner above is simpler.
+>
+> Registry install copies files only; add your own npm scripts or run `node scripts/vellum-server.mjs` directly.
 
 </details>
 
@@ -145,7 +155,9 @@ The agent then:
 2. **Sees what you saw** (optional) — renders a visual review packet: the actual frame at each note's time with the pin or box drawn on it.
 
    ```bash
-   npm run vellum:review     # → notes/review/note-<id>.png + INDEX.md
+   npm run vellum:review          # installer path
+   node scripts/vellum-review.mjs # clone/manual path
+   npx vellum-review              # package/bin path
    ```
 
 3. **Edits** the composition to satisfy each note, then verifies with a snapshot at the note's time — and reports back, note by note.
@@ -165,10 +177,8 @@ This repo ships a tiny self-contained composition — the one pictured above:
 ```bash
 git clone https://github.com/jakeat11labs/vellum.git && cd vellum
 npm i hyperframes
-VELLUM_DIR=examples/demo node scripts/vellum-server.mjs
+VELLUM_DIR=examples/demo npm run vellum
 ```
-
-There's also a [45-second promo](promo/) built **as a HyperFrames composition** — Vellum's own ad, made with the tool it reviews. `VELLUM_DIR=promo node scripts/vellum-server.mjs` lets you review the promo with Vellum itself.
 
 ## Under the hood
 
@@ -191,7 +201,7 @@ Vellum never touches your composition. It loads your real `index.html` in an **i
 - **Local-only by design** — binds to `127.0.0.1`, sends no CORS headers, and guards against path traversal. The notes API can't be reached from another origin.
 - **Faithful playback** — supports HTTP Range requests so audio/video seek correctly, and re-asserts each audio clip's state every frame so scrubbing into the middle of a clip still plays.
 - **Scene-aware markers** — a pin only appears while its own scene is on screen, so markers don't float across the whole timeline.
-- **Heads-up on review packets:** `vellum-review` renders frames with `hyperframes snapshot`, which drives the GSAP timeline but does **not** toggle `data-start` clip visibility. If your composition's scene changes rely *only* on clip toggling (no timeline-driven opacity), packet frames may show stacked scenes. Timeline-driven scene transitions — like the [`examples/demo`](examples/demo/) and [`promo/`](promo/) compositions — render exactly right.
+- **Heads-up on review packets:** `vellum-review` renders frames with `hyperframes snapshot`, which drives the GSAP timeline but does **not** toggle `data-start` clip visibility. If your composition's scene changes rely *only* on clip toggling (no timeline-driven opacity), packet frames may show stacked scenes. Timeline-driven scene transitions — like the [`examples/demo`](examples/demo/) composition — render exactly right.
 
 ## License
 

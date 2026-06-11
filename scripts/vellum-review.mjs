@@ -20,8 +20,34 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 
 const ROOT = process.cwd();
-const COMP_DIR = (process.env.VELLUM_DIR || "").replace(/^\/+|\/+$/g, "");
-const COMP = path.join(ROOT, COMP_DIR);
+function cleanCompDir(value) {
+  const raw = String(value || "").replace(/^[/\\]+|[/\\]+$/g, "");
+  if (!raw || raw === ".") return "";
+  const normalized = path.normalize(raw);
+  if (
+    path.isAbsolute(normalized) ||
+    normalized === ".." ||
+    normalized.startsWith(`..${path.sep}`) ||
+    normalized.split(path.sep).includes("..")
+  ) {
+    console.error(`VELLUM_DIR must stay inside the project root: ${value}`);
+    process.exit(1);
+  }
+  return normalized;
+}
+
+function resolveInside(base, target) {
+  const full = path.resolve(base, target);
+  if (full !== base && !full.startsWith(base + path.sep)) return null;
+  return full;
+}
+
+const COMP_DIR = cleanCompDir(process.env.VELLUM_DIR);
+const COMP = resolveInside(ROOT, COMP_DIR || ".");
+if (!COMP) {
+  console.error(`VELLUM_DIR must stay inside the project root: ${process.env.VELLUM_DIR}`);
+  process.exit(1);
+}
 const NOTES_JSON = path.join(COMP, "notes", "annotations.json");
 const SNAP_DIR = path.join(COMP, "snapshots");
 const OUT_DIR = path.join(COMP, "notes", "review");
@@ -31,8 +57,8 @@ const ACCENT = "0x5EEAD4";
 function compSize() {
   try {
     const html = fs.readFileSync(path.join(COMP, "index.html"), "utf8");
-    const w = Number((/data-width="(\d+)"/.exec(html) || [])[1]) || 1920;
-    const h = Number((/data-height="(\d+)"/.exec(html) || [])[1]) || 1080;
+    const w = Number((/data-width\s*=\s*["'](\d+)["']/.exec(html) || [])[1]) || 1920;
+    const h = Number((/data-height\s*=\s*["'](\d+)["']/.exec(html) || [])[1]) || 1080;
     return { W: w, H: h };
   } catch {
     return { W: 1920, H: 1080 };
@@ -49,15 +75,32 @@ function fmt(t) {
 function readNotes() {
   try {
     return JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
-  } catch {
+  } catch (err) {
+    if (err && err.code !== "ENOENT") {
+      console.error(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message}`);
+      process.exit(1);
+    }
     return [];
   }
+}
+
+function ensureCommand(name, args) {
+  const r = spawnSync(name, args, { encoding: "utf8" });
+  if (r.error && r.error.code === "ENOENT") {
+    console.error(`Missing required command: ${name}`);
+    process.exit(1);
+  }
+  return true;
 }
 
 // Render the composition frame at time t; return the path to the produced PNG.
 function snapshot(t) {
   const before = new Set(fs.existsSync(SNAP_DIR) ? fs.readdirSync(SNAP_DIR) : []);
   const r = spawnSync("npx", ["hyperframes", "snapshot", "--at", String(t)], { cwd: COMP, encoding: "utf8" });
+  if (r.error && r.error.code === "ENOENT") {
+    console.error("Missing required command: npx");
+    return null;
+  }
   if (r.status !== 0) {
     console.error(`  snapshot @ ${t}s failed: ${(r.stderr || r.stdout || "").trim().split("\n").pop()}`);
     return null;
@@ -90,6 +133,10 @@ function drawMarker(srcPng, note, outPng) {
     return true;
   }
   const r = spawnSync("ffmpeg", ["-y", "-i", srcPng, "-vf", filter, outPng], { encoding: "utf8" });
+  if (r.error && r.error.code === "ENOENT") {
+    console.error("  ffmpeg is required to draw note markers. Install ffmpeg or run without review packets.");
+    return false;
+  }
   if (r.status !== 0) {
     console.error(`  ffmpeg draw failed for note ${note.id}: ${(r.stderr || "").trim().split("\n").pop()}`);
     return false;
@@ -103,8 +150,10 @@ function main() {
     console.log("No notes to render. Pin some in the Vellum player first.");
     return;
   }
+  ensureCommand("ffmpeg", ["-version"]);
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const index = [`# Review packet${COMP_DIR ? ` — ${COMP_DIR}` : ""}`, "", `${notes.length} note(s).`, ""];
+  let failures = 0;
 
   notes.forEach((n, i) => {
     console.log(`[${i + 1}/${notes.length}] ${fmt(n.time)} — ${n.text.slice(0, 60)}`);
@@ -112,6 +161,7 @@ function main() {
     const out = path.join(OUT_DIR, `note-${n.id}.png`);
     let drawn = false;
     if (snap) drawn = drawMarker(snap, n, out);
+    if (!drawn) failures += 1;
     const where = n.w != null ? `box ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%,${n.y}%` : "—";
     const tgt = n.target ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`` : "";
     index.push(`### ${i + 1}. ${fmt(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
@@ -124,6 +174,10 @@ function main() {
   });
 
   fs.writeFileSync(path.join(OUT_DIR, "INDEX.md"), index.join("\n"));
+  if (failures) {
+    console.error(`\nFailed to render ${failures} review marker(s). See messages above.`);
+    process.exit(1);
+  }
   console.log(`\nWrote ${notes.length} frame(s) → ${path.relative(ROOT, OUT_DIR)}/  (see INDEX.md)`);
 }
 
