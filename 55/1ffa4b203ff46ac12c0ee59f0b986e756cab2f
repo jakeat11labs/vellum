@@ -1,0 +1,24 @@
+package.json
+  s_4ac1138c7055b5::t_5f56053ef34d5b 4
+registry.json
+  s_4ac1138c7055b5::t_4d6acb40fbca75 10
+README.md
+  s_4ac1138c7055b5::t_4853643d53eb0f 10-11
+  s_4ac1138c7055b5::t_64a73788483bd5 3-6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "551ffa4b203ff46ac12c0ee59f0b986e756cab2f",
+  "prompts": {},
+  "sessions": {
+    "s_4ac1138c7055b5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a493a09-a734-4355-94d4-ac97505ed170",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
