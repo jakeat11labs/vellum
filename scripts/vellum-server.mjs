@@ -64,12 +64,16 @@ function resolveInside(base, target) {
   return full;
 }
 
-// HyperFrames runtime resolution. Academy / npx-style projects run `npx hyperframes@X`
-// and have no local node_modules/hyperframes, so the runtime the player injects
-// (/node_modules/hyperframes/dist/hyperframe.runtime.iife.js) is served from the npx
-// download cache when a matching version is found, otherwise redirected to the jsDelivr
-// CDN. A real local install always wins.
+// HyperFrames runtime resolution. The runtime the player injects is NOT referenced by
+// the composition's HTML, and its filename is not declared in the hyperframes package
+// (no `exports`/`main`, and dist/ ships more than one build). So we resolve it
+// DYNAMICALLY rather than hardcoding the path: glob the dist/ of a local
+// node_modules/hyperframes, else the npx download cache, else fall back to the jsDelivr
+// CDN. The player fetches it from a stable Vellum endpoint (RUNTIME_ENDPOINT) so the
+// exact filename never has to be hardcoded on the client. A real local install wins.
 const HF_BASE = "/node_modules/hyperframes";
+const RUNTIME_ENDPOINT = "/__vellum/runtime.js";
+const HF_CDN = "https://cdn.jsdelivr.net/npm/hyperframes";
 
 function detectHyperframesVersion() {
   try {
@@ -85,6 +89,20 @@ function detectHyperframesVersion() {
   return "latest";
 }
 
+// Locate the browser runtime build inside a hyperframes package by globbing dist/, so a
+// future rename (e.g. hyperframe.runtime.iife.js → *.runtime.min.js) still resolves.
+function findRuntimeFile(hfDir) {
+  const dist = path.join(hfDir, "dist");
+  try {
+    const files = fs.readdirSync(dist);
+    const pick =
+      files.find((f) => /runtime/i.test(f) && /\.iife\.js$/i.test(f)) ||
+      files.find((f) => /runtime/i.test(f) && f.endsWith(".js"));
+    if (pick) return path.join(dist, pick);
+  } catch {}
+  return null;
+}
+
 function findNpxRuntimeDir(version) {
   try {
     const base = path.join(os.homedir(), ".npm", "_npx");
@@ -92,12 +110,7 @@ function findNpxRuntimeDir(version) {
       const hf = path.join(base, sub, "node_modules", "hyperframes");
       try {
         const v = JSON.parse(fs.readFileSync(path.join(hf, "package.json"), "utf8")).version;
-        if (
-          (version === "latest" || v === version) &&
-          fs.existsSync(path.join(hf, "dist", "hyperframe.runtime.iife.js"))
-        ) {
-          return hf;
-        }
+        if ((version === "latest" || v === version) && findRuntimeFile(hf)) return hf;
       } catch {}
     }
   } catch {}
@@ -105,35 +118,46 @@ function findNpxRuntimeDir(version) {
 }
 
 const HF_VERSION = detectHyperframesVersion();
-const HF_LOCAL = fs.existsSync(
-  path.join(ROOT, "node_modules", "hyperframes", "dist", "hyperframe.runtime.iife.js")
-);
-const HF_NPX_DIR = HF_LOCAL ? null : findNpxRuntimeDir(HF_VERSION);
+const HF_LOCAL_DIR = path.join(ROOT, "node_modules", "hyperframes");
+const HF_LOCAL_RUNTIME = findRuntimeFile(HF_LOCAL_DIR);
+const HF_NPX_DIR = HF_LOCAL_RUNTIME ? null : findNpxRuntimeDir(HF_VERSION);
 
+function streamFile(res, filePath) {
+  const st = fs.statSync(filePath);
+  const type = MIME[path.extname(filePath).toLowerCase()] || "application/octet-stream";
+  res.writeHead(200, { "content-type": type, "content-length": st.size, "cache-control": "no-cache" });
+  const stream = fs.createReadStream(filePath);
+  stream.on("error", () => res.destroy());
+  stream.pipe(res);
+}
+
+// Stable endpoint the player injects. Resolves the real runtime file (local → npx cache),
+// else redirects to the CDN — so the client never hardcodes the dist filename.
+function serveRuntime(res) {
+  const local = HF_LOCAL_RUNTIME || (HF_NPX_DIR ? findRuntimeFile(HF_NPX_DIR) : null);
+  if (local) {
+    try {
+      return streamFile(res, local);
+    } catch {}
+  }
+  const verTag = HF_VERSION === "latest" ? "" : `@${HF_VERSION}`;
+  res.writeHead(302, { location: `${HF_CDN}${verTag}/dist/hyperframe.runtime.iife.js`, "cache-control": "no-cache" });
+  return res.end();
+}
+
+// Legacy passthrough: anything still requesting /node_modules/hyperframes/* directly.
 function serveHyperframesRuntime(req, res, pathname) {
-  const rest = pathname.slice(HF_BASE.length); // "" or "/dist/hyperframe.runtime.iife.js"
+  const rest = pathname.slice(HF_BASE.length);
   if (HF_NPX_DIR) {
     const cacheFull = resolveInside(HF_NPX_DIR, `.${rest}`);
     if (cacheFull) {
       try {
-        const st = fs.statSync(cacheFull);
-        if (st.isFile()) {
-          const type = MIME[path.extname(cacheFull).toLowerCase()] || "application/octet-stream";
-          res.writeHead(200, {
-            "content-type": type,
-            "content-length": st.size,
-            "cache-control": "no-cache",
-          });
-          const stream = fs.createReadStream(cacheFull);
-          stream.on("error", () => res.destroy());
-          return stream.pipe(res);
-        }
+        if (fs.statSync(cacheFull).isFile()) return streamFile(res, cacheFull);
       } catch {}
     }
   }
   const verTag = HF_VERSION === "latest" ? "" : `@${HF_VERSION}`;
-  const cdn = `https://cdn.jsdelivr.net/npm/hyperframes${verTag}${rest}`;
-  res.writeHead(302, { location: cdn, "cache-control": "no-cache" });
+  res.writeHead(302, { location: `${HF_CDN}${verTag}${rest}`, "cache-control": "no-cache" });
   return res.end();
 }
 const NOTES_DIR = path.join(COMP_ABS, "notes");
@@ -491,6 +515,7 @@ function serveStatic(req, res) {
 
 const server = http.createServer((req, res) => {
   const { pathname } = new URL(req.url, "http://localhost");
+  if (pathname === RUNTIME_ENDPOINT) return serveRuntime(res);
   const noteMatch = /^\/api\/notes\/(\d+)$/.exec(pathname);
   if (noteMatch) return handleNoteById(req, res, noteMatch[1]);
   if (pathname === "/api/notes") return handleNotes(req, res);
@@ -498,19 +523,25 @@ const server = http.createServer((req, res) => {
   return serveStatic(req, res);
 });
 
-server.listen(PORT, "127.0.0.1", () => {
+// Honor an explicit VELLUM_PORT exactly (fail clearly if taken); otherwise hunt for the
+// next free port instead of crashing with a raw EADDRINUSE stack trace.
+const EXPLICIT_PORT = Boolean(process.env.VELLUM_PORT);
+let activePort = PORT;
+
+function onListen() {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
   if (!fs.existsSync(NOTES_JSON)) writeNotes(emptyNotesOnMissing());
   const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
-  const url = `http://127.0.0.1:${PORT}${ANNOTATE_PATH}`;
+  const url = `http://127.0.0.1:${activePort}${ANNOTATE_PATH}`;
   if (!fs.existsSync(path.join(COMP_ABS, "index.html"))) {
     console.warn(`⚠  No composition found at ${compRel}. Run vellum from your HyperFrames project root, or set VELLUM_DIR.`);
   }
-  const hfSource = HF_LOCAL
-    ? "node_modules/hyperframes"
+  const hfSource = HF_LOCAL_RUNTIME
+    ? `node_modules/hyperframes (${path.basename(HF_LOCAL_RUNTIME)})`
     : HF_NPX_DIR
       ? `npx cache (hyperframes@${HF_VERSION})`
       : `jsDelivr CDN (hyperframes@${HF_VERSION})`;
+  if (activePort !== PORT) console.log(`\n  Port ${PORT} was busy — using ${activePort} instead.`);
   console.log(`\n  Vellum review server  ·  ${url}`);
   console.log(`  Composition:  ${compRel}`);
   console.log(`  Runtime:      ${hfSource}`);
@@ -522,4 +553,21 @@ server.listen(PORT, "127.0.0.1", () => {
     console.log(`  Open → ${url}`);
   }
   console.log(`  Press Ctrl+C to stop.\n`);
+}
+
+server.on("listening", onListen);
+server.on("error", (err) => {
+  if (err && err.code === "EADDRINUSE") {
+    if (!EXPLICIT_PORT && activePort < PORT + 20) {
+      activePort += 1;
+      server.listen(activePort, "127.0.0.1");
+      return;
+    }
+    console.error(`\n  Port ${activePort} is already in use. Free it or pick another:  VELLUM_PORT=5050 vellum\n`);
+    process.exit(1);
+  }
+  console.error(`\n  Server error: ${err && err.message}\n`);
+  process.exit(1);
 });
+
+server.listen(activePort, "127.0.0.1");

@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.3] - June 11, 2026
+
+### Changed
+- **Runtime is resolved dynamically, not by hardcoded filename.** The player now fetches the HyperFrames runtime from a stable `/__vellum/runtime.js` endpoint; the server globs the real build out of a local `node_modules/hyperframes` → npx cache → CDN. Survives a future runtime rename instead of hardcoding `dist/hyperframe.runtime.iife.js` on the client.
+- **Audio bed detection honors an explicit `data-vellum-audio="music"|"voice"`** attribute on `<audio>` elements, falling back to the previous id/longest-clip heuristic.
+
+### Added
+- **Automatic port fallback.** If the default port (4848) is busy, the server hops to the next free port instead of crashing with `EADDRINUSE`. An explicit `VELLUM_PORT` is still honored exactly (clear error if taken).
+
 ## [0.3.2] - June 11, 2026
 
 ### Fixed
