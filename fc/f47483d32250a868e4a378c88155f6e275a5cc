@@ -1,0 +1,25 @@
+install.sh
+  s_4ac1138c7055b5::t_cd8cd36378736b 32-33
+  s_4ac1138c7055b5::t_85d6174fbb3e68 3
+scripts/vellum-shim
+  s_4ac1138c7055b5::t_45e39fbf029e19 32
+README.md
+  s_4ac1138c7055b5::t_9cca0640adb27d 31,66
+  s_4ac1138c7055b5::t_4f67de1e799636 75
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "fcf47483d32250a868e4a378c88155f6e275a5cc",
+  "prompts": {},
+  "sessions": {
+    "s_4ac1138c7055b5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a493a09-a734-4355-94d4-ac97505ed170",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
