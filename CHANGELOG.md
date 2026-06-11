@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.1] - June 11, 2026
+
+### Fixed
+- Installer no longer aborts under `set -e` right after installing the agent skill. On a root-composition install (no `--dir`, no existing `.vellum.env`), `write_vellum_env` ended on a `[ -f .vellum.env ] && rm -f …` test that returned non-zero, killing the script before the global `vellum` command was installed and before the "Start Vellum now?" step. Root-composition installs now complete cleanly.
+
 ## [0.3.0] - June 11, 2026
 
 ### Added

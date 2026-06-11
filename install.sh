@@ -400,8 +400,7 @@ write_vellum_env() {
     mv "$tmp" "$env_file"
     ok "wrote $env_file (defaults for the vellum command)"
   else
-    rm -f "$tmp"
-    [ -f "$env_file" ] && rm -f "$env_file"
+    rm -f "$tmp" "$env_file"
   fi
 }
 

@@ -1,6 +1,6 @@
 {
   "name": "vellum-hf",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A visual feedback interface for AI-edited video — pin time-coded notes your coding agent can read.",
   "type": "module",
   "bin": {
