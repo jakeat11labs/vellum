@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.2] - June 11, 2026
+
+### Fixed
+- Review player now locates the composition root by its `data-composition-id` attribute instead of requiring a literal `id="root"`. Compositions whose root element uses a different id (e.g. `id="stage"`) now mount correctly instead of failing with "no #root composition in index.html". Scene detection and the pin hit-test use the same lookup.
+
 ## [0.3.1] - June 11, 2026
 
 ### Fixed

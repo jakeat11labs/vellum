@@ -188,9 +188,9 @@
         flash._t = setTimeout(() => statusEl.classList.remove("show"), 2000);
       };
 
-      // ---- scenes (generic: read [data-start] direct children of #root) ----
+      // ---- scenes (generic: read [data-start] direct children of the composition root) ----
       function buildScenes(doc) {
-        const root = doc.getElementById("root") || doc.body;
+        const root = doc.querySelector("[data-composition-id]") || doc.getElementById("root") || doc.body;
         const out = [];
         for (const el of root.children) {
           if (el.tagName === "AUDIO" || el.tagName === "SCRIPT") continue;
@@ -251,8 +251,8 @@
         });
         const win = iframe.contentWindow;
         compDoc = iframe.contentDocument;
-        const root = compDoc.getElementById("root");
-        if (!root) throw new Error("no #root composition in index.html");
+        const root = compDoc.querySelector("[data-composition-id]") || compDoc.getElementById("root");
+        if (!root) throw new Error("no composition root ([data-composition-id] or #root) in index.html");
         compW = Number(root.getAttribute("data-width")) || root.offsetWidth || 1920;
         compH = Number(root.getAttribute("data-height")) || root.offsetHeight || 1080;
         iframe.style.width = `${compW}px`;
@@ -422,7 +422,7 @@
         const ix = (clientX - r.left) / s;
         const iy = (clientY - r.top) / s;
         const el = compDoc.elementFromPoint(ix, iy);
-        const root = compDoc.getElementById("root");
+        const root = compDoc.querySelector("[data-composition-id]") || compDoc.getElementById("root");
         if (!el || !root || !root.contains(el)) return null;
         let node = el;
         while (node && node !== root && !(typeof node.className === "string" && node.className.trim())) {
