@@ -7,7 +7,7 @@
       "name": "vellum",
       "type": "registry:file",
       "title": "Vellum — HyperFrames review & annotate",
-      "description": "A transparent review-and-annotate layer for HyperFrames videos. Pin time-coded notes on any frame; your coding agent reads them back. Installs the local server, the player, and the review-packet builder.",
+      "description": "A visual feedback interface for AI-edited video. Pin time-coded notes on any frame; your coding agent reads them back. Installs the local server, the player, and the review-packet builder.",
       "files": [
         {
           "path": "scripts/vellum-shared.mjs",

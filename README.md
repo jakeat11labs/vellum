@@ -1,11 +1,14 @@
 <div align="center">
 
-<img src="assets/logo-banner.png" alt="Vellum" width="600" />
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/logo-darkmode.png">
+  <img src="assets/logo-updated.png" alt="Vellum — a visual feedback interface for AI-edited video" width="600">
+</picture>
 
 ### You see the problem. Your agent can't.
 
-**Vellum is the transparent review layer for [HyperFrames](https://hyperframes.heygen.com) videos —
-pin time-coded notes onto any frame, and your coding agent reads them back and makes the edits.**
+**Vellum is a visual feedback interface for AI-edited video —
+pin time-coded notes onto any [HyperFrames](https://hyperframes.heygen.com) frame, and your coding agent reads them back and makes the edits.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-5eead4)](LICENSE)
 [![Node >= 18](https://img.shields.io/badge/node-%E2%89%A5%2018-339933?logo=node.js&logoColor=white)](package.json)
