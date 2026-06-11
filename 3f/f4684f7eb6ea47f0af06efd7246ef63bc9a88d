@@ -1,0 +1,19 @@
+CHANGELOG.md
+  s_4ac1138c7055b5::t_d2e538117f1ab9 77
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "3ff4684f7eb6ea47f0af06efd7246ef63bc9a88d",
+  "prompts": {},
+  "sessions": {
+    "s_4ac1138c7055b5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a493a09-a734-4355-94d4-ac97505ed170",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
