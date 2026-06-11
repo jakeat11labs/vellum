@@ -7,7 +7,7 @@
 **Vellum is the transparent review layer for [HyperFrames](https://hyperframes.heygen.com) videos —
 pin time-coded notes onto any frame, and your coding agent reads them back and makes the edits.**
 
-[![License: MIT](https://img.shields.io/github/license/jakeat11labs/vellum?color=5eead4&label=license)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-5eead4)](LICENSE)
 [![Node >= 18](https://img.shields.io/badge/node-%E2%89%A5%2018-339933?logo=node.js&logoColor=white)](package.json)
 [![CI](https://github.com/jakeat11labs/vellum/actions/workflows/test.yml/badge.svg)](https://github.com/jakeat11labs/vellum/actions/workflows/test.yml)
 [![Made for HyperFrames](https://img.shields.io/badge/made%20for-HyperFrames-0b0b0d)](https://hyperframes.heygen.com)
