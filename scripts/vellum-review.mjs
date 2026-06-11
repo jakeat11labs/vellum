@@ -9,7 +9,7 @@
  * Output: <comp>/notes/review/note-<id>.png  +  <comp>/notes/review/INDEX.md
  *
  * Run from your HyperFrames project root:  npx vellum-review   (or: node scripts/vellum-review.mjs)
- *   VELLUM_DIR=M01L01 node scripts/vellum-review.mjs   # monorepo
+ *   VELLUM_DIR=compositions/hero node scripts/vellum-review.mjs   # subfolder composition
  *
  * External processes are invoked with argument ARRAYS (no shell string interpolation);
  * all marker coordinates are numbers derived from the note percentages.
@@ -18,46 +18,45 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
+import { compSize, fmtTime, resolveComposition } from "./vellum-shared.mjs";
 
-const ROOT = process.cwd();
-const COMP_DIR = (process.env.VELLUM_DIR || "").replace(/^\/+|\/+$/g, "");
-const COMP = path.join(ROOT, COMP_DIR);
+const { root: ROOT, compDir: COMP_DIR, compAbs: COMP } = resolveComposition();
 const NOTES_JSON = path.join(COMP, "notes", "annotations.json");
 const SNAP_DIR = path.join(COMP, "snapshots");
 const OUT_DIR = path.join(COMP, "notes", "review");
 const ACCENT = "0x5EEAD4";
 
-// Composition pixel size — read from index.html #root, default 1920x1080.
-function compSize() {
-  try {
-    const html = fs.readFileSync(path.join(COMP, "index.html"), "utf8");
-    const w = Number((/data-width="(\d+)"/.exec(html) || [])[1]) || 1920;
-    const h = Number((/data-height="(\d+)"/.exec(html) || [])[1]) || 1080;
-    return { W: w, H: h };
-  } catch {
-    return { W: 1920, H: 1080 };
-  }
-}
-const { W, H } = compSize();
-
-function fmt(t) {
-  const m = Math.floor(t / 60);
-  const s = t % 60;
-  return `${m}:${s.toFixed(2).padStart(5, "0")}`;
-}
+const { W, H } = compSize(COMP);
 
 function readNotes() {
   try {
     return JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
-  } catch {
+  } catch (err) {
+    if (err && err.code !== "ENOENT") {
+      console.error(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message}`);
+      process.exit(1);
+    }
     return [];
   }
+}
+
+function ensureCommand(name, args) {
+  const r = spawnSync(name, args, { encoding: "utf8" });
+  if (r.error && r.error.code === "ENOENT") {
+    console.error(`Missing required command: ${name}`);
+    process.exit(1);
+  }
+  return true;
 }
 
 // Render the composition frame at time t; return the path to the produced PNG.
 function snapshot(t) {
   const before = new Set(fs.existsSync(SNAP_DIR) ? fs.readdirSync(SNAP_DIR) : []);
   const r = spawnSync("npx", ["hyperframes", "snapshot", "--at", String(t)], { cwd: COMP, encoding: "utf8" });
+  if (r.error && r.error.code === "ENOENT") {
+    console.error("Missing required command: npx");
+    return null;
+  }
   if (r.status !== 0) {
     console.error(`  snapshot @ ${t}s failed: ${(r.stderr || r.stdout || "").trim().split("\n").pop()}`);
     return null;
@@ -90,6 +89,10 @@ function drawMarker(srcPng, note, outPng) {
     return true;
   }
   const r = spawnSync("ffmpeg", ["-y", "-i", srcPng, "-vf", filter, outPng], { encoding: "utf8" });
+  if (r.error && r.error.code === "ENOENT") {
+    console.error("  ffmpeg is required to draw note markers. Install ffmpeg or run without review packets.");
+    return false;
+  }
   if (r.status !== 0) {
     console.error(`  ffmpeg draw failed for note ${note.id}: ${(r.stderr || "").trim().split("\n").pop()}`);
     return false;
@@ -103,18 +106,21 @@ function main() {
     console.log("No notes to render. Pin some in the Vellum player first.");
     return;
   }
+  ensureCommand("ffmpeg", ["-version"]);
   fs.mkdirSync(OUT_DIR, { recursive: true });
   const index = [`# Review packet${COMP_DIR ? ` — ${COMP_DIR}` : ""}`, "", `${notes.length} note(s).`, ""];
+  let failures = 0;
 
   notes.forEach((n, i) => {
-    console.log(`[${i + 1}/${notes.length}] ${fmt(n.time)} — ${n.text.slice(0, 60)}`);
+    console.log(`[${i + 1}/${notes.length}] note-${n.id} ${fmtTime(n.time)} — ${n.text.slice(0, 60)}`);
     const snap = snapshot(n.time);
     const out = path.join(OUT_DIR, `note-${n.id}.png`);
     let drawn = false;
     if (snap) drawn = drawMarker(snap, n, out);
+    if (!drawn) failures += 1;
     const where = n.w != null ? `box ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%,${n.y}%` : "—";
     const tgt = n.target ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`` : "";
-    index.push(`### ${i + 1}. ${fmt(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
+    index.push(`### note-${n.id} · ${fmtTime(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
     index.push("");
     index.push(`${n.text}`);
     index.push("");
@@ -124,6 +130,10 @@ function main() {
   });
 
   fs.writeFileSync(path.join(OUT_DIR, "INDEX.md"), index.join("\n"));
+  if (failures) {
+    console.error(`\nFailed to render ${failures} review marker(s). See messages above.`);
+    process.exit(1);
+  }
   console.log(`\nWrote ${notes.length} frame(s) → ${path.relative(ROOT, OUT_DIR)}/  (see INDEX.md)`);
 }
 

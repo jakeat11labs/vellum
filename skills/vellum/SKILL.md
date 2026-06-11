@@ -22,17 +22,22 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
 ## The workflow
 
 1. **Locate the notes.** They live at `<comp>/notes/annotations.md` (readable) and
-   `annotations.json` (structured). In a single-composition project that's `./notes/`; in a
-   monorepo it's under the lesson subdir (e.g. `M01L01/notes/`).
+   `annotations.json` (structured). In a single-composition project that's `./notes/`; if the
+   composition lives in a subfolder, notes are under that subdir (e.g. `compositions/hero/notes/`).
 
 2. **Read them.** `annotations.md` lists each note as:
-   `- **M:SS.ss** \`scene-id\` — <feedback>  _(pin x%, y% | box …)_ · on \`tag.class\` "text"`
-   The `time`, `scene`, and `target` tell you *exactly* where in the composition the note lands.
+   `- **note-<id>** · **M:SS.ss** \`scene-id\` — <feedback>  _(pin x%, y% | box …)_ · on \`tag.class\` "text"`
+   The `note-<id>` links to `notes/review/note-<id>.png`. Use `time`, `scene`, and `target` to find the edit in `index.html`.
+   Notes may include status `(resolved)` or `(wontfix)` — skip those unless the user asks you to revisit them.
 
 3. **See what each note points at (optional but recommended for visual notes).** Run the
    review-packet builder to render the actual frame with the marker drawn on it:
    ```bash
-   node scripts/vellum-review.mjs          # or: VELLUM_DIR=<subdir> node scripts/vellum-review.mjs
+   npm run vellum:review                  # installer path
+   node scripts/vellum-review.mjs         # clone/manual path
+   npx vellum-review                      # package/bin path
+   # subfolder composition:
+   VELLUM_DIR=compositions/hero node scripts/vellum-review.mjs
    ```
    Then read `<comp>/notes/review/INDEX.md` and the `note-<id>.png` images — they show the
    frame at the note's time with the pin/box overlaid.
@@ -45,9 +50,11 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
      `data-duration` and re-syncing dependent cues — follow the `hyperframes` timing rules.
 
 5. **Verify.** After edits, run the project's lint, then snapshot at the note's time to confirm
-   the fix (`npx hyperframes snapshot --at <time>`). Re-read the note and check it's satisfied.
+   the fix (`npx hyperframes snapshot --at <time>`). Prefer `annotations.json` for exact
+   coordinates/timing, inspect review images for visual notes, re-snapshot after each fix, and
+   re-read the original note before marking it satisfied.
 
-6. **Report back per note.** Tell the user, note by note, what you changed (or why you didn't).
+6. **Report back per note.** Tell the user, note by note, what you changed (or why you didn't). Reference `note-<id>` in your summary so it lines up with the review packet.
 
 ## Saved audio mix
 
@@ -57,10 +64,12 @@ saved them. Apply by setting the matching `data-volume` on the relevant `<audio>
 
 ## Running Vellum (to tell the user)
 
-Vellum is started by the human, not by you — it opens a browser review player:
+Vellum is started by the human, not by you — it opens a browser review player automatically:
 ```bash
+vellum                          # installer path — opens the browser
+npm run vellum                  # if you skipped the global command
 npx vellum                      # composition is ./index.html
-VELLUM_DIR=M01L01 npx vellum    # composition is ./M01L01/index.html
+VELLUM_DIR=compositions/hero vellum    # composition is ./compositions/hero/index.html
 ```
 If they haven't reviewed yet and ask you to, point them at the command above, then wait for the
 notes to appear before acting.

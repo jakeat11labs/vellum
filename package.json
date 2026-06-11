@@ -1,6 +1,6 @@
 {
   "name": "vellum-hf",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A transparent review-and-annotate layer for HyperFrames videos — pin time-coded notes your coding agent can read.",
   "type": "module",
   "bin": {
@@ -8,8 +8,11 @@
     "vellum-review": "scripts/vellum-review.mjs"
   },
   "scripts": {
+    "vellum": "node scripts/vellum-server.mjs",
+    "vellum:review": "node scripts/vellum-review.mjs",
     "annotate": "node scripts/vellum-server.mjs",
-    "review": "node scripts/vellum-review.mjs"
+    "review": "node scripts/vellum-review.mjs",
+    "test": "node scripts/vellum-smoke-test.mjs"
   },
   "keywords": [
     "hyperframes",
@@ -22,10 +25,15 @@
   ],
   "files": [
     "scripts/",
+    ".github/workflows/test.yml",
     "skills/",
+    "assets/",
+    "docs/",
+    "examples/",
     "registry.json",
     "install.sh",
-    "README.md"
+    "README.md",
+    "CHANGELOG.md"
   ],
   "license": "MIT",
   "repository": {
@@ -35,5 +43,8 @@
   "homepage": "https://github.com/jakeat11labs/vellum#readme",
   "engines": {
     "node": ">=18"
+  },
+  "dependencies": {
+    "hyperframes": "^0.6.91"
   }
 }

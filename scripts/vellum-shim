@@ -1,0 +1,33 @@
+#!/bin/sh
+# Vellum CLI shim — finds the nearest project install and runs the review server.
+# Installed to ~/.local/bin/vellum (and vellum-review) by install.sh.
+set -e
+
+cmd="$(basename "$0")"
+case "$cmd" in
+  vellum) script_name="vellum-server.mjs" ;;
+  vellum-review) script_name="vellum-review.mjs" ;;
+  *)
+    printf 'vellum: unknown command: %s\n' "$cmd" >&2
+    exit 1
+    ;;
+esac
+
+dir="$PWD"
+while [ "$dir" != "/" ]; do
+  target="$dir/scripts/$script_name"
+  if [ -f "$target" ]; then
+    if [ -f "$dir/.vellum.env" ]; then
+      # shellcheck disable=SC1090
+      . "$dir/.vellum.env"
+    fi
+    cd "$dir"
+    exec node "$target" "$@"
+  fi
+  dir="$(dirname "$dir")"
+done
+
+printf 'vellum: no installation found in this directory tree.\n' >&2
+printf 'Run the installer from your HyperFrames project root:\n' >&2
+printf '  curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh\n' >&2
+exit 1
