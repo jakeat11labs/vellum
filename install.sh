@@ -1,6 +1,6 @@
 #!/bin/sh
 # Vellum installer - run from the root of your HyperFrames project:
-#   curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
+#   curl -fsSL https://tryvellum.vercel.app/install | sh
 #
 # Installs the review tool into scripts/ and the agent skill (default: .agents/skills/vellum/).
 # Re-runnable; it never overwrites existing package.json scripts.
@@ -29,8 +29,8 @@ usage() {
 Vellum installer
 
 Usage:
-  curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
-  curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh -s -- --dir compositions/hero
+  curl -fsSL https://tryvellum.vercel.app/install | sh
+  curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --dir compositions/hero
 
 Options:
   --dir <path>       Default HyperFrames composition directory for npm scripts

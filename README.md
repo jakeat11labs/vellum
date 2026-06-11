@@ -28,7 +28,7 @@ pin time-coded notes onto any [HyperFrames](https://hyperframes.heygen.com) fram
 <br><br>
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
+curl -fsSL https://tryvellum.vercel.app/install | sh
 vellum
 ```
 
@@ -63,7 +63,7 @@ Works on **any** HyperFrames project — scenes come from the `data-start` attri
 From the root of your HyperFrames project:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
+curl -fsSL https://tryvellum.vercel.app/install | sh
 vellum
 ```
 
@@ -72,7 +72,7 @@ The installer drops the review tool into `scripts/`, adds a global `vellum` comm
 Composition in a subfolder? Pass `--dir` during install:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh -s -- --dir compositions/hero
+curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --dir compositions/hero
 ```
 
 > **Requirements:** HyperFrames project (`index.html` + `node_modules/hyperframes`). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.

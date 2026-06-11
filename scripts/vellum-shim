@@ -29,5 +29,5 @@ done
 
 printf 'vellum: no installation found in this directory tree.\n' >&2
 printf 'Run the installer from your HyperFrames project root:\n' >&2
-printf '  curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh\n' >&2
+printf '  curl -fsSL https://tryvellum.vercel.app/install | sh\n' >&2
 exit 1
