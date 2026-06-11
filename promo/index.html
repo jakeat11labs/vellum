@@ -71,18 +71,26 @@
       .vmix .mtrack { width: 46px; height: 5px; background: #26262c; border-radius: 3px; position: relative; }
       .vmix .mfill { position: absolute; left: 0; top: 0; bottom: 0; background: #5eead4; border-radius: 3px; }
 
-      /* mock composition inside the stage */
-      .mock-orb { position: absolute; left: 50%; top: 44%; width: 470px; height: 470px; border-radius: 50%;
-        transform: translate(-50%, -50%);
-        background: radial-gradient(circle at 38% 32%, rgba(94,234,212,0.55) 0%, rgba(96,165,250,0.38) 38%, rgba(139,125,255,0.30) 62%, rgba(139,125,255,0) 78%);
-        filter: blur(6px); }
-      .mock-headline { position: absolute; left: 0; right: 0; top: 205px; text-align: center;
-        font-size: 80px; font-weight: 700; letter-spacing: -0.025em; color: #ffffff; }
+      /* mock composition inside the stage — a polished "voice product" frame */
+      .mock-frame { position: absolute; inset: 0;
+        background:
+          radial-gradient(115% 80% at 80% 10%, rgba(139,125,255,0.20), rgba(139,125,255,0) 56%),
+          radial-gradient(110% 78% at 14% 98%, rgba(94,234,212,0.13), rgba(94,234,212,0) 55%),
+          linear-gradient(155deg, #12121d 0%, #0c0c14 58%, #0a0a0f 100%); }
+      .mock-eyebrow { position: absolute; left: 54px; top: 44px; font-family: "IBM Plex Mono", monospace;
+        font-size: 17px; letter-spacing: 0.24em; text-transform: uppercase; color: #9a9aa4;
+        display: flex; align-items: center; gap: 13px; }
+      .mock-eyebrow .rec { width: 10px; height: 10px; border-radius: 50%; background: #5eead4; box-shadow: 0 0 12px rgba(94,234,212,0.9); }
+      .mock-headline { position: absolute; left: 0; right: 0; top: 168px; text-align: center;
+        font-size: 82px; font-weight: 700; letter-spacing: -0.03em; color: #ffffff; }
+      .mock-wave { position: absolute; left: 50%; transform: translateX(-50%); top: 392px;
+        width: 1000px; height: 150px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+      .wbar { width: 7px; border-radius: 4px; }
       .mock-caption { position: absolute; left: 50%; transform: translateX(-50%);
-        background: rgba(245,245,247,0.96); color: #15151a; font-size: 24px; font-weight: 500;
-        padding: 10px 26px; border-radius: 999px; white-space: nowrap; }
-      .mock-caption.bad { top: 252px; }       /* overlaps the headline baseline — the flaw */
-      .mock-caption.good { top: 560px; }      /* correctly seated lower third */
+        background: #f4f4f6; color: #14141a; font-size: 22px; font-weight: 600; letter-spacing: -0.01em;
+        padding: 9px 22px; border-radius: 11px; white-space: nowrap; box-shadow: 0 8px 30px rgba(0,0,0,0.5); }
+      .mock-caption.bad { top: 240px; }       /* overlaps the headline baseline — the flaw */
+      .mock-caption.good { top: 556px; }      /* correctly seated lower third */
       .mock-cards { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); display: flex; gap: 34px; }
       .mock-card { width: 360px; padding: 40px 36px 44px; border-radius: 18px; background: rgba(255,255,255,0.045);
         border: 1px solid rgba(255,255,255,0.13); }
@@ -157,7 +165,7 @@
       /* ---------- s7 terminal + diff ---------- */
       .splitwrap { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -55%); width: 1640px;
         display: flex; gap: 0; align-items: stretch; }
-      .term { width: 860px; background: #0e0e11; border: 1px solid #2c2c32; border-radius: 14px;
+      .term { width: 860px; background: #121218; border: 1px solid #2c2c32; border-radius: 14px;
         padding: 30px 34px; font-family: "IBM Plex Mono", monospace; font-size: 22px; line-height: 2.0; color: #e8e8ea; }
       .term .prompt-line .w { display: inline-block; white-space: pre; }
       .term .chk { color: #5eead4; font-weight: 600; margin-right: 12px; }
@@ -170,7 +178,7 @@
         font-family: "IBM Plex Mono", monospace; font-size: 18px; color: #8b8b93; }
       .diffbody { padding: 24px 28px; font-family: "IBM Plex Mono", monospace; font-size: 20px; line-height: 2.0; }
       .dline { white-space: nowrap; }
-      .dminus { color: #8b8b93; } .dminus .g { color: #6e6e76; margin-right: 14px; }
+      .dminus { color: #9aa0aa; } .dminus .g { color: #6e6e76; margin-right: 14px; }
       .dplus { color: #5eead4; } .dplus .g { margin-right: 14px; }
       .quote { position: absolute; left: 0; right: 0; bottom: 92px; text-align: center;
         font-size: 42px; font-weight: 500; color: #ffffff; letter-spacing: -0.01em; }
@@ -186,19 +194,11 @@
       /* ---------- s9 cta ---------- */
       .cta-wrap { position: absolute; left: 0; right: 0; top: 0; bottom: 0; display: flex; flex-direction: column;
         align-items: center; justify-content: center; gap: 0; }
-      .sheets { position: relative; width: 460px; height: 330px; margin-bottom: 8px; }
-      .sheet { position: absolute; width: 150px; height: 300px; border-radius: 30px;
-        background: linear-gradient(165deg, rgba(94,234,212,0.85) 0%, rgba(96,165,250,0.65) 45%, rgba(139,125,255,0.75) 100%);
-        mix-blend-mode: screen; }
-      .sheet-l { left: 70px; top: 10px; transform: rotate(-17deg); opacity: 0.85; }
-      .sheet-m { left: 158px; top: 26px; transform: rotate(-2deg); opacity: 0.55; }
-      .sheet-r { left: 240px; top: 8px; transform: rotate(15deg); opacity: 0.75; }
-      .glyph { position: absolute; z-index: 6; }
-      .glyph-circle { left: 118px; top: 96px; width: 22px; height: 22px; border: 3px solid #ffffff; border-radius: 50%; }
-      .glyph-square { left: 312px; top: 110px; width: 20px; height: 20px; border: 3px solid #ffffff; }
-      .glyph-diamond { left: 222px; top: 252px; width: 18px; height: 18px; border: 3px solid #ffffff; transform: rotate(45deg); }
+      .cta-mark { width: 360px; height: auto; display: block; margin-bottom: 10px;
+        filter: drop-shadow(0 18px 60px rgba(94,234,212,0.20)) drop-shadow(0 8px 34px rgba(139,125,255,0.18)); }
       .cta-word { font-size: 100px; font-weight: 300; letter-spacing: -0.01em; color: #ffffff; line-height: 1; }
-      .cta-tag { font-size: 30px; font-weight: 300; color: #8b8b93; margin-top: 18px; }
+      .cta-tag { font-size: 30px; font-weight: 300; color: #cfd0d6; margin-top: 18px; }
+      .cta-tag .accent { color: #5eead4; font-weight: 400; }
       .cta-chip { margin-top: 44px; background: #121216; border: 1px solid #2c2c32; border-radius: 12px;
         padding: 20px 30px; font-family: "IBM Plex Mono", monospace; font-size: 23px; color: #e8e8ea; display: flex; align-items: center; }
       .cta-chip .dollar { color: #5eead4; font-weight: 600; margin-right: 16px; }
@@ -216,8 +216,10 @@
         <div class="ghost" id="s1-ghost" style="left: -40px; bottom: -70px; font-size: 330px;">REVIEW</div>
         <div class="vplayer" id="s1-player">
           <div class="vstage">
-            <div class="mock-orb"></div>
+            <div class="mock-frame"></div>
+            <div class="mock-eyebrow"><span class="rec"></span>Voice AI · 2026</div>
             <div class="mock-headline">VOICE THAT SCALES</div>
+            <div class="mock-wave"></div>
             <div class="mock-caption bad" id="s1-caption">Voice that scales</div>
           </div>
           <div class="vbar" id="s1-bar">
@@ -270,13 +272,15 @@
         <div class="ghost" style="left: -10px; top: -40px; font-size: 280px;">PIN</div>
         <div class="vplayer">
           <div class="vstage">
-            <div class="mock-orb"></div>
+            <div class="mock-frame"></div>
+            <div class="mock-eyebrow"><span class="rec"></span>Voice AI · 2026</div>
             <div class="mock-headline">VOICE THAT SCALES</div>
+            <div class="mock-wave"></div>
             <div class="mock-caption bad">Voice that scales</div>
             <div class="ripple" id="s3-ripple" style="left: 714px; top: 230px; opacity: 0;"></div>
             <div class="vpin" id="s3-pin" style="left: 724px; top: 240px;">1</div>
             <div class="composer" id="s3-composer" style="left: 750px; top: 295px;">
-              <div class="meta" id="s3-meta">0:12.40 · <span class="tk" id="s3-tok-scene" style="color:#8b8b93">scene-04</span> · pin 48.2%, 71.5%</div>
+              <div class="meta" id="s3-meta">0:12.40 · <span class="tk" id="s3-tok-scene" style="color:#8b8b93">scene-04</span> · pin 58.4%, 34.4%</div>
               <div class="tgt" id="s3-tgt">on div.caption — “Voice that scales”</div>
               <div class="box"><span class="ph">What's the note?</span></div>
               <div class="row"><span class="cbtn">Cancel</span><span class="cbtn save">Save note</span></div>
@@ -308,14 +312,16 @@
       <section id="s4" class="clip scene" data-start="19.8" data-duration="5.55" data-track-index="4" style="z-index: 4">
         <div class="sbody" id="s4-body">
         <div class="glow glow-violet" id="s4-glow" style="right: -340px; bottom: -380px;"></div>
-        <div class="vplayer" id="s4-player" style="transform-origin: 79% 48%;">
+        <div class="vplayer" id="s4-player" style="transform-origin: 70% 47%;">
           <div class="vstage">
-            <div class="mock-orb"></div>
+            <div class="mock-frame"></div>
+            <div class="mock-eyebrow"><span class="rec"></span>Voice AI · 2026</div>
             <div class="mock-headline">VOICE THAT SCALES</div>
+            <div class="mock-wave"></div>
             <div class="mock-caption bad">Voice that scales</div>
             <div class="vpin" style="left: 724px; top: 240px;">1</div>
             <div class="composer" id="s4-composer" style="left: 750px; top: 295px;">
-              <div class="meta">0:12.40 · scene-04 · pin 48.2%, 71.5%</div>
+              <div class="meta">0:12.40 · scene-04 · pin 58.4%, 34.4%</div>
               <div class="tgt">on div.caption — “Voice that scales”</div>
               <div class="box" id="s4-box"><span class="w">caption </span><span class="w">overlaps </span><span class="w">the </span><span class="w">headline </span><span class="w">— </span><span class="w">nudge </span><span class="w">it </span><span class="w">down</span><span class="caret" id="s4-caret"></span></div>
               <div class="row"><span class="cbtn">Cancel</span><span class="cbtn save" id="s4-save">Save note</span></div>
@@ -403,7 +409,7 @@
             <div id="s6-l1" class="cm"># Review notes</div>
             <div id="s6-l2">&nbsp;</div>
             <div id="s6-l3">- <span class="tk">**0:12.40**</span> <span class="tk">`scene-04`</span> — caption overlaps the headline — nudge it down</div>
-            <div id="s6-l4" class="cm">&nbsp;&nbsp;_(pin 48.2%, 71.5%)_ · on <span class="tk">`div.caption`</span> “Voice that scales”</div>
+            <div id="s6-l4" class="cm">&nbsp;&nbsp;_(pin 58.4%, 34.4%)_ · on <span class="tk">`div.caption`</span> “Voice that scales”</div>
             <div id="s6-l5">- <span class="tk">**0:31.10**</span> <span class="tk">`scene-07`</span> — this card enters late — start at 18.0</div>
             <div id="s6-l6" class="cm">&nbsp;&nbsp;_(box 22.4 × 31.0%)_ · on <span class="tk">`article.feature-card`</span></div>
           </div>
@@ -425,15 +431,15 @@
           <div class="term" id="s7-term">
             <div class="prompt-line" id="s7-prompt"><span class="chk">&gt;</span><span class="w">address </span><span class="w">my </span><span class="w">Vellum </span><span class="w">review </span><span class="w">notes</span></div>
             <div id="s7-o1"><span class="chk">✓</span>Reading notes/annotations.md — 2 notes</div>
-            <div id="s7-o2"><span class="chk">✓</span>note 1: .caption <span class="old">bottom 64px<span class="strike" id="s7-st1"></span></span> <span class="new">→ 128px</span></div>
+            <div id="s7-o2"><span class="chk">✓</span>note 1: .caption <span class="old">top 252px<span class="strike" id="s7-st1"></span></span> <span class="new">→ 560px</span></div>
             <div id="s7-o3"><span class="chk">✓</span>note 2: <span class="old">data-start 19.4<span class="strike" id="s7-st2"></span></span> <span class="new">→ 18.0</span></div>
           </div>
           <div class="vdivider" id="s7-div"></div>
           <div class="diffcard" id="s7-diff">
             <div class="diffhead">index.html</div>
             <div class="diffbody">
-              <div class="dline dminus" id="s7-d1"><span class="g">−</span>.caption { bottom: 64px; }</div>
-              <div class="dline dplus" id="s7-d2"><span class="g">+</span>.caption { bottom: 128px; }</div>
+              <div class="dline dminus" id="s7-d1"><span class="g">−</span>.caption { top: 252px; }</div>
+              <div class="dline dplus" id="s7-d2"><span class="g">+</span>.caption { top: 560px; }</div>
               <div class="dline dminus" id="s7-d3"><span class="g">−</span>data-start="19.4"</div>
               <div class="dline dplus" id="s7-d4"><span class="g">+</span>data-start="18.0"</div>
             </div>
@@ -451,18 +457,22 @@
         <div class="vplayer">
           <div class="vstage">
             <!-- BEFORE -->
-            <div class="mock-orb"></div>
+            <div class="mock-frame"></div>
+            <div class="mock-eyebrow"><span class="rec"></span>Voice AI · 2026</div>
             <div class="mock-headline">VOICE THAT SCALES</div>
+            <div class="mock-wave"></div>
             <div class="mock-caption bad">Voice that scales</div>
             <div class="vpin" id="s8-pin" style="left: 724px; top: 240px;">1</div>
             <!-- AFTER (revealed by the wipe) -->
             <div class="after-layer" id="s8-after">
-              <div class="mock-orb"></div>
+              <div class="mock-frame"></div>
+              <div class="mock-eyebrow"><span class="rec"></span>Voice AI · 2026</div>
               <div class="mock-headline">VOICE THAT SCALES</div>
+              <div class="mock-wave"></div>
               <div class="mock-caption good">Voice that scales</div>
             </div>
             <div class="wipeline" id="s8-wipe" style="opacity: 0;"></div>
-            <div class="resolved-chip" id="s8-chip" style="left: 716px; top: 534px; opacity: 0;">✓ resolved</div>
+            <div class="resolved-chip" id="s8-chip" style="left: 744px; top: 548px; opacity: 0;">✓ resolved</div>
             <div class="stage-flash" id="s8-flash"></div>
           </div>
           <div class="vbar">
@@ -492,16 +502,9 @@
         <div class="glow glow-violet" id="s9-glow1" style="left: 50%; top: -480px; margin-left: -550px;"></div>
         <div class="glow glow-cyan" id="s9-glow2" style="left: 50%; bottom: -460px; margin-left: -450px;"></div>
         <div class="cta-wrap">
-          <div class="sheets">
-            <div class="sheet sheet-l" id="s9-sheet1"></div>
-            <div class="sheet sheet-m" id="s9-sheet2"></div>
-            <div class="sheet sheet-r" id="s9-sheet3"></div>
-            <div class="glyph glyph-circle" id="s9-g1"></div>
-            <div class="glyph glyph-square" id="s9-g2"></div>
-            <div class="glyph glyph-diamond" id="s9-g3"></div>
-          </div>
-          <div class="cta-word" id="s9-word">vellum</div>
-          <div class="cta-tag" id="s9-tag">Transparent review for HyperFrames videos.</div>
+          <img class="cta-mark" id="s9-mark" src="assets/logo-mark.png" alt="Vellum logo" />
+          <div class="cta-word" id="s9-word">Vellum</div>
+          <div class="cta-tag" id="s9-tag">Transparent review for <span class="accent">HyperFrames</span> videos.</div>
           <div class="cta-chip" id="s9-chip"><span class="dollar">$</span><span class="cmd-mask" id="s9-cmd">curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh</span></div>
           <div class="cta-url" id="s9-url">github.com/jakeat11labs/vellum</div>
         </div>
@@ -519,13 +522,35 @@
       <audio id="vo-07" class="clip" src="assets/vo-07-agent.mp3"  data-start="34.8" data-duration="3.81" data-track-index="57" data-volume="1" preload="auto"></audio>
       <audio id="vo-08" class="clip" src="assets/vo-08-fixed.mp3"  data-start="39.8" data-duration="2.93" data-track-index="58" data-volume="1" preload="auto"></audio>
       <audio id="vo-09" class="clip" src="assets/vo-09-cta.mp3"    data-start="43.9" data-duration="7.29" data-track-index="59" data-volume="1" preload="auto"></audio>
-      <audio id="music-bed" class="clip" src="assets/music-bed.mp3" data-start="0"   data-duration="52.5" data-track-index="70" data-volume="0.16" preload="auto"></audio>
+      <audio id="music-bed" class="clip" src="assets/music-bed.mp3" data-start="0"   data-duration="52.5" data-track-index="70" data-volume="0.5" preload="auto"></audio>
     </div>
 
     <script>
       // Scene visibility is driven HERE, on the timeline — not by runtime clip toggling —
       // so static snapshots, review packets, and the renderer all agree frame-for-frame.
       // All selectors are hardcoded strings (template literals crash the HTML bundler).
+      // Build the deterministic audio waveform shared by every mock "product" frame.
+      // Static content, populated synchronously at load (no Math.random / Date.now).
+      (function () {
+        var BARS = 56;
+        document.querySelectorAll(".mock-wave").forEach(function (el) {
+          if (el.childElementCount) return;
+          for (var i = 0; i < BARS; i++) {
+            var t = i / (BARS - 1);
+            var env = Math.sin(t * Math.PI);                    // arch — tall in the middle
+            var ripple = 0.55 + 0.45 * Math.sin(i * 0.8 + 0.6); // deterministic detail
+            var h = 10 + (0.45 + 0.55 * ripple) * env * 138;
+            var bar = document.createElement("div");
+            bar.className = "wbar";
+            bar.style.height = h.toFixed(1) + "px";
+            bar.style.backgroundColor =
+              "rgb(" + Math.round(94 + t * 45) + "," + Math.round(234 - t * 109) + "," + Math.round(212 + t * 43) + ")";
+            bar.style.opacity = (0.55 + 0.4 * env).toFixed(2);
+            el.appendChild(bar);
+          }
+        });
+      })();
+
       window.__timelines = window.__timelines || {};
       var tl = gsap.timeline({ paused: true });
 
@@ -559,9 +584,9 @@
 
       // ---------- S1 · hook (0–5) ----------
       tl.fromTo("#s1-player", { scale: 0.96, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.65, ease: "expo.out" }, 0.15);
-      tl.fromTo("#s1-bar", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 0.35);
+      tl.fromTo("#s1-bar", { y: 40, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 0.7);
       tl.fromTo("#s1-glow", { x: -50, opacity: 0 }, { x: 0, opacity: 1, duration: 1.2, ease: "sine.out" }, 0);
-      tl.fromTo("#s1-ghost", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 1.4, ease: "power1.out" }, 0.2);
+      tl.fromTo("#s1-ghost", { y: 60, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power2.out" }, 0.2);
       // scrub: play, advance, freeze at 0:12.40
       tl.set("#s1-play", { opacity: 0 }, 0.85);
       tl.set("#s1-pause", { opacity: 1 }, 0.85);
@@ -581,45 +606,45 @@
       // ---------- S2 · spiral (5–10.2) ----------
       tl.fromTo("#s2-chat", { y: 26, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: "power3.out" }, 5.25);
       tl.fromTo("#s2-glow", { scale: 0.85 }, { scale: 1.06, duration: 5, ease: "sine.inOut" }, 5);
-      tl.fromTo("#s2-msg .w", { opacity: 0 }, { opacity: 1, duration: 0.05, stagger: 0.09, ease: "none" }, 5.55);
-      tl.fromTo("#s2-caret", { opacity: 1 }, { opacity: 0, duration: 0.4, ease: "steps(1)", yoyo: true, repeat: 7 }, 5.55);
-      tl.fromTo("#s2-r1", { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 6.5);
-      tl.fromTo("#s2-r2", { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 7.2);
-      tl.fromTo("#s2-r3", { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 7.9);
-      tl.to("#s2-chat", { opacity: 0.18, duration: 0.5, ease: "power2.inOut" }, 8.6);
-      tl.fromTo("#s2-stamp", { opacity: 0, scale: 1.08 }, { opacity: 1, scale: 1, duration: 0.55, ease: "expo.out" }, 8.75);
-      tl.fromTo("#s2-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.out" }, 9.1);
+      tl.fromTo("#s2-msg .w", { opacity: 0 }, { opacity: 1, duration: 0.05, stagger: 0.07, ease: "none" }, 5.4);
+      tl.fromTo("#s2-caret", { opacity: 1 }, { opacity: 0, duration: 0.4, ease: "steps(1)", yoyo: true, repeat: 7 }, 5.4);
+      tl.fromTo("#s2-r1", { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 5.95);
+      tl.fromTo("#s2-r2", { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 6.65);
+      tl.fromTo("#s2-r3", { y: 28, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power3.out" }, 7.35);
+      tl.to("#s2-chat", { opacity: 0.18, duration: 0.35, ease: "power2.inOut" }, 8.35);
+      tl.fromTo("#s2-stamp", { opacity: 0, scale: 1.08 }, { opacity: 1, scale: 1, duration: 0.55, ease: "expo.out" }, 8.45);
+      tl.fromTo("#s2-rule", { scaleX: 0 }, { scaleX: 1, duration: 0.5, ease: "power2.out" }, 8.85);
 
       // ---------- S3 · pin drop (10.2–19.8) ----------
       tl.fromTo("#s3-copy", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 11.2);
       tl.fromTo("#s3-tick", { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power2.out", transformOrigin: "left center" }, 11.05);
       tl.fromTo("#s3-glow", { x: 0 }, { x: 70, duration: 9, ease: "sine.inOut" }, 10.2);
-      // cursor journey: bar button → caption
-      tl.fromTo("#s3-cursor", { left: 1500, top: 990 }, { left: 1635, top: 815, duration: 0.55, ease: "power2.inOut" }, 11.0);
-      tl.to("#s3-add-on", { opacity: 1, duration: 0.15 }, 11.6);
-      tl.to("#s3-cursor", { left: 1326, top: 322, duration: 0.7, ease: "power2.inOut" }, 11.9);
-      // click → ripple → pin → composer
-      tl.fromTo("#s3-ripple", { scale: 0.4, opacity: 0.55 }, { scale: 1.6, opacity: 0, duration: 0.45, ease: "power2.out" }, 12.7);
-      tl.fromTo("#s3-pin", { scale: 0, y: -16 }, { scale: 1, y: 0, duration: 0.45, ease: "back.out(2)" }, 12.85);
-      tl.fromTo("#s3-composer", { opacity: 0, y: 10, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "expo.out" }, 13.35);
-      tl.fromTo("#s3-meta", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 13.7);
-      tl.fromTo("#s3-tgt", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 13.85);
-      tl.to("#s3-cursor", { left: 1735, top: 597, duration: 0.5, ease: "power2.inOut" }, 13.6);
-      // "time, scene, and element" — three token blips riding the VO tail
-      tl.fromTo("#s3-meta", { color: "#8b8b93" }, { color: "#5eead4", duration: 0.18, yoyo: true, repeat: 1, ease: "power1.inOut" }, 17.2);
-      tl.fromTo("#s3-tok-scene", { color: "#8b8b93" }, { color: "#5eead4", duration: 0.18, yoyo: true, repeat: 1, ease: "power1.inOut" }, 17.8);
-      tl.fromTo("#s3-tgt", { x: 0 }, { x: 6, duration: 0.16, yoyo: true, repeat: 1, ease: "power1.inOut" }, 18.4);
+      // cursor journey: to the Add-note button, then a slow deliberate glide to the caption
+      tl.fromTo("#s3-cursor", { left: 1500, top: 990 }, { left: 1635, top: 815, duration: 0.55, ease: "power2.inOut" }, 11.2);
+      tl.to("#s3-add-on", { opacity: 1, duration: 0.15 }, 12.0);
+      tl.to("#s3-cursor", { left: 1326, top: 322, duration: 2.3, ease: "power1.inOut" }, 12.7);
+      // click → ripple → pin → composer — lands on the spoken "Pin the glitch" (~15.5)
+      tl.fromTo("#s3-ripple", { scale: 0.4, opacity: 0.55 }, { scale: 1.6, opacity: 0, duration: 0.45, ease: "power2.out" }, 15.35);
+      tl.fromTo("#s3-pin", { scale: 0, y: -16 }, { scale: 1, y: 0, duration: 0.45, ease: "back.out(2)" }, 15.5);
+      tl.to("#s3-cursor", { left: 1735, top: 597, duration: 0.5, ease: "power2.inOut" }, 15.7);
+      tl.fromTo("#s3-composer", { opacity: 0, y: 10, scale: 0.96 }, { opacity: 1, y: 0, scale: 1, duration: 0.45, ease: "expo.out" }, 15.85);
+      tl.fromTo("#s3-meta", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 16.0);
+      tl.fromTo("#s3-tgt", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 16.1);
+      // "It captures time, scene, and element" — three token blips on the words
+      tl.fromTo("#s3-meta", { color: "#8b8b93" }, { color: "#5eead4", duration: 0.18, yoyo: true, repeat: 1, ease: "power1.inOut" }, 17.3);
+      tl.fromTo("#s3-tok-scene", { color: "#8b8b93" }, { color: "#5eead4", duration: 0.18, yoyo: true, repeat: 1, ease: "power1.inOut" }, 17.95);
+      tl.fromTo("#s3-tgt", { x: 0 }, { x: 6, duration: 0.16, yoyo: true, repeat: 1, ease: "power1.inOut" }, 18.6);
 
       // ---------- S4 · type & save (19.8–24.6) ----------
-      tl.fromTo("#s4-player", { scale: 1 }, { scale: 1.16, duration: 0.85, ease: "power2.inOut" }, 20.0);
+      tl.fromTo("#s4-player", { scale: 1 }, { scale: 1.10, duration: 0.85, ease: "power2.inOut" }, 20.0);
       tl.fromTo("#s4-glow", { opacity: 0.7 }, { opacity: 1, duration: 4, ease: "sine.inOut" }, 19.8);
       tl.fromTo("#s4-box .w", { opacity: 0 }, { opacity: 1, duration: 0.05, stagger: 0.16, ease: "none" }, 20.5);
       tl.fromTo("#s4-caret", { opacity: 1 }, { opacity: 0, duration: 0.42, ease: "steps(1)", yoyo: true, repeat: 6 }, 20.5);
-      tl.fromTo("#s4-save", { scale: 1 }, { scale: 0.93, duration: 0.13, yoyo: true, repeat: 1, ease: "power2.inOut" }, 22.9);
-      tl.to("#s4-composer", { opacity: 0, y: 8, duration: 0.3, ease: "power2.in" }, 23.3);
-      tl.fromTo("#s4-pill", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 23.55);
-      tl.to("#s4-n0", { opacity: 0, duration: 0.2 }, 23.7);
-      tl.to("#s4-n1", { opacity: 1, duration: 0.2 }, 23.7);
+      tl.fromTo("#s4-save", { scale: 1 }, { scale: 0.93, duration: 0.13, yoyo: true, repeat: 1, ease: "power2.inOut" }, 22.65);
+      tl.to("#s4-composer", { opacity: 0, y: 8, duration: 0.3, ease: "power2.in" }, 23.05);
+      tl.fromTo("#s4-pill", { opacity: 0, y: 10 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out" }, 23.5);
+      tl.to("#s4-n0", { opacity: 0, duration: 0.2 }, 23.6);
+      tl.to("#s4-n1", { opacity: 1, duration: 0.2 }, 23.6);
       tl.fromTo("#s4-tick", { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power2.out", transformOrigin: "left center" }, 20.9);
       tl.fromTo("#s4-copy", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 21.0);
 
@@ -627,12 +652,12 @@
       tl.fromTo("#s5-glow", { y: 0 }, { y: 50, duration: 5, ease: "sine.inOut" }, 24.6);
       tl.fromTo("#s5-cursor", { left: 640, top: 270 }, { left: 1012, top: 586, duration: 0.75, ease: "power1.inOut" }, 25.3);
       tl.fromTo("#s5-dragbox", { width: 0, height: 0, opacity: 1 }, { width: 392, height: 340, duration: 0.75, ease: "power1.inOut" }, 25.3);
-      tl.set("#s5-dragbox", { opacity: 0 }, 26.1);
-      tl.fromTo("#s5-region", { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, 26.1);
-      tl.fromTo("#s5-region .rbadge", { scale: 0 }, { scale: 1, duration: 0.35, ease: "back.out(2)" }, 26.25);
-      tl.fromTo("#s5-drawer", { x: 460 }, { x: 0, duration: 0.5, ease: "power3.out" }, 26.9);
-      tl.fromTo("#s5-note1", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 27.3);
-      tl.fromTo("#s5-note2", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 27.45);
+      tl.set("#s5-dragbox", { opacity: 0 }, 26.0);
+      tl.fromTo("#s5-region", { opacity: 0 }, { opacity: 1, duration: 0.2, ease: "power1.out" }, 26.0);
+      tl.fromTo("#s5-region .rbadge", { scale: 0 }, { scale: 1, duration: 0.35, ease: "back.out(2)" }, 26.15);
+      tl.fromTo("#s5-drawer", { x: 460 }, { x: 0, duration: 0.5, ease: "power3.out" }, 26.3);
+      tl.fromTo("#s5-note1", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 26.7);
+      tl.fromTo("#s5-note2", { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power2.out" }, 26.85);
       tl.fromTo("#s5-tick", { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power2.out", transformOrigin: "left center" }, 25.4);
       tl.fromTo("#s5-copy", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 25.5);
 
@@ -644,26 +669,26 @@
       tl.fromTo("#s6-l4", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 30.75);
       tl.fromTo("#s6-l5", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 31.0);
       tl.fromTo("#s6-l6", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.3, ease: "power2.out" }, 31.25);
-      tl.fromTo("#s6-ghostlabel", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power1.out" }, 32.2);
-      tl.fromTo("#s6-tick", { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power2.out", transformOrigin: "right center" }, 31.6);
-      tl.fromTo("#s6-copy", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 31.7);
+      tl.fromTo("#s6-ghostlabel", { opacity: 0 }, { opacity: 1, duration: 0.4, ease: "power1.out" }, 31.4);
+      tl.fromTo("#s6-tick", { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power2.out", transformOrigin: "right center" }, 32.2);
+      tl.fromTo("#s6-copy", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 32.35);
 
       // ---------- S7 · agent applies (34.4–39.4) ----------
       tl.fromTo("#s7-term", { x: -34, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 34.65);
       tl.fromTo("#s7-diff", { x: 34, opacity: 0 }, { x: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 34.8);
       tl.fromTo("#s7-div", { scaleY: 0 }, { scaleY: 1, duration: 0.5, ease: "power2.out" }, 34.7);
       tl.fromTo("#s7-glow", { x: 0 }, { x: -60, duration: 5, ease: "sine.inOut" }, 34.4);
-      tl.fromTo("#s7-prompt .w", { opacity: 0 }, { opacity: 1, duration: 0.05, stagger: 0.12, ease: "none" }, 35.1);
-      tl.fromTo("#s7-o1", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 36.1);
-      tl.fromTo("#s7-o2", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 36.7);
-      tl.fromTo("#s7-o3", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 37.3);
-      tl.fromTo("#s7-st1", { scaleX: 0 }, { scaleX: 1, duration: 0.25, ease: "power2.out" }, 37.1);
-      tl.fromTo("#s7-st2", { scaleX: 0 }, { scaleX: 1, duration: 0.25, ease: "power2.out" }, 37.7);
-      tl.fromTo("#s7-d1", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 36.9);
-      tl.fromTo("#s7-d2", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 37.15);
-      tl.fromTo("#s7-d3", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 37.5);
-      tl.fromTo("#s7-d4", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 37.75);
-      tl.fromTo("#s7-quote", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 35.3);
+      tl.fromTo("#s7-prompt .w", { opacity: 0 }, { opacity: 1, duration: 0.05, stagger: 0.12, ease: "none" }, 35.45);
+      tl.fromTo("#s7-o1", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 36.9);
+      tl.fromTo("#s7-o2", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 37.45);
+      tl.fromTo("#s7-o3", { y: 10, opacity: 0 }, { y: 0, opacity: 1, duration: 0.35, ease: "power2.out" }, 37.95);
+      tl.fromTo("#s7-st1", { scaleX: 0 }, { scaleX: 1, duration: 0.25, ease: "power2.out" }, 37.7);
+      tl.fromTo("#s7-st2", { scaleX: 0 }, { scaleX: 1, duration: 0.25, ease: "power2.out" }, 38.2);
+      tl.fromTo("#s7-d1", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 37.1);
+      tl.fromTo("#s7-d2", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 37.45);
+      tl.fromTo("#s7-d3", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 37.8);
+      tl.fromTo("#s7-d4", { opacity: 0 }, { opacity: 1, duration: 0.3, ease: "power2.out" }, 38.05);
+      tl.fromTo("#s7-quote", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 35.9);
 
       // ---------- S8 · before/after wipe (39.4–43.4) ----------
       tl.fromTo("#s8-glow", { scale: 0.9 }, { scale: 1.08, duration: 4, ease: "sine.inOut" }, 39.4);
@@ -671,25 +696,24 @@
       tl.fromTo("#s8-after", { clipPath: "inset(0% 100% 0% 0%)" }, { clipPath: "inset(0% 0% 0% 0%)", duration: 0.9, ease: "power2.inOut" }, 40.0);
       tl.fromTo("#s8-wipe", { left: 0 }, { left: 1237, duration: 0.9, ease: "power2.inOut" }, 40.0);
       tl.set("#s8-wipe", { opacity: 0 }, 40.95);
-      tl.to("#s8-pin", { scale: 0, duration: 0.2, ease: "power2.in" }, 41.1);
-      tl.fromTo("#s8-chip", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.32, ease: "back.out(2)" }, 41.2);
+      tl.to("#s8-pin", { scale: 0, duration: 0.2, ease: "power2.in" }, 41.05);
+      tl.fromTo("#s8-chip", { opacity: 0, scale: 0.6 }, { opacity: 1, scale: 1, duration: 0.32, ease: "back.out(2)" }, 41.35);
       tl.fromTo("#s8-flash", { opacity: 0 }, { opacity: 0.8, duration: 0.18, yoyo: true, repeat: 1, ease: "power1.inOut" }, 41.5);
       tl.fromTo("#s8-tick", { scaleX: 0 }, { scaleX: 1, duration: 0.4, ease: "power2.out", transformOrigin: "left center" }, 41.5);
       tl.fromTo("#s8-w1", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 41.6);
       tl.fromTo("#s8-w2", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.4, ease: "power3.out" }, 41.95);
 
       // ---------- S9 · CTA (43.4–52.5) ----------
-      tl.fromTo("#s9-sheet1", { x: -90, y: 40, rotation: -40, opacity: 0 }, { x: 0, y: 0, rotation: -17, opacity: 0.85, duration: 0.9, ease: "expo.out" }, 43.7);
-      tl.fromTo("#s9-sheet2", { y: 80, rotation: 14, opacity: 0 }, { y: 0, rotation: -2, opacity: 0.55, duration: 0.9, ease: "expo.out" }, 43.85);
-      tl.fromTo("#s9-sheet3", { x: 90, y: 40, rotation: 38, opacity: 0 }, { x: 0, y: 0, rotation: 15, opacity: 0.75, duration: 0.9, ease: "expo.out" }, 44.0);
-      tl.fromTo("#s9-g1", { scale: 0 }, { scale: 1, duration: 0.35, ease: "back.out(2)" }, 44.85);
-      tl.fromTo("#s9-g2", { scale: 0 }, { scale: 1, duration: 0.35, ease: "back.out(2)" }, 45.0);
-      tl.fromTo("#s9-g3", { scale: 0, rotation: 45 }, { scale: 1, rotation: 45, duration: 0.35, ease: "back.out(2)" }, 45.15);
-      tl.fromTo("#s9-word", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 45.1);
-      tl.fromTo("#s9-tag", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.45, ease: "power2.out" }, 45.45);
-      tl.fromTo("#s9-chip", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "expo.out" }, 46.3);
-      tl.fromTo("#s9-cmd", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 1.3, ease: "none" }, 46.8);
-      tl.fromTo("#s9-url", { opacity: 0 }, { opacity: 1, duration: 0.5, ease: "power2.out" }, 48.6);
+      // the real glass mark blooms on the spoken "Vellum" (vo abs ~43.9); wordmark rides mid-bloom
+      tl.fromTo("#s9-mark", { opacity: 0, scale: 0.86, y: 26 }, { opacity: 1, scale: 1, y: 0, duration: 0.9, ease: "expo.out" }, 43.7);
+      tl.fromTo("#s9-mark", { y: 0 }, { y: -9, duration: 3.4, ease: "sine.inOut", yoyo: true, repeat: 1 }, 45.2);
+      tl.fromTo("#s9-word", { y: 16, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power3.out" }, 44.2);
+      tl.fromTo("#s9-tag", { y: 12, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "power2.out" }, 44.95);
+      // install chip enters as a frame on "open source"; command types so the reveal lands on "one curl away"
+      tl.fromTo("#s9-chip", { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: "expo.out" }, 47.45);
+      tl.fromTo("#s9-cmd", { clipPath: "inset(0 100% 0 0)" }, { clipPath: "inset(0 0% 0 0)", duration: 1.5, ease: "none" }, 48.6);
+      tl.fromTo("#s9-url", { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out" }, 50.35);
+      tl.fromTo("#s9-chip", { borderColor: "#2c2c32" }, { borderColor: "#5eead4", duration: 0.22, yoyo: true, repeat: 1, ease: "power1.inOut" }, 50.2);
       tl.fromTo("#s9-glow1", { scale: 1 }, { scale: 1.12, duration: 8, ease: "sine.inOut" }, 43.6);
       tl.fromTo(".cta-wrap", { scale: 1 }, { scale: 1.01, duration: 2.4, ease: "sine.inOut" }, 50.0);
 

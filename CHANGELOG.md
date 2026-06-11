@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - **README overhauled**: hook-first hero ("You see the problem. Your agent can't."), truthful badge row, quickstart above the fold, a "What your agent sees" sample of `annotations.md`, merged agent-handoff section, and an "Under the hood" section with the security/playback guarantees.
 - README keyboard table now correctly describes arrow-key scrubbing as 0.1s steps (Shift = 1s).
+- **Promo polish**: replaced the blurry-orb mock frame with a clean voice-AI product frame (deterministic teal→violet waveform, eyebrow label, legible headline); raised the music bed from an inaudible `data-volume` 0.18 (~−34 dB) to 0.5 (~−22 dB) so the bed is actually heard under the voiceover.
 
 ### Fixed
 - `examples/demo` scene visibility is now timeline-driven (opacity crossfades), so `hyperframes snapshot` and `vellum-review` packets show the correct scene — the static-render path does not toggle `data-start` clip visibility. Also documented this as a heads-up in the README.
