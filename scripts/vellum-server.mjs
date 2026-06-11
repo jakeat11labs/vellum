@@ -23,6 +23,7 @@ import os from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { fmtTime, normalizeNoteStatus, resolveComposition, VERSION } from "./vellum-shared.mjs";
+import * as ui from "./vellum-ui.mjs";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
 const PORT = Number(process.env.VELLUM_PORT) || 4848;
@@ -54,6 +55,17 @@ function openInBrowser(url) {
   const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
   child.on("error", () => console.log(`  Open manually → ${url}`));
   child.unref();
+}
+
+// Live activity feed — one line per review event so the terminal feels alive
+// while notes come in from the browser.
+function logEvent(glyph, text) {
+  const ts = new Date().toTimeString().slice(0, 8);
+  console.log(`  ${ui.dim(ts)} ${glyph} ${text}`);
+}
+
+function noteLabel(note) {
+  return `${ui.bold(`note-${note.id}`)} ${ui.dim(`@ ${fmtTime(note.time)}`)}`;
 }
 
 const { compDir: COMP_DIR, compAbs: COMP_ABS } = resolveComposition(ROOT);
@@ -337,9 +349,11 @@ function handleNoteById(req, res, idValue) {
 
   if (req.method === "DELETE") {
     return withNotes(res, (notes) => {
+      const removed = notes.find((n) => n.id === id);
       const next = notes.filter((n) => n.id !== id);
       if (next.length === notes.length) return sendJson(res, 404, { error: "note not found" });
       if (!recoverableWriteNotes(res, next)) return;
+      logEvent(ui.glyph.del, `${noteLabel(removed)} deleted`);
       return sendJson(res, 200, { ok: true, notes: next });
     });
   }
@@ -349,9 +363,17 @@ function handleNoteById(req, res, idValue) {
       withNotes(res, (notes) => {
         const note = notes.find((n) => n.id === id);
         if (!note) return sendJson(res, 404, { error: "note not found" });
+        const prevStatus = normalizeNoteStatus(note.status);
         const result = applyNotePatch(note, parsed);
         if (result.error) return sendJson(res, 400, { error: result.error });
         if (!recoverableWriteNotes(res, notes)) return;
+        const newStatus = normalizeNoteStatus(note.status);
+        if (newStatus !== prevStatus) {
+          const glyph = newStatus === "open" ? ui.glyph.add : newStatus === "resolved" ? ui.glyph.ok : ui.glyph.edit;
+          logEvent(glyph, `${noteLabel(note)} ${newStatus === "open" ? "reopened" : newStatus}`);
+        } else if (parsed.text != null) {
+          logEvent(ui.glyph.edit, `${noteLabel(note)} edited ${ui.dim(`— "${ui.truncate(note.text, 48)}"`)}`);
+        }
         return sendJson(res, 200, result.note);
       })
     );
@@ -365,6 +387,7 @@ function handleNotes(req, res) {
   if (req.method === "GET") return withNotes(res, (notes) => sendNotes(res, 200, notes));
   if (req.method === "DELETE") {
     if (!recoverableWriteNotes(res, [])) return;
+    logEvent(ui.glyph.del, "all notes cleared");
     return sendNotesObject(res, 200, { ok: true, notes: [] });
   }
   if (req.method === "POST") {
@@ -396,6 +419,7 @@ function handleNotes(req, res) {
         };
         notes.push(note);
         if (!recoverableWriteNotes(res, notes)) return;
+        logEvent(ui.glyph.add, `${noteLabel(note)} ${ui.dim(`— "${ui.truncate(note.text, 48)}"`)}`);
         return sendJson(res, 201, note);
       });
     });
@@ -421,6 +445,7 @@ function handleMix(req, res) {
       };
       fs.mkdirSync(NOTES_DIR, { recursive: true });
       fs.writeFileSync(MIX_JSON, `${JSON.stringify(mix, null, 2)}\n`);
+      logEvent(ui.glyph.music, `mix saved ${ui.dim(`— voice ${Math.round(mix.voice * 100)}% · music ${Math.round(mix.music * 100)}%`)}`);
       return sendJson(res, 201, mix);
     });
   }
@@ -533,27 +558,70 @@ function onListen() {
   if (!fs.existsSync(NOTES_JSON)) writeNotes(emptyNotesOnMissing());
   const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
   const url = `http://127.0.0.1:${activePort}${ANNOTATE_PATH}`;
-  if (!fs.existsSync(path.join(COMP_ABS, "index.html"))) {
-    console.warn(`⚠  No composition found at ${compRel}. Run vellum from your HyperFrames project root, or set VELLUM_DIR.`);
-  }
   const hfSource = HF_LOCAL_RUNTIME
-    ? `node_modules/hyperframes (${path.basename(HF_LOCAL_RUNTIME)})`
+    ? `node_modules/hyperframes ${ui.dim(`(${path.basename(HF_LOCAL_RUNTIME)})`)}`
     : HF_NPX_DIR
-      ? `npx cache (hyperframes@${HF_VERSION})`
-      : `jsDelivr CDN (hyperframes@${HF_VERSION})`;
-  if (activePort !== PORT) console.log(`\n  Port ${PORT} was busy — using ${activePort} instead.`);
-  console.log(`\n  Vellum review server  ·  ${url}`);
-  console.log(`  Composition:  ${compRel}`);
-  console.log(`  Runtime:      ${hfSource}`);
-  console.log(`  Notes:        ${path.relative(ROOT, NOTES_JSON)}  (+ annotations.md)`);
+      ? `npx cache ${ui.dim(`(hyperframes@${HF_VERSION})`)}`
+      : `jsDelivr CDN ${ui.dim(`(hyperframes@${HF_VERSION})`)}`;
+  const existing = emptyNotesOnMissing();
+
+  console.log("");
+  console.log(ui.wordmark(`v${VERSION} · HyperFrames review layer`));
+  console.log("");
+  if (!fs.existsSync(path.join(COMP_ABS, "index.html"))) {
+    console.warn(`  ${ui.glyph.warn} No composition found at ${ui.bold(compRel)}. Run vellum from your HyperFrames project root, or set VELLUM_DIR.`);
+    console.log("");
+  }
+  if (activePort !== PORT) {
+    console.log(`  ${ui.glyph.warn} Port ${PORT} was busy — using ${ui.bold(activePort)} instead.`);
+    console.log("");
+  }
+  const noteCount = existing.length
+    ? `${path.relative(ROOT, NOTES_JSON)}  ${ui.dim(`(${existing.length} saved)`)}`
+    : `${path.relative(ROOT, NOTES_JSON)}  ${ui.dim("(+ annotations.md)")}`;
+  console.log(
+    ui.box([
+      `${ui.glyph.play} ${ui.bold(ui.teal(ui.link(url)))}`,
+      "",
+      ...ui.rows([
+        ["Composition", compRel],
+        ["Runtime", hfSource],
+        ["Notes", noteCount],
+      ]),
+    ])
+  );
+  console.log("");
   if (OPEN_BROWSER) {
     openInBrowser(url);
-    console.log(`  Browser opened — pin notes on any frame, then tell your agent: "address my Vellum review notes"`);
+    console.log(`  ${ui.dim("Browser opened — pin notes on any frame, then tell your agent:")}`);
   } else {
     console.log(`  Open → ${url}`);
+    console.log(`  ${ui.dim("Pin notes on any frame, then tell your agent:")}`);
   }
-  console.log(`  Press Ctrl+C to stop.\n`);
+  console.log(`  ${ui.teal('"address my Vellum review notes"')}`);
+  console.log("");
+  console.log(`  ${ui.dim("Watching for notes · Ctrl+C to stop")}`);
+  console.log("");
 }
+
+// Graceful shutdown: leave a session summary instead of a bare ^C.
+let shuttingDown = false;
+process.on("SIGINT", () => {
+  if (shuttingDown) process.exit(130);
+  shuttingDown = true;
+  const notes = emptyNotesOnMissing();
+  const open = notes.filter((n) => normalizeNoteStatus(n.status) === "open").length;
+  console.log("\n");
+  if (notes.length) {
+    const breakdown = open === notes.length ? "" : ui.dim(` (${open} open · ${notes.length - open} done)`);
+    console.log(`  ${ui.glyph.ok} ${ui.bold(notes.length)} note(s) saved → ${path.relative(ROOT, NOTES_JSON)}${breakdown}`);
+    if (open) console.log(`  ${ui.dim('Tell your agent: "address my Vellum review notes"')}`);
+  } else {
+    console.log(`  ${ui.dim("Vellum stopped — no notes this session.")}`);
+  }
+  console.log("");
+  process.exit(0);
+});
 
 server.on("listening", onListen);
 server.on("error", (err) => {
@@ -563,10 +631,10 @@ server.on("error", (err) => {
       server.listen(activePort, "127.0.0.1");
       return;
     }
-    console.error(`\n  Port ${activePort} is already in use. Free it or pick another:  VELLUM_PORT=5050 vellum\n`);
+    console.error(`\n  ${ui.glyph.err} Port ${ui.bold(activePort)} is already in use. Free it or pick another:  ${ui.bold("VELLUM_PORT=5050 vellum")}\n`);
     process.exit(1);
   }
-  console.error(`\n  Server error: ${err && err.message}\n`);
+  console.error(`\n  ${ui.glyph.err} Server error: ${err && err.message}\n`);
   process.exit(1);
 });
 

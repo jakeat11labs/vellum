@@ -18,7 +18,8 @@
 import fs from "node:fs";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
-import { compSize, fmtTime, resolveComposition } from "./vellum-shared.mjs";
+import { compSize, fmtTime, resolveComposition, VERSION } from "./vellum-shared.mjs";
+import * as ui from "./vellum-ui.mjs";
 
 const { root: ROOT, compDir: COMP_DIR, compAbs: COMP } = resolveComposition();
 const NOTES_JSON = path.join(COMP, "notes", "annotations.json");
@@ -102,8 +103,11 @@ function drawMarker(srcPng, note, outPng) {
 
 function main() {
   const notes = readNotes().sort((a, b) => a.time - b.time);
+  console.log("");
+  console.log(ui.wordmark(`v${VERSION} · review packet`));
+  console.log("");
   if (!notes.length) {
-    console.log("No notes to render. Pin some in the Vellum player first.");
+    console.log(`  ${ui.dim("No notes to render — pin some in the Vellum player first.")}\n`);
     return;
   }
   ensureCommand("ffmpeg", ["-version"]);
@@ -112,12 +116,21 @@ function main() {
   let failures = 0;
 
   notes.forEach((n, i) => {
-    console.log(`[${i + 1}/${notes.length}] note-${n.id} ${fmtTime(n.time)} — ${n.text.slice(0, 60)}`);
+    const label = `${ui.bold(`note-${n.id}`)} ${ui.dim(`@ ${fmtTime(n.time)}`)} ${ui.dim(`— "${ui.truncate(n.text, 44)}"`)}`;
+    if (ui.interactive) {
+      process.stdout.write(`\r\x1b[K  ${ui.bar((i + 1) / notes.length)} ${i + 1}/${notes.length}  ${label}`);
+    } else {
+      console.log(`[${i + 1}/${notes.length}] note-${n.id} ${fmtTime(n.time)} — ${n.text.slice(0, 60)}`);
+    }
     const snap = snapshot(n.time);
     const out = path.join(OUT_DIR, `note-${n.id}.png`);
     let drawn = false;
     if (snap) drawn = drawMarker(snap, n, out);
     if (!drawn) failures += 1;
+    if (ui.interactive) {
+      process.stdout.write("\r\x1b[K");
+      console.log(`  ${drawn ? ui.glyph.ok : ui.glyph.err} ${label}`);
+    }
     const where = n.w != null ? `box ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%,${n.y}%` : "—";
     const tgt = n.target ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`` : "";
     index.push(`### note-${n.id} · ${fmtTime(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
@@ -131,10 +144,10 @@ function main() {
 
   fs.writeFileSync(path.join(OUT_DIR, "INDEX.md"), index.join("\n"));
   if (failures) {
-    console.error(`\nFailed to render ${failures} review marker(s). See messages above.`);
+    console.error(`\n  ${ui.glyph.err} Failed to render ${failures} review marker(s). See messages above.\n`);
     process.exit(1);
   }
-  console.log(`\nWrote ${notes.length} frame(s) → ${path.relative(ROOT, OUT_DIR)}/  (see INDEX.md)`);
+  console.log(`\n  ${ui.glyph.ok} Wrote ${ui.bold(notes.length)} frame(s) → ${ui.teal(`${path.relative(ROOT, OUT_DIR)}/`)}  ${ui.dim("(see INDEX.md)")}\n`);
 }
 
 main();

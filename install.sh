@@ -99,7 +99,9 @@ case "$INSTALL_MODE" in
   *) printf 'error: VELLUM_INSTALL must be all, tool, or skill\n' >&2; exit 1 ;;
 esac
 
-if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+ESC="$(printf '\033')"
+TRUECOLOR=0
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && command -v tput >/dev/null 2>&1; then
   bold="$(tput bold 2>/dev/null || true)"
   dim="$(tput dim 2>/dev/null || true)"
   green="$(tput setaf 2 2>/dev/null || true)"
@@ -107,15 +109,50 @@ if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
   yellow="$(tput setaf 3 2>/dev/null || true)"
   red="$(tput setaf 1 2>/dev/null || true)"
   reset="$(tput sgr0 2>/dev/null || true)"
+  case "${COLORTERM:-}" in
+    *truecolor*|*24bit*) TRUECOLOR=1 ;;
+  esac
+  case "${TERM_PROGRAM:-}" in
+    iTerm.app|WezTerm|ghostty|vscode) TRUECOLOR=1 ;;
+  esac
 else
   bold=""; dim=""; green=""; cyan=""; yellow=""; red=""; reset=""
 fi
 
+# Brand teal ramp, light to deep (matches the player accent). Truecolor terminals
+# get the real gradient; everything else falls back to plain cyan shades.
+if [ "$TRUECOLOR" = "1" ]; then
+  t1="${ESC}[38;2;153;246;228m"
+  t2="${ESC}[38;2;94;234;212m"
+  t3="${ESC}[38;2;45;212;191m"
+  t4="${ESC}[38;2;20;184;166m"
+  t5="${ESC}[38;2;13;148;136m"
+  t6="${ESC}[38;2;15;118;110m"
+elif [ -n "$cyan" ]; then
+  t1="$bold$cyan"; t2="$bold$cyan"; t3="$cyan"; t4="$cyan"; t5="$dim$cyan"; t6="$dim$cyan"
+else
+  t1=""; t2=""; t3=""; t4=""; t5=""; t6=""
+fi
+
 say() { printf '%s\n' "$*"; }
 info() { printf '  %s\n' "$*"; }
-ok() { printf '  %sOK%s %s\n' "$green" "$reset" "$*"; }
-warn() { printf '  %sWARN%s %s\n' "$yellow" "$reset" "$*"; }
-fail() { printf '  %sERROR%s %s\n' "$red" "$reset" "$*" >&2; exit 1; }
+ok() { printf '  %s✓%s %s\n' "$green" "$reset" "$*"; }
+warn() { printf '  %s!%s %s\n' "$yellow" "$reset" "$*"; }
+fail() { printf '  %s✗ ERROR%s %s\n' "$red" "$reset" "$*" >&2; exit 1; }
+
+repeat_rule() {
+  n="$1"
+  s=""
+  while [ "$n" -gt 0 ]; do s="${s}─"; n=$((n - 1)); done
+  printf '%s' "$s"
+}
+
+section() {
+  label="$1"
+  rule_len=$((42 - ${#label}))
+  [ "$rule_len" -lt 4 ] && rule_len=4
+  printf '\n  %s──%s %s%s%s %s%s%s\n' "$t5" "$reset" "$bold" "$label" "$reset" "$t5" "$(repeat_rule "$rule_len")" "$reset"
+}
 
 has_tty() {
   { : > /dev/tty; } 2>/dev/null
@@ -140,7 +177,7 @@ ask() {
     printf '%s' "$default"
     return
   fi
-  printf '  %s [%s]: ' "$prompt" "$default" > /dev/tty
+  printf '  %s?%s %s %s[%s]%s ' "$t3" "$reset" "$prompt" "$dim" "$default" "$reset" > /dev/tty
   IFS= read -r answer < /dev/tty || answer=""
   [ -n "$answer" ] || answer="$default"
   printf '%s' "$answer"
@@ -236,10 +273,10 @@ pick_composition_dir() {
 
   if can_prompt; then
     say ""
-    info "Multiple compositions found:"
+    info "${bold}Multiple compositions found:${reset}"
     i=1
     for comp in $COMPOSITIONS; do
-      tty_say "    $i) $(composition_label "$comp")"
+      tty_say "    ${t3}$i${reset}) $(composition_label "$comp")"
       i=$((i + 1))
     done
     choice="$(pick_number "Choose composition" "1" "$COMP_COUNT")"
@@ -268,10 +305,10 @@ pick_install_mode() {
     return
   fi
   say ""
-  info "What do you want to install?"
-  tty_say "    1) Full setup — review tool + agent skill ${dim}(recommended)${reset}"
-  tty_say "    2) Review tool only"
-  tty_say "    3) Agent skill only"
+  info "${bold}What do you want to install?${reset}"
+  tty_say "    ${t3}1${reset}) Full setup — review tool + agent skill ${dim}(recommended)${reset}"
+  tty_say "    ${t3}2${reset}) Review tool only"
+  tty_say "    ${t3}3${reset}) Agent skill only"
   choice="$(pick_number "Choose" "1" "3")"
   case "$choice" in
     1) INSTALL_MODE="all" ;;
@@ -296,10 +333,10 @@ pick_skill_targets() {
     return
   fi
   say ""
-  info "Which coding agent do you use?"
-  tty_say "    1) Cursor / Codex / Windsurf / most ${dim}(.agents/skills — recommended)${reset}"
-  tty_say "    2) Claude Code ${dim}(.claude/skills)${reset}"
-  tty_say "    3) Both ${dim}(.agents/skills + .claude/skills symlink)${reset}"
+  info "${bold}Which coding agent do you use?${reset}"
+  tty_say "    ${t3}1${reset}) Cursor / Codex / Windsurf / most ${dim}(.agents/skills — recommended)${reset}"
+  tty_say "    ${t3}2${reset}) Claude Code ${dim}(.claude/skills)${reset}"
+  tty_say "    ${t3}3${reset}) Both ${dim}(.agents/skills + .claude/skills symlink)${reset}"
   choice="$(pick_number "Choose" "1" "3")"
   case "$choice" in
     1) SKILL_TARGETS=".agents/skills/vellum" ;;
@@ -352,8 +389,7 @@ link_skill_target() {
 
 install_agent_skills() {
   [ "$WANT_SKILL" -eq 1 ] || return 0
-  say ""
-  info "Installing agent skill…"
+  section "Agent skill"
   canonical="$(canonical_skill_target)"
   [ -n "$canonical" ] || fail "no skill install target configured"
 
@@ -463,7 +499,8 @@ start_vellum() {
   if [ "$WANT_TOOL" -ne 1 ]; then
     return 0
   fi
-  info "Starting Vellum — your browser should open automatically."
+  say ""
+  info "${t3}▸${reset} Starting Vellum — your browser should open automatically."
   say ""
   if command -v vellum >/dev/null 2>&1; then
     exec vellum
@@ -479,14 +516,30 @@ start_vellum() {
 
 COMPOSITION_DIR="$(normalize_dir "$COMPOSITION_DIR")"
 
-say ""
-say "  ${bold}${cyan}╭──────────────────────────────────────────────╮${reset}"
-say "  ${bold}${cyan}│${reset}  ${bold}VELLUM${reset}  ·  HyperFrames review layer       ${bold}${cyan}│${reset}"
-say "  ${bold}${cyan}╰──────────────────────────────────────────────╯${reset}"
-say "  ${dim}Pin time-coded notes on any frame — your agent reads them back.${reset}"
-say ""
-info "Project: $(pwd)"
-info "Source:  $REPO @ $REF"
+print_banner() {
+  cols=80
+  if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
+    cols="$(tput cols 2>/dev/null || printf '80')"
+  fi
+  say ""
+  if [ -n "$t1" ] && [ "${cols:-80}" -ge 60 ]; then
+    say "  ${t1}██╗   ██╗███████╗██╗     ██╗     ██╗   ██╗███╗   ███╗${reset}"
+    say "  ${t2}██║   ██║██╔════╝██║     ██║     ██║   ██║████╗ ████║${reset}"
+    say "  ${t3}██║   ██║█████╗  ██║     ██║     ██║   ██║██╔████╔██║${reset}"
+    say "  ${t4}╚██╗ ██╔╝██╔══╝  ██║     ██║     ██║   ██║██║╚██╔╝██║${reset}"
+    say "  ${t5} ╚████╔╝ ███████╗███████╗███████╗╚██████╔╝██║ ╚═╝ ██║${reset}"
+    say "  ${t6}  ╚═══╝  ╚══════╝╚══════╝╚══════╝ ╚═════╝ ╚═╝     ╚═╝${reset}"
+  else
+    say "  ${bold}${cyan}◆ VELLUM${reset}  ${dim}· HyperFrames review layer${reset}"
+  fi
+  say ""
+  say "  ${dim}Pin time-coded notes on any frame — your agent reads them back.${reset}"
+  say ""
+}
+
+print_banner
+info "${dim}Project${reset}  $(pwd)"
+info "${dim}Source${reset}   $REPO @ $REF"
 
 pick_composition_dir
 COMPOSITIONS="$(find_compositions)"
@@ -503,8 +556,7 @@ esac
 pick_bin_install
 pick_skill_targets
 
-say ""
-info "Checking project…"
+section "Project check"
 
 if [ -n "$COMPOSITION_DIR" ]; then
   if [ ! -f "$COMPOSITION_DIR/index.html" ]; then
@@ -537,28 +589,28 @@ else
   warn "node_modules/hyperframes not found; run npm install in your HyperFrames project before reviewing"
 fi
 
-if [ "$WANT_TOOL" -eq 1 ]; then
-  say ""
-  info "Installing review tool…"
-  mkdir -p "$SCRIPTS_DIR"
-  download "$BASE/scripts/vellum" "$SCRIPTS_DIR/vellum" || fail "could not download vellum launcher"
-  download "$BASE/scripts/vellum-shim" "$SCRIPTS_DIR/vellum-shim" || fail "could not download vellum-shim"
-  download "$BASE/scripts/vellum-shared.mjs" "$SCRIPTS_DIR/vellum-shared.mjs" || fail "could not download vellum-shared.mjs"
-  download "$BASE/scripts/vellum-server.mjs" "$SCRIPTS_DIR/vellum-server.mjs" || fail "could not download vellum-server.mjs"
-  download "$BASE/scripts/vellum-template.html" "$SCRIPTS_DIR/vellum-template.html" || fail "could not download vellum-template.html"
-  download "$BASE/scripts/vellum-review.mjs" "$SCRIPTS_DIR/vellum-review.mjs" || fail "could not download vellum-review.mjs"
-  download "$BASE/scripts/vellum-update.mjs" "$SCRIPTS_DIR/vellum-update.mjs" || fail "could not download vellum-update.mjs"
-  chmod +x "$SCRIPTS_DIR/vellum" "$SCRIPTS_DIR/vellum-shim" 2>/dev/null || true
-  ok "installed $SCRIPTS_DIR/vellum"
-  ok "installed $SCRIPTS_DIR/vellum-shim"
-  ok "installed $SCRIPTS_DIR/vellum-shared.mjs"
-  ok "installed $SCRIPTS_DIR/vellum-server.mjs"
-  ok "installed $SCRIPTS_DIR/vellum-template.html"
-  ok "installed $SCRIPTS_DIR/vellum-review.mjs"
-  ok "installed $SCRIPTS_DIR/vellum-update.mjs"
-fi
+TOOL_FILES="vellum vellum-shim vellum-shared.mjs vellum-ui.mjs vellum-server.mjs vellum-template.html vellum-review.mjs vellum-update.mjs"
 
-install_agent_skills
+if [ "$WANT_TOOL" -eq 1 ]; then
+  section "Review tool"
+  mkdir -p "$SCRIPTS_DIR"
+  tool_count=0
+  for f in $TOOL_FILES; do
+    if [ -t 1 ]; then
+      printf '\r%s[K  %s↓ fetching %s…%s' "$ESC" "$dim" "$f" "$reset"
+    fi
+    if ! download "$BASE/scripts/$f" "$SCRIPTS_DIR/$f"; then
+      if [ -t 1 ]; then printf '\r%s[K' "$ESC"; fi
+      fail "could not download $f"
+    fi
+    tool_count=$((tool_count + 1))
+  done
+  if [ -t 1 ]; then printf '\r%s[K' "$ESC"; fi
+  chmod +x "$SCRIPTS_DIR/vellum" "$SCRIPTS_DIR/vellum-shim" 2>/dev/null || true
+  ok "review tool → $SCRIPTS_DIR/ ($tool_count files)"
+  info "${dim}vellum · vellum-shim · vellum-shared.mjs · vellum-ui.mjs · vellum-server.mjs${reset}"
+  info "${dim}vellum-template.html · vellum-review.mjs · vellum-update.mjs${reset}"
+fi
 
 if [ "$WANT_TOOL" -eq 1 ]; then
   write_vellum_env
@@ -571,6 +623,9 @@ if [ "$WANT_TOOL" -eq 1 ] && [ -f package.json ] && [ -z "$NO_PACKAGE_SCRIPTS" ]
     VELLUM_SCRIPTS_DIR="$SCRIPTS_DIR" \
     VELLUM_COMPOSITION_DIR="$COMPOSITION_DIR" \
     VELLUM_PORT_VALUE="$PORT_VALUE" \
+    VELLUM_C_OK="$green" \
+    VELLUM_C_DIM="$dim" \
+    VELLUM_C_RESET="$reset" \
     node <<'NODE'
 const fs = require("fs");
 const path = require("path");
@@ -610,8 +665,11 @@ if (!pkg.scripts["vellum:review"]) {
 
 fs.writeFileSync(pkgPath, `${JSON.stringify(pkg, null, 2)}\n`);
 
-if (added.length) console.log(`  added npm scripts: ${added.join(", ")}`);
-if (kept.length) console.log(`  kept existing npm scripts: ${kept.join(", ")}`);
+const G = process.env.VELLUM_C_OK || "";
+const D = process.env.VELLUM_C_DIM || "";
+const R = process.env.VELLUM_C_RESET || "";
+if (added.length) console.log(`  ${G}✓${R} added npm scripts: ${added.join(", ")}`);
+if (kept.length) console.log(`  ${D}kept existing npm scripts: ${kept.join(", ")}${R}`);
 NODE
     HAS_VELLUM_SCRIPT="$(node -e 'try{const p=require("./package.json");const s=p.scripts&&p.scripts.vellum||"";console.log(/vellum/.test(s)?"1":"0")}catch{console.log("0")}' 2>/dev/null || printf '0')"
   else
@@ -621,22 +679,26 @@ elif [ "$WANT_TOOL" -eq 1 ] && [ ! -f package.json ]; then
   warn "no package.json found; run ./$SCRIPTS_DIR/vellum from your project root"
 fi
 
+install_agent_skills
+
 say ""
-say "  ${bold}${green}Done!${reset} From this project directory:"
+say "  ${t4}$(repeat_rule 46)${reset}"
+say ""
+say "  ${green}✓${reset} ${bold}Vellum is ready.${reset} From this project directory:"
 say ""
 if [ "$HAS_VELLUM_CMD" = "1" ]; then
-  say "    ${bold}vellum${reset}                  ${dim}← opens your browser to the review player${reset}"
+  say "    ${bold}${t2}vellum${reset}                  ${dim}open the review player in your browser${reset}"
 elif [ -f "$SCRIPTS_DIR/vellum" ]; then
-  say "    ${bold}./$SCRIPTS_DIR/vellum${reset}   ${dim}← opens your browser to the review player${reset}"
+  say "    ${bold}${t2}./$SCRIPTS_DIR/vellum${reset}   ${dim}open the review player in your browser${reset}"
 elif [ "$HAS_VELLUM_SCRIPT" = "1" ]; then
-  say "    ${bold}npm run vellum${reset}          ${dim}← opens your browser to the review player${reset}"
+  say "    ${bold}${t2}npm run vellum${reset}          ${dim}open the review player in your browser${reset}"
 fi
 if [ "$HAS_VELLUM_CMD" = "1" ]; then
-  say "    ${bold}vellum update${reset}           ${dim}← check for and install the latest version${reset}"
+  say "    ${bold}${t2}vellum update${reset}           ${dim}check for and install the latest version${reset}"
 fi
 say ""
 say "  ${dim}Pin notes on any frame, then tell your agent:${reset}"
-say "  ${dim}\"address my Vellum review notes\"${reset}"
+say "  ${t3}\"address my Vellum review notes\"${reset}"
 say ""
 
 if [ "$START_AFTER" = "1" ]; then

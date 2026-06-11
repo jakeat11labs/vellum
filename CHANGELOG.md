@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.5] - June 11, 2026
+
+### Added
+- **Terminal UI overhaul.** New zero-dependency `scripts/vellum-ui.mjs` toolkit: teal-gradient brand styling on truecolor terminals (256/16-color fallbacks, `NO_COLOR` honored, plain text when piped), rounded boxes, spinners, progress bars, and OSC-8 clickable links.
+- **Live activity feed.** The review server now logs each event as it happens — note added/edited/resolved/reopened/deleted, notes cleared, mix saved — with timestamps, instead of sitting silent while you review.
+- **Session summary on Ctrl+C.** Stopping the server prints how many notes were saved (open vs. done) and where, plus the agent handoff prompt.
+
+### Changed
+- **Server startup panel.** Gradient `◆ vellum` wordmark and a boxed status panel with a clickable review URL, composition, runtime source, and notes path (shows saved-note count when resuming a review).
+- **`vellum update` polish.** Animated spinner while checking, styled `v0.3.x → v0.3.y` version diff, and clear up-to-date / available / failed states.
+- **`vellum-review` progress.** Live progress bar with per-note ✓/✗ result lines while frames render (plain numbered lines when piped).
+- **Installer redesign.** Teal-gradient VELLUM banner (compact fallback on narrow/no-color terminals), sectioned steps (`── Project check ──`, `── Review tool ──`, `── Agent skill ──`), one-line download progress instead of seven repeated "installed" lines, styled prompts/choice lists, and a cleaner "Vellum is ready" summary.
+
 ## [0.3.4] - June 11, 2026
 
 ### Changed

@@ -15,6 +15,11 @@
           "target": "scripts/vellum-shared.mjs"
         },
         {
+          "path": "scripts/vellum-ui.mjs",
+          "type": "registry:file",
+          "target": "scripts/vellum-ui.mjs"
+        },
+        {
           "path": "scripts/vellum-server.mjs",
           "type": "registry:file",
           "target": "scripts/vellum-server.mjs"

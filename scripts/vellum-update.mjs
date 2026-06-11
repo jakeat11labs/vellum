@@ -7,6 +7,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { VERSION } from "./vellum-shared.mjs";
+import * as ui from "./vellum-ui.mjs";
 
 // Source repo. Env-overridable for forks/testing; defaults to the canonical repo.
 const REPO = process.env.VELLUM_REPO || "jakeat11labs/vellum";
@@ -64,29 +65,39 @@ export async function runUpdate(args = []) {
   const checkOnly = args.includes("--check");
   const force = args.includes("--force");
 
-  console.log(`  Vellum ${VERSION} — checking for updates…`);
+  console.log("");
+  console.log(ui.wordmark(`v${VERSION} · update`));
+  console.log("");
+  const sp = ui.spinner("Checking for updates…");
   let latest;
   try {
     latest = await fetchLatestVersion();
   } catch (e) {
-    console.error(`  Could not check for updates: ${e.message}`);
+    sp.stop(`  ${ui.glyph.err} Could not check for updates: ${e.message}`);
+    console.log("");
     process.exitCode = 1;
     return;
   }
 
   const diff = cmpVersion(latest, VERSION);
-  console.log(`  Installed: ${VERSION}    Latest: ${latest}`);
 
   if (diff <= 0 && !force) {
-    console.log(diff === 0 ? "  You're on the latest version. ✓" : "  You're ahead of the published version. ✓");
+    sp.stop(
+      diff === 0
+        ? `  ${ui.glyph.ok} Up to date — ${ui.bold(`v${VERSION}`)} is the latest version.`
+        : `  ${ui.glyph.ok} You're ahead of the published version ${ui.dim(`(installed v${VERSION}, published v${latest})`)}.`
+    );
+    console.log("");
     return;
   }
   if (checkOnly) {
-    console.log("  A newer version is available — run 'vellum update' to install it.");
+    sp.stop(`  ${ui.glyph.up} ${ui.bold(`v${latest}`)} available ${ui.dim(`(installed v${VERSION})`)} — run ${ui.bold(ui.teal("vellum update"))} to install it.`);
+    console.log("");
     return;
   }
 
-  console.log(`  Updating ${VERSION} → ${latest}…\n`);
+  sp.stop(`  ${ui.glyph.up} Updating ${ui.dim(`v${VERSION}`)} ${ui.teal("→")} ${ui.bold(ui.teal(`v${latest}`))}…`);
+  console.log("");
 
   // Re-run the published installer in place. It is idempotent: it refreshes the tool
   // scripts, the agent skill, and the global shim, and never clobbers package.json
@@ -110,15 +121,15 @@ export async function runUpdate(args = []) {
   await new Promise((resolve) => {
     child.on("exit", (code) => {
       if (code === 0) {
-        console.log(`\n  Updated to ${latest}. ✓`);
+        console.log(`\n  ${ui.glyph.ok} Updated to ${ui.bold(ui.teal(`v${latest}`))}.\n`);
       } else {
-        console.error(`\n  Update failed (installer exited ${code}).`);
+        console.error(`\n  ${ui.glyph.err} Update failed (installer exited ${code}).\n`);
         process.exitCode = code || 1;
       }
       resolve();
     });
     child.on("error", (e) => {
-      console.error(`  Update failed: ${e.message}`);
+      console.error(`  ${ui.glyph.err} Update failed: ${e.message}`);
       process.exitCode = 1;
       resolve();
     });
