@@ -82,12 +82,6 @@ curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --dir compositions/he
 
 **Flags:** `--dir <path>` · `--port <number>` · `--start` · `--tool-only` · `--skill-only` · `--no-bin` · `--no-prompt` · `--no-package`
 
-Pin a release:
-
-```bash
-VELLUM_REF=v0.2.0 curl -fsSL https://raw.githubusercontent.com/jakeat11labs/vellum/main/install.sh | sh
-```
-
 **Clone & run**
 
 ```bash
