@@ -75,7 +75,7 @@ Composition in a subfolder? Pass `--dir` during install:
 curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --dir compositions/hero
 ```
 
-> **Requirements:** HyperFrames project (`index.html` + `node_modules/hyperframes`). Node ≥ 18. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
+> **Requirements:** a HyperFrames project (an `index.html` composition) and Node ≥ 18. The HyperFrames runtime is resolved automatically — from a local `node_modules/hyperframes` if present, otherwise the npx cache or the CDN — so `npx`-style projects work without a local install. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
 
 <details>
 <summary>Installer flags &amp; other install paths</summary>
