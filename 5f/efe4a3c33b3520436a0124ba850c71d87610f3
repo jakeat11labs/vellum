@@ -1,0 +1,70 @@
+promo/index.html
+  s_7e04d05027adb2::t_38d37a9245b033 689
+  s_7e04d05027adb2::t_9e1b50eb12da1b 200-201
+  s_7e04d05027adb2::t_389e51ed7265b5 645
+  s_7e04d05027adb2::t_53b8b4ff7b6615 683
+  s_7e04d05027adb2::t_63a7007af2cdcf 691
+  s_7e04d05027adb2::t_db6dc41e1760c8 686
+  s_7e04d05027adb2::t_683ba418cc3ca0 672
+  s_7e04d05027adb2::t_393d877257869c 707-716
+  s_7e04d05027adb2::t_33fb02f6be8a52 673-674
+  s_7e04d05027adb2::t_7348a163f11fe5 644
+  s_7e04d05027adb2::t_80d086a915dc3c 690
+  s_7e04d05027adb2::t_c61dc6398e721d 475
+  s_7e04d05027adb2::t_53e4a21e9faac1 168
+  s_7e04d05027adb2::t_e651e17028a58e 682
+  s_7e04d05027adb2::t_a307430c3b61ca 434
+  s_6ad70e01c175e0::t_bbf9b678c0d08d 74-88,90-93
+  s_7e04d05027adb2::t_57a56cd8095dba 684
+  s_7e04d05027adb2::t_c52ae02ef9bae9 283,324,412
+  s_6ad70e01c175e0::t_034ca6b7e9c7ce 525
+  s_7e04d05027adb2::t_1781b0491bc0e9 639
+  s_7e04d05027adb2::t_a5dab7a1574719 687
+  s_7e04d05027adb2::t_bddff36a2c1623 699
+  s_6ad70e01c175e0::t_47e7fd4a0d32ff 468-469,471
+  s_6ad70e01c175e0::t_e32c55609fb723 532-553
+  s_7e04d05027adb2::t_04c60e34851a8e 505-507
+  s_7e04d05027adb2::t_ec72db04eb708e 700
+  s_7e04d05027adb2::t_8b5630a7494107 181
+  s_7e04d05027adb2::t_876c7ebb39f636 441-442
+  s_7e04d05027adb2::t_3232b4af1f3020 688
+  s_7e04d05027adb2::t_7af4e019344bcf 643
+  s_7e04d05027adb2::t_e0dd3c7be3621f 315
+  s_7e04d05027adb2::t_a316bef056b08a 658-660
+  s_7e04d05027adb2::t_d38dda77593398 685
+  s_6ad70e01c175e0::t_da5df545a7f0fa 219-220,222,275-276,278,317-318,320,460-461,463
+  s_7e04d05027adb2::t_4910f38d122c43 587
+  s_7e04d05027adb2::t_547bbc105ac0f8 622-636
+  s_7e04d05027adb2::t_0d07cc16c2a392 609-616
+  s_7e04d05027adb2::t_54a1853dd98172 655-657
+  s_7e04d05027adb2::t_e2b411a9728a55 589
+  s_7e04d05027adb2::t_a9bf07f09c2157 646-647
+  s_7e04d05027adb2::t_ef918104a3b7cf 197-198
+  s_7e04d05027adb2::t_a6cc9c6b8d49bc 681
+CHANGELOG.md
+  s_6ad70e01c175e0::t_51cb12535d3899 18
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "5fefe4a3c33b3520436a0124ba850c71d87610f3",
+  "prompts": {},
+  "sessions": {
+    "s_6ad70e01c175e0": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9262bb91-6d6a-4c0f-b300-f4adc8002f27",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    },
+    "s_7e04d05027adb2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "5707a6d4-a85f-4e8d-9076-4445c3befef0",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
