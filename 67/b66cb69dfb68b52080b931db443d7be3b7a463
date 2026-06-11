@@ -1,0 +1,61 @@
+scripts/vellum-ui.mjs
+  s_aa4e06089279c8::t_d30863bc0cb191 1-196
+scripts/vellum-server.mjs
+  s_aa4e06089279c8::t_578a2edf474b45 352,356,366,370-376
+  s_aa4e06089279c8::t_0ad3929b4dc8a6 634,637
+  s_aa4e06089279c8::t_867d8ac6a48921 448
+  s_aa4e06089279c8::t_0d6372f06ddff1 26
+  s_aa4e06089279c8::t_7075a0b265e0ba 422
+  s_aa4e06089279c8::t_41c3d80c0c8e39 60-70
+  s_aa4e06089279c8::t_ee4542d1fe9540 562,564-593,596,599,601-604,607-624
+  s_aa4e06089279c8::t_df47afbc6dbe34 390
+package.json
+  s_aa4e06089279c8::t_4bb7935b2c8caa 3
+scripts/vellum-update.mjs
+  s_aa4e06089279c8::t_8bb8fa7ce2b1f2 68-71,76-77,85-90,94-95,99-100
+  s_aa4e06089279c8::t_bf5a984003404b 10
+  s_aa4e06089279c8::t_d5841c9b480416 124,126,132
+CHANGELOG.md
+  s_aa4e06089279c8::t_4bc19c3a5a3004 12-22
+  s_aa4e06089279c8::t_cde87e5987eeb3 10-11
+registry.json
+  s_aa4e06089279c8::t_8206676389d2ce 18-21
+install.sh
+  s_aa4e06089279c8::t_0a6a2f45876913 392
+  s_aa4e06089279c8::t_48336ace4e9167 592-593,595,597-608,610-612
+  s_aa4e06089279c8::t_17f9e3d3d50b20 276,279
+  s_aa4e06089279c8::t_2f68728b2fb4a1 668-672
+  s_aa4e06089279c8::t_006d6344aad14b 336-339
+  s_aa4e06089279c8::t_8dc7f3cac3292e 308-311
+  s_aa4e06089279c8::t_0d838886927da2 682-683
+  s_aa4e06089279c8::t_971e05d5a0448f 685,687,690,692,694,697,701
+  s_aa4e06089279c8::t_777f596493d9e5 180
+  s_aa4e06089279c8::t_e80b8cfe2b6051 519-542
+  s_aa4e06089279c8::t_578d0c6695f13a 559
+  s_aa4e06089279c8::t_b55f6169c7bf04 626-628
+  s_aa4e06089279c8::t_528f55e247b241 502-503
+  s_aa4e06089279c8::t_81604dc99da997 102-104,112-117,122-136,139-155
+scripts/vellum-shared.mjs
+  s_aa4e06089279c8::t_20a8d82ecc5ddc 6
+scripts/vellum-review.mjs
+  s_aa4e06089279c8::t_eda5a29abbfbd1 21-22
+  s_aa4e06089279c8::t_3611c5a039adb5 130-133
+  s_aa4e06089279c8::t_ea9c8f055616af 106-108,110,119-124
+  s_aa4e06089279c8::t_e4b56c73b95baf 147,150
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "67b66cb69dfb68b52080b931db443d7be3b7a463",
+  "prompts": {},
+  "sessions": {
+    "s_aa4e06089279c8": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "6eee3f53-3a3c-4638-a4b3-43f30e839cc2",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
