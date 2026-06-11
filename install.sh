@@ -38,7 +38,7 @@ Options:
   --tool-only        Install scripts only
   --skill-only       Install the agent skill only
   --start            Launch the review player when install finishes
-  --no-bin           Skip installing the vellum command to ~/.local/bin
+  --no-bin           Don't install the global vellum command (installed by default)
   --no-prompt, -y    Accept defaults; useful for CI/automation
   --no-package       Do not modify package.json scripts
   --help             Show this help
@@ -378,15 +378,10 @@ pick_bin_install() {
   if [ "$INSTALL_BIN" = "0" ]; then
     return
   fi
-  if ! can_prompt; then
-    INSTALL_BIN=1
-    return
-  fi
-  answer="$(ask "Install vellum command to $BIN_DIR? (type vellum from any folder in this project)" "Y")"
-  case "$answer" in
-    n|N|no|NO|No) INSTALL_BIN=0 ;;
-    *) INSTALL_BIN=1 ;;
-  esac
+  # The global 'vellum' command is part of setup, not a question. It's installed
+  # once and works from any HyperFrames project you set up — it auto-detects which
+  # project you're in. Opt out with --no-bin or VELLUM_INSTALL_BIN=0.
+  INSTALL_BIN=1
 }
 
 write_vellum_env() {
@@ -418,7 +413,7 @@ install_bin_shims() {
   cp "$SCRIPTS_DIR/vellum-shim" "$BIN_DIR/vellum"
   cp "$SCRIPTS_DIR/vellum-shim" "$BIN_DIR/vellum-review"
   chmod +x "$BIN_DIR/vellum" "$BIN_DIR/vellum-review" 2>/dev/null || true
-  ok "vellum + vellum-review → $BIN_DIR"
+  ok "global vellum command → $BIN_DIR (run 'vellum' from any project — it auto-detects which one)"
   HAS_VELLUM_CMD=1
   case ":$PATH:" in
     *:"$BIN_DIR":*) ;;
