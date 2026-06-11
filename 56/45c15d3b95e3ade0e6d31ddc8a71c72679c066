@@ -1,0 +1,26 @@
+scripts/vellum-template.html
+  s_4ac1138c7055b5::t_b9868e58cec7aa 39-71
+  s_4ac1138c7055b5::t_3bd67b749e5622 118-129,132,135-153
+package.json
+  s_4ac1138c7055b5::t_bd91f5e43cf810 3
+scripts/vellum-shared.mjs
+  s_4ac1138c7055b5::t_4d70d07bc88ce1 6
+CHANGELOG.md
+  s_4ac1138c7055b5::t_3444ed7f942588 10-14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "5645c15d3b95e3ade0e6d31ddc8a71c72679c066",
+  "prompts": {},
+  "sessions": {
+    "s_4ac1138c7055b5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a493a09-a734-4355-94d4-ac97505ed170",
+        "model": "claude-sonnet-4-6"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
