@@ -298,12 +298,13 @@ pick_skill_targets() {
   say ""
   info "Which coding agent do you use?"
   tty_say "    1) Cursor / Codex / Windsurf / most ${dim}(.agents/skills — recommended)${reset}"
-  tty_say "    2) Claude Code ${dim}(.agents/skills + .claude/skills symlink)${reset}"
-  tty_say "    3) Both ${dim}(same — one copy in .agents/skills)${reset}"
+  tty_say "    2) Claude Code ${dim}(.claude/skills)${reset}"
+  tty_say "    3) Both ${dim}(.agents/skills + .claude/skills symlink)${reset}"
   choice="$(pick_number "Choose" "1" "3")"
   case "$choice" in
     1) SKILL_TARGETS=".agents/skills/vellum" ;;
-    2|3) SKILL_TARGETS=".agents/skills/vellum .claude/skills/vellum" ;;
+    2) SKILL_TARGETS=".claude/skills/vellum" ;;
+    3) SKILL_TARGETS=".agents/skills/vellum .claude/skills/vellum" ;;
   esac
 }
 
