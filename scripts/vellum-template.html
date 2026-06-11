@@ -36,18 +36,39 @@
       button:hover { filter: brightness(1.12); }
       button.active { background: #5eead4; color: #06231f; border-color: #5eead4; }
 
-      /* Control bar */
-      #bar { display: flex; align-items: center; gap: 10px; row-gap: 8px; padding: 12px 18px; background: #121216; border-top: 1px solid #25252b; flex-wrap: wrap; }
-      #bar .brandwrap { display: flex; align-items: center; gap: 8px; }
-      #bar .brand-mark { height: 24px; width: auto; display: block; }
-      #bar .brand { font-weight: 700; letter-spacing: 0.04em; color: #e8e8ea; font-size: 14px; }
-      #bar .play { width: 44px; height: 38px; font-size: 16px; }
-      #scrub { flex: 1; min-width: 120px; accent-color: #5eead4; height: 6px; }
-      #tc { font-variant-numeric: tabular-nums; font-size: 14px; color: #b9b9c0; min-width: 128px; text-align: center; }
-      #scene-tag { font-size: 12px; color: #5eead4; min-width: 110px; }
-      .amix { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: #b9b9c0; }
-      .amix input { width: 70px; accent-color: #5eead4; }
-      .amix .val { font-variant-numeric: tabular-nums; width: 30px; color: #8b8b93; font-size: 11px; }
+      /* Control bar — single row, grouped by hairline separators */
+      #bar { display: flex; align-items: center; gap: 0; padding: 0 14px; height: 52px; background: #121216; border-top: 1px solid #25252b; flex-wrap: nowrap; overflow: hidden; }
+      #bar .sep { width: 1px; height: 20px; background: #25252b; margin: 0 10px; flex-shrink: 0; }
+      /* Logo */
+      #bar .brandwrap { display: flex; align-items: center; gap: 7px; padding-right: 2px; flex-shrink: 0; }
+      #bar .brand-mark { width: 26px; height: 26px; display: block; flex-shrink: 0; filter: drop-shadow(0 0 5px rgba(94,234,212,0.45)); }
+      #bar .brand { font-weight: 700; letter-spacing: 0.06em; color: #c8c8d0; font-size: 12px; }
+      /* Transport */
+      #bar .transport { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
+      #bar .transport button { width: 32px; height: 32px; padding: 0; font-size: 12px; display: flex; align-items: center; justify-content: center; background: transparent; border-color: transparent; border-radius: 6px; }
+      #bar .transport button:hover { background: #1f1f25; border-color: #2c2c32; }
+      #bar #play { width: 36px; height: 36px; font-size: 14px; background: #1f1f25; border-color: #2c2c32; }
+      /* Scrubber + time + scene */
+      #scrub { flex: 1; min-width: 80px; accent-color: #5eead4; height: 4px; margin: 0 10px; cursor: pointer; }
+      #tc { font-variant-numeric: tabular-nums; font-size: 12px; color: #b9b9c0; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.02em; }
+      #scene-tag { font-size: 11px; color: #5eead4; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; margin: 0 6px; }
+      #copy-scene { padding: 4px 6px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 13px; flex-shrink: 0; }
+      #copy-scene:hover { color: #b9b9c0; }
+      /* Audio mix */
+      .amix { display: inline-flex; align-items: center; gap: 5px; flex-shrink: 0; }
+      .amix .lbl { font-size: 10px; font-weight: 600; letter-spacing: 0.07em; color: #5a5a63; text-transform: uppercase; }
+      .amix input[type=range] { width: 58px; accent-color: #5eead4; height: 3px; cursor: pointer; }
+      .amix .val { font-variant-numeric: tabular-nums; width: 22px; color: #6b6b73; font-size: 10px; text-align: right; }
+      #save-mix { padding: 5px 9px; font-size: 12px; flex-shrink: 0; }
+      /* Action group */
+      #bar .actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+      #bar .actions button { padding: 5px 10px; font-size: 12px; height: 32px; flex-shrink: 0; }
+      #arm { background: rgba(94,234,212,0.08); border-color: rgba(94,234,212,0.22); color: #5eead4; font-size: 12px; }
+      #arm:hover { background: rgba(94,234,212,0.15); border-color: rgba(94,234,212,0.35); }
+      #copy-prompt { padding: 5px 8px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 14px; }
+      #copy-prompt:hover { color: #b9b9c0; }
+      #clear-all { padding: 5px 8px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 15px; }
+      #clear-all:hover { color: #ff6b6b; filter: none; }
 
       /* Notes drawer */
       #notes { position: absolute; top: 0; right: 0; bottom: 0; width: 360px; background: #101014; border-left: 1px solid #25252b; transform: translateX(100%); transition: transform .2s ease; z-index: 25; display: flex; flex-direction: column; }
@@ -94,21 +115,42 @@
       </div>
 
       <div id="bar">
-        <span class="brandwrap"><img class="brand-mark" alt="" /><span class="brand">VELLUM</span></span>
-        <button id="prev-scene" title="Previous scene (↑)">⏮</button>
-        <button class="play" id="play" title="Play / pause (space)">▶</button>
-        <button id="next-scene" title="Next scene (↓)">⏭</button>
+        <span class="brandwrap">
+          <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M4 4l6 16M20 4l-6 16M10 20h4" stroke="#5eead4" stroke-width="3" stroke-linecap="round"/>
+          </svg>
+          <span class="brand">VELLUM</span>
+        </span>
+        <div class="sep"></div>
+        <div class="transport">
+          <button id="prev-scene" title="Previous scene (↑)">⏮</button>
+          <button id="play" title="Play / pause (space)">▶</button>
+          <button id="next-scene" title="Next scene (↓)">⏭</button>
+        </div>
         <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" />
         <span id="tc">0:00.00 / 0:00.00</span>
+        <div class="sep"></div>
         <span id="scene-tag"></span>
         <button id="copy-scene" title="Copy current scene name">⧉</button>
-        <span class="amix" title="Voiceover level">🎙<input id="voice-vol" type="range" min="0" max="1" step="0.01" value="1" /><span class="val" id="voice-val">100</span></span>
-        <span class="amix" title="Music bed level">🎵<input id="music-vol" type="range" min="0" max="1" step="0.01" value="0.2" /><span class="val" id="music-val">20</span></span>
-        <button id="save-mix" title="Save these levels so they can be baked into the render">Save mix</button>
-        <button id="arm" title="Add note — N, then click or drag">＋ Add note</button>
-        <button id="toggle-notes">Notes (0)</button>
-        <button id="copy-prompt" title="Copy the agent handoff prompt">Copy prompt</button>
-        <button id="clear-all" title="Delete every note">🗑 Clear all</button>
+        <div class="sep"></div>
+        <span class="amix" title="Voiceover level">
+          <span class="lbl">VO</span>
+          <input id="voice-vol" type="range" min="0" max="1" step="0.01" value="1" />
+          <span class="val" id="voice-val">100</span>
+        </span>
+        <span class="amix" title="Music bed level" style="margin-left:8px">
+          <span class="lbl">MX</span>
+          <input id="music-vol" type="range" min="0" max="1" step="0.01" value="0.2" />
+          <span class="val" id="music-val">20</span>
+        </span>
+        <button id="save-mix" title="Save mix levels to notes/mix.json" style="margin-left:8px">Mix</button>
+        <div class="sep"></div>
+        <div class="actions">
+          <button id="arm" title="Add note — N, then click or drag">＋ Add note</button>
+          <button id="toggle-notes">Notes (0)</button>
+          <button id="copy-prompt" title="Copy agent handoff prompt">📋</button>
+          <button id="clear-all" title="Delete every note">🗑</button>
+        </div>
       </div>
 
       <div id="notes">
@@ -143,8 +185,6 @@
         const fav = document.createElement("link");
         fav.rel = "icon"; fav.type = "image/png"; fav.href = MARK;
         document.head.appendChild(fav);
-        const bm = document.querySelector(".brand-mark");
-        if (bm) bm.src = MARK;
       })();
       const stage = document.getElementById("stage");
       const pins = document.getElementById("pins");

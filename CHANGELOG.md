@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.4] - June 11, 2026
+
+### Changed
+- **Control bar redesigned** — single fixed row that never wraps. Logo is now an inline SVG V mark with a teal glow (no more faint-on-dark PNG). Controls grouped by function with hairline separators: transport · scrub+timecode+scene · audio mix · actions. Secondary buttons (Copy prompt, Clear all) are icon-only. "Save mix" → "Mix", emoji audio labels → compact "VO"/"MX" text. Scrubber gets all remaining width.
+
 ## [0.3.3] - June 11, 2026
 
 ### Changed
