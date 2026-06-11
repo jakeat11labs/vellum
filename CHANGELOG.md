@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.0] - June 11, 2026
+
+### Added
+- **`vellum update`** — checks the published version and, when newer, updates the install in place by re-running the installer non-interactively while preserving your config (skill target, `VELLUM_DIR`/port). `vellum update --check` reports only; `--force` reinstalls. Adds `vellum version` too.
+- **HyperFrames runtime resolution for `npx`-style projects** — when `node_modules/hyperframes` isn't installed (e.g. lessons that run `npx hyperframes@x`), the review server now serves the injected runtime from the npx cache (matching the version in `package.json`) or redirects to the jsDelivr CDN, so the composition mounts instead of failing to load. The startup banner shows the runtime source.
+
+### Changed
+- Installer sets up the global `vellum` command by default and no longer prompts for it (`--no-bin` / `VELLUM_INSTALL_BIN=0` still opt out).
+- Agent-skill picker: **Claude Code** now installs to `.claude/skills` only; **Both** creates the canonical `.agents/skills` copy plus a `.claude/skills` symlink. Cursor/Codex/Windsurf unchanged.
+
+### Fixed
+- README license badge is now a static badge, avoiding shields.io "unable to select next github token from pool" errors.
+
 ## [0.2.0] - June 11, 2026
 
 ### Added
@@ -61,6 +74,7 @@ Initial release — a transparent review-and-annotate layer for HyperFrames vide
 ### Security
 - Local-only by design: the server binds to `127.0.0.1`, sends no CORS headers, guards against path traversal, validates and length-caps note input, and invokes external tools (`hyperframes`, `ffmpeg`) with argument arrays only.
 
-[Unreleased]: https://github.com/jakeat11labs/vellum/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/jakeat11labs/vellum/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/jakeat11labs/vellum/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/jakeat11labs/vellum/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/jakeat11labs/vellum/releases/tag/v0.1.0
