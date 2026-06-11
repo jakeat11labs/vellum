@@ -1,0 +1,22 @@
+scripts/vellum-server.mjs
+  s_4ac1138c7055b5::t_8c43dd0da1e7da 430-434
+  s_4ac1138c7055b5::t_34e66f805ec0f7 55-127
+  s_4ac1138c7055b5::t_7735f03e16dcb0 498-502,505
+  s_4ac1138c7055b5::t_c4300347fb4114 22
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "a4d38a544173fea2c8e8c96c6a12ce483199871f",
+  "prompts": {},
+  "sessions": {
+    "s_4ac1138c7055b5": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "7a493a09-a734-4355-94d4-ac97505ed170",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
