@@ -1,0 +1,27 @@
+CHANGELOG.md
+  s_a468e2207e1e77::t_d44dae7b43a9fb 10-14
+package.json
+  s_a468e2207e1e77::t_bc1215fd7a8073 3
+scripts/vellum-shared.mjs
+  s_a468e2207e1e77::t_c9309f2b373831 6
+scripts/vellum-template.html
+  s_a468e2207e1e77::t_f8a8b3ab569a26 84-85,87-94
+  s_a468e2207e1e77::t_b4a0d313133951 180
+  s_a468e2207e1e77::t_c22783e6a815f7 431
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "4d3ff1c6aa73b2372d2ebe4be116ded9ad42ac2a",
+  "prompts": {},
+  "sessions": {
+    "s_a468e2207e1e77": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc399c3b-cfb5-4a26-b182-876feab4a701",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
