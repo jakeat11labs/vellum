@@ -18,11 +18,12 @@
       /* Pin/region layer overlays the scaled iframe exactly */
       #pins { position: absolute; inset: 0; pointer-events: none; }
       #pins.arming { pointer-events: auto; cursor: crosshair; }
-      .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; width: 26px; height: 26px; border-radius: 50% 50% 50% 2px; background: #5eead4; border: 2px solid #0b0b0d; color: #06231f; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.5); }
-      .pin:hover { background: #fff; }
-      .region { position: absolute; pointer-events: auto; border: 2px solid #5eead4; border-radius: 4px; background: rgba(94,234,212,0.12); cursor: pointer; }
-      .region:hover { background: rgba(94,234,212,0.22); }
-      .region .rbadge { position: absolute; top: -13px; left: -2px; background: #5eead4; color: #06231f; font-size: 12px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; }
+      /* Per-note color rides in on --c (set inline) so :hover can brighten it. */
+      .pin { position: absolute; transform: translate(-50%, -50%); pointer-events: auto; width: 26px; height: 26px; border-radius: 50% 50% 50% 2px; background: var(--c, #5eead4); border: 2px solid #0b0b0d; color: #06231f; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.5); transition: filter .12s ease, box-shadow .12s ease; }
+      .pin:hover { filter: brightness(1.25); box-shadow: 0 0 10px var(--c, #5eead4); }
+      .region { position: absolute; pointer-events: auto; border: 2px solid var(--c, #5eead4); border-radius: 4px; background: color-mix(in srgb, var(--c, #5eead4) 13%, transparent); cursor: pointer; transition: background .12s ease, box-shadow .12s ease; }
+      .region:hover { background: color-mix(in srgb, var(--c, #5eead4) 24%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--c, #5eead4) 60%, transparent); }
+      .region .rbadge { position: absolute; top: -13px; left: -2px; background: var(--c, #5eead4); color: #06231f; font-size: 12px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; }
       #dragbox { position: absolute; border: 2px dashed #5eead4; background: rgba(94,234,212,0.12); display: none; pointer-events: none; }
 
       /* Note composer popover */
@@ -49,7 +50,15 @@
       #bar .transport button:hover { background: #1f1f25; border-color: #2c2c32; }
       #bar #play { width: 36px; height: 36px; font-size: 14px; background: #1f1f25; border-color: #2c2c32; }
       /* Scrubber + time + scene */
-      #scrub { flex: 1; min-width: 80px; accent-color: #5eead4; height: 4px; margin: 0 10px; cursor: pointer; }
+      #scrubwrap { position: relative; flex: 1; min-width: 80px; margin: 0 10px; display: flex; align-items: center; }
+      #scrub { width: 100%; accent-color: #5eead4; height: 4px; margin: 0; cursor: pointer; position: relative; z-index: 1; }
+      /* Faint vertical ghost lines marking scene breaks (where ⏮/⏭ land) */
+      .scene-ticks { position: absolute; left: 0; right: 0; top: 50%; height: 16px; transform: translateY(-50%); pointer-events: none; z-index: 0; }
+      .scene-tick { position: absolute; top: 0; width: 1px; height: 100%; background: rgba(255,255,255,0.16); }
+      /* Colored dots above the bar, one per note, at its point on the timeline */
+      .note-dots { position: absolute; left: 0; right: 0; top: 50%; height: 0; pointer-events: none; z-index: 2; }
+      .note-dot { position: absolute; top: -11px; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); background: var(--c, #5eead4); border: 1.5px solid #121216; box-shadow: 0 0 4px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; transition: transform .12s ease, filter .12s ease; }
+      .note-dot:hover { transform: translateX(-50%) scale(1.4); filter: brightness(1.2); }
       #tc { font-variant-numeric: tabular-nums; font-size: 12px; color: #b9b9c0; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.02em; }
       #scene-tag { font-size: 11px; color: #5eead4; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; margin: 0 6px; }
       #copy-scene { padding: 4px 6px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 13px; flex-shrink: 0; }
@@ -127,7 +136,11 @@
           <button id="play" title="Play / pause (space)">▶</button>
           <button id="next-scene" title="Next scene (↓)">⏭</button>
         </div>
-        <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" />
+        <div id="scrubwrap">
+          <div class="scene-ticks" id="scene-ticks"></div>
+          <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" />
+          <div class="note-dots" id="note-dots"></div>
+        </div>
         <span id="tc">0:00.00 / 0:00.00</span>
         <div class="sep"></div>
         <span id="scene-tag"></span>
@@ -206,6 +219,19 @@
       const musicSlider = document.getElementById("music-vol");
       const voiceVal = document.getElementById("voice-val");
       const musicVal = document.getElementById("music-val");
+      const noteDots = document.getElementById("note-dots");
+      const sceneTicks = document.getElementById("scene-ticks");
+
+      // Per-note colors. Notes carry stable incrementing integer ids, so map id → palette
+      // by (id-1) so adjacent notes always differ and a note keeps its color for life.
+      const NOTE_PALETTE = ["#5eead4","#f472b6","#facc15","#a78bfa","#fb923c","#60a5fa","#4ade80","#f87171","#22d3ee","#e879f9","#fcd34d","#34d399"];
+      function colorFor(id) {
+        const n = Number(id);
+        if (Number.isInteger(n) && n > 0) return NOTE_PALETTE[(n - 1) % NOTE_PALETTE.length];
+        let h = 0; const s = String(id);
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+        return NOTE_PALETTE[h % NOTE_PALETTE.length];
+      }
 
       let player = null;       // the HyperFrames player living inside the iframe
       let compDoc = null;      // iframe.contentDocument
@@ -270,6 +296,21 @@
       const updateMarkerVisibility = (t) => {
         for (const m of markerEls) m.el.style.display = t >= m.start && t < m.end ? "" : "none";
       };
+      // Faint vertical line on the scrubber at each scene's start — a visual preview of
+      // where ⏮/⏭ (and ↑/↓) jump the playhead.
+      function renderSceneTicks() {
+        sceneTicks.innerHTML = "";
+        if (!duration) return;
+        for (const s of scenes) {
+          const pct = (s.start / duration) * 100;
+          if (pct < 0 || pct > 100) continue;
+          const tick = document.createElement("div");
+          tick.className = "scene-tick";
+          tick.style.left = `${pct}%`;
+          tick.title = `${s.id} — ${fmt(s.start)}`;
+          sceneTicks.appendChild(tick);
+        }
+      }
 
       function fitStage() {
         const iframe = stage.querySelector("#comp");
@@ -325,6 +366,7 @@
         duration = player.getDuration() || Number(root.getAttribute("data-duration")) || 0;
         scrub.max = duration;
         scenes = buildScenes(compDoc);
+        renderSceneTicks();
 
         // Audio: pick the music bed, treat the rest as voice. An explicit
         // data-vellum-audio="music"|"voice" on an <audio> always wins; otherwise fall back
@@ -608,6 +650,7 @@
         markerEls = [];
         notes.forEach((n) => {
           if (n.x == null) return;
+          const color = colorFor(n.id);
           let marker;
           if (n.w != null) {
             marker = document.createElement("div");
@@ -616,6 +659,7 @@
             marker.style.top = `${n.y}%`;
             marker.style.width = `${n.w}%`;
             marker.style.height = `${n.h}%`;
+            marker.style.setProperty("--c", color);
             const badge = document.createElement("div");
             badge.className = "rbadge";
             badge.textContent = n.id;
@@ -625,6 +669,7 @@
             marker.className = "pin";
             marker.style.left = `${n.x}%`;
             marker.style.top = `${n.y}%`;
+            marker.style.setProperty("--c", color);
             marker.textContent = n.id;
           }
           marker.title = `${fmt(n.time)} — ${n.text}`;
@@ -634,6 +679,25 @@
           markerEls.push({ el: marker, start, end });
         });
         updateMarkerVisibility(player ? player.getTime() : 0);
+        renderNoteDots();
+      }
+      // A colored dot above the scrubber for each note, at its point on the timeline,
+      // matching that note's pin/region color. Click to jump there.
+      function renderNoteDots() {
+        noteDots.innerHTML = "";
+        if (!duration) return;
+        notes.forEach((n) => {
+          if (n.time == null) return;
+          const pct = (n.time / duration) * 100;
+          if (pct < 0 || pct > 100) return;
+          const dot = document.createElement("div");
+          dot.className = "note-dot";
+          dot.style.left = `${pct}%`;
+          dot.style.setProperty("--c", colorFor(n.id));
+          dot.title = `note-${n.id} · ${fmt(n.time)} — ${n.text || ""}`;
+          dot.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
+          noteDots.appendChild(dot);
+        });
       }
       function renderList() {
         noteList.innerHTML = "";
@@ -641,6 +705,8 @@
           const status = n.status || "open";
           const item = document.createElement("div");
           item.className = `note-item${status !== "open" ? ` ${status}` : ""}`;
+          item.style.borderLeftColor = colorFor(n.id);
+          item.style.borderLeftWidth = "3px";
           const actions = document.createElement("div");
           actions.className = "actions";
           const statusBtn = document.createElement("button");

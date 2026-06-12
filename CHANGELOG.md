@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.7] - June 11, 2026
+
+### Added
+- **Per-note colors.** Each note gets its own stable color from a 12-color palette (mapped by note id, so a note keeps its color for life). Pins, region boxes, their badges, and the notes-panel rows all share that color, making notes easy to tell apart at a glance.
+- **Timeline note dots.** A colored dot sits above the scrubber at each note's point on the timeline, matching that note's color — click one to jump straight to it. Hover to preview `note-N · time — text`.
+- **Scene-break ghost lines.** Faint vertical ticks on the scrubber mark where each scene begins, so you can see where ⏮/⏭ (and ↑/↓) will land the playhead before you jump. Hover a tick for the scene name and timestamp.
+
+### Changed
+- **Pins, regions, and dots brighten in their own color on hover** (with a matching glow), replacing the old fixed teal/white hover state now that markers are individually colored.
+- **README leads with the demo.** Added the 52-second promo video (poster + link) to the hero and "Try the demo" sections.
+
 ## [0.3.6] - June 11, 2026
 
 ### Changed

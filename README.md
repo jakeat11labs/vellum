@@ -25,6 +25,10 @@ pin time-coded notes onto any [HyperFrames](https://hyperframes.heygen.com) fram
 
 <sub>Scrub the real composition · pin point or region notes · balance the mix · hand off to your agent</sub>
 
+<br>
+
+<sub>▶ <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo.mp4">Watch the 52-second demo</a></sub>
+
 <br><br>
 
 ```bash
@@ -166,7 +170,17 @@ The agent then:
 
 ## Try the demo
 
-Self-contained composition (screenshot above):
+<div align="center">
+  <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo.mp4">
+    <img src="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo-poster.jpg" alt="Watch the Vellum demo — see the whole review loop in 52 seconds" width="820" />
+  </a>
+  <br>
+  <sub>▶ <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo.mp4">Watch the 52-second walkthrough</a> — see, pin, hand off, fixed.</sub>
+</div>
+
+<br>
+
+Self-contained composition:
 
 ```bash
 git clone https://github.com/jakeat11labs/vellum.git && cd vellum
