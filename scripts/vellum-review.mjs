@@ -70,7 +70,23 @@ function snapshot(t) {
   return pick ? path.join(SNAP_DIR, pick.f) : null;
 }
 
-// Draw the note's marker (pin dot or region box) onto the snapshot.
+// Draw the note's marker (pin dot or region box) onto the snapshot. Pin notes whose
+// target carries an element bounding box (captured via the HyperFrames picker at pin
+// time) get the element's actual outline plus a small filled dot at the click point;
+// older notes fall back to the generic 40px square.
+function targetBox(note) {
+  const b = note.target && note.target.box;
+  if (!b) return null;
+  const vals = [b.x, b.y, b.w, b.h].map(Number);
+  if (!vals.every(Number.isFinite) || vals[2] <= 0 || vals[3] <= 0) return null;
+  return {
+    x: Math.round((vals[0] / 100) * W),
+    y: Math.round((vals[1] / 100) * H),
+    w: Math.max(4, Math.round((vals[2] / 100) * W)),
+    h: Math.max(4, Math.round((vals[3] / 100) * H)),
+  };
+}
+
 function drawMarker(srcPng, note, outPng) {
   let filter;
   if (note.w != null) {
@@ -82,8 +98,14 @@ function drawMarker(srcPng, note, outPng) {
   } else if (note.x != null) {
     const cx = Math.round((note.x / 100) * W);
     const cy = Math.round((note.y / 100) * H);
-    const s = 40;
-    filter = `drawbox=x=${cx - s}:y=${cy - s}:w=${s * 2}:h=${s * 2}:color=${ACCENT}@1.0:t=5`;
+    const box = targetBox(note);
+    if (box) {
+      const d = 9;
+      filter = `drawbox=x=${box.x}:y=${box.y}:w=${box.w}:h=${box.h}:color=${ACCENT}@1.0:t=4,drawbox=x=${cx - d}:y=${cy - d}:w=${d * 2}:h=${d * 2}:color=${ACCENT}@1.0:t=fill`;
+    } else {
+      const s = 40;
+      filter = `drawbox=x=${cx - s}:y=${cy - s}:w=${s * 2}:h=${s * 2}:color=${ACCENT}@1.0:t=5`;
+    }
   } else {
     // no coordinates — just copy the frame
     fs.copyFileSync(srcPng, outPng);
@@ -133,11 +155,12 @@ function main() {
     }
     const where = n.w != null ? `box ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%,${n.y}%` : "—";
     const tgt = n.target ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`` : "";
+    const sel = n.target && n.target.selector ? ` · at \`${n.target.selector}\`` : "";
     index.push(`### note-${n.id} · ${fmtTime(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
     index.push("");
     index.push(`${n.text}`);
     index.push("");
-    index.push(`_(${where}${tgt})_`);
+    index.push(`_(${where}${tgt}${sel})_`);
     if (drawn) index.push("", `![note ${n.id}](note-${n.id}.png)`);
     index.push("");
   });

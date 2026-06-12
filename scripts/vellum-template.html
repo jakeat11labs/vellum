@@ -25,11 +25,14 @@
       .region:hover { background: color-mix(in srgb, var(--c, #5eead4) 24%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--c, #5eead4) 60%, transparent); }
       .region .rbadge { position: absolute; top: -13px; left: -2px; background: var(--c, #5eead4); color: #06231f; font-size: 12px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; }
       #dragbox { position: absolute; border: 2px dashed #5eead4; background: rgba(94,234,212,0.12); display: none; pointer-events: none; }
+      /* Floating label naming the element under the crosshair while arming */
+      #hover-tag { position: absolute; z-index: 5; display: none; pointer-events: none; background: #0e0e11; border: 1px solid #2d4f49; color: #5eead4; font-size: 11px; padding: 2px 7px; border-radius: 6px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 
       /* Note composer popover */
       #composer { position: absolute; z-index: 30; width: 340px; background: #17171b; border: 1px solid #2c2c32; border-radius: 12px; padding: 12px; box-shadow: 0 14px 50px rgba(0,0,0,0.6); display: none; }
       #composer .meta { font-size: 12px; color: #8b8b93; margin-bottom: 4px; }
       #composer .tgt { font-size: 12px; color: #5eead4; margin-bottom: 8px; word-break: break-word; }
+      #composer .tgt select { width: 100%; margin-top: 2px; background: #0e0e11; color: #5eead4; border: 1px solid #2c2c32; border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
       #composer textarea { width: 100%; height: 78px; resize: vertical; background: #0e0e11; color: #e8e8ea; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px; font: inherit; font-size: 14px; }
       #composer .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
       button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid #2c2c32; background: #1f1f25; color: #e8e8ea; padding: 7px 12px; }
@@ -110,7 +113,7 @@
     <div id="wrap">
       <div id="viewport">
         <div id="stage"><div class="hint" style="padding:40px">Loading composition…</div></div>
-        <div id="pins"><div id="dragbox"></div></div>
+        <div id="pins"><div id="dragbox"></div><div id="hover-tag"></div></div>
         <div id="composer">
           <div class="meta" id="composer-meta"></div>
           <div class="tgt" id="composer-tgt"></div>
@@ -189,6 +192,9 @@
       //   window.__playerReady : boolean — true once the player has mounted
       //   window.__player      : object  — .getDuration(); drives the scrubber + playback
       //   window.__timelines   : object  — per-composition GSAP timelines
+      //   window.__HF_PICKER_API : object (optional) — element inspector; we use
+      //     .getCandidatesAtPoint(x, y, max) for friendly element labels. Older runtimes
+      //     lack it; targeting still works, labels are generated locally instead.
       // The composition root is identified by [data-composition-id]; scenes are its
       // [data-start] children. If a future runtime renames any of these, update them here.
 
@@ -363,6 +369,7 @@
           await sleep(50);
         }
         player = win.__player;
+        ensureCompStyles();
         duration = player.getDuration() || Number(root.getAttribute("data-duration")) || 0;
         scrub.max = duration;
         scenes = buildScenes(compDoc);
@@ -476,7 +483,7 @@
       document.getElementById("next-scene").onclick = () => jumpScene(1);
 
       window.addEventListener("keydown", (e) => {
-        if (e.code === "Escape") { composer.style.display = "none"; pending = null; notesPanel.classList.remove("open"); return; }
+        if (e.code === "Escape") { composer.style.display = "none"; pending = null; notesPanel.classList.remove("open"); clearHover(); return; }
         if (e.target.tagName === "TEXTAREA") return;
         if (e.code === "Space") { e.preventDefault(); player.isPlaying() ? player.pause() : player.play(); }
         else if (e.code === "KeyN") { e.preventDefault(); if (!arming) armBtn.click(); }
@@ -510,16 +517,102 @@
         arming = !arming;
         armBtn.classList.toggle("active", arming);
         pins.classList.toggle("arming", arming);
+        if (!arming) clearHover();
         flash(arming ? "Click a spot, or drag a box, to mark feedback" : "Add-note off");
       };
 
-      // Identify the composition element under a screen point (inside the iframe doc).
-      function captureTarget(clientX, clientY) {
-        const iframe = stage.querySelector("#comp");
-        const r = iframe.getBoundingClientRect();
+      // ---- element targeting ----
+      // Notes capture the full element stack under the pin point (not just the topmost
+      // element): exact verified CSS selector, bounding box, and data-* attributes per
+      // candidate. Newer HyperFrames runtimes expose window.__HF_PICKER_API inside the
+      // iframe — the element inspector Studio's layers panel uses — which contributes
+      // friendly element labels ("Heading", "Composition"). Its generated selectors can
+      // be document-ambiguous, so Vellum derives selectors itself and only trusts ones
+      // that round-trip querySelectorAll uniquely.
+      const PICK_MAX = 5;
+      function pickerApi() {
+        try {
+          const api = stage.querySelector("#comp")?.contentWindow?.__HF_PICKER_API;
+          return api && typeof api.getCandidatesAtPoint === "function" ? api : null;
+        } catch { return null; }
+      }
+      // Screen point → composition-space point (the iframe's internal coords are unscaled).
+      function compPoint(clientX, clientY) {
+        const r = stage.querySelector("#comp").getBoundingClientRect();
         const s = r.width / compW;
-        const ix = (clientX - r.left) / s;
-        const iy = (clientY - r.top) / s;
+        return { ix: (clientX - r.left) / s, iy: (clientY - r.top) / s };
+      }
+      const pctOf = (v, dim) => Math.round((v / dim) * 1000) / 10;
+      function shortText(el) {
+        return (el && el.textContent ? el.textContent : "").replace(/\s+/g, " ").trim().slice(0, 80);
+      }
+      function shortCls(el) {
+        if (!el || typeof el.className !== "string") return "";
+        // Drop transient highlight/flash classes (vellum's and the runtime's own).
+        return el.className.trim().split(/\s+/).filter((c) => !c.startsWith("__vellum-") && !c.startsWith("__hf-")).slice(0, 3).join(".");
+      }
+      // Build a CSS selector for an element and verify it resolves uniquely. The picker
+      // API's own selectors can be document-ambiguous (e.g. a bare `div:nth-of-type(2)`),
+      // so Vellum generates its own: id shortcut where available, else a `>`-chained
+      // tag:nth-of-type path down from the nearest id'd ancestor / composition root.
+      function cssPath(el) {
+        const parts = [];
+        let node = el;
+        while (node && node.nodeType === 1 && node !== compDoc.documentElement && node !== compDoc.body) {
+          if (node.id) { parts.unshift(`#${CSS.escape(node.id)}`); break; }
+          const parent = node.parentElement;
+          let seg = node.tagName.toLowerCase();
+          if (parent) {
+            const sibs = [...parent.children].filter((c) => c.tagName === node.tagName);
+            if (sibs.length > 1) seg += `:nth-of-type(${sibs.indexOf(node) + 1})`;
+          }
+          parts.unshift(seg);
+          node = parent;
+        }
+        const sel = parts.join(" > ");
+        try { return sel && compDoc.querySelectorAll(sel).length === 1 ? sel : null; } catch { return null; }
+      }
+      // Friendly element name, mirroring the picker's labels for the no-picker fallback.
+      function autoLabel(el) {
+        const tag = el.tagName.toLowerCase();
+        if (/^h[1-3]$/.test(tag)) return "Heading";
+        if (tag === "img") return "Image";
+        if (tag === "video") return "Video";
+        if (tag === "audio") return "Audio";
+        if (tag === "svg") return "Shape";
+        if (el.getAttribute && el.getAttribute("data-composition-src")) return "Composition";
+        if (tag === "section") return "Section";
+        if (tag === "p" || tag === "span" || tag === "div") {
+          const text = shortText(el);
+          return text ? (text.length > 56 ? `${text.slice(0, 55)}…` : text) : "Text";
+        }
+        return tag.charAt(0).toUpperCase() + tag.slice(1);
+      }
+      // Live DOM element → vellum candidate { el, target }. `info` (the picker's
+      // ElementInfo for the same stack position, when available) contributes only the
+      // label — selector, box, and attributes all come from the element itself.
+      function toCandidate(el, info) {
+        const b = el.getBoundingClientRect();
+        const data = {};
+        for (const a of el.attributes) if (a.name.startsWith("data-")) data[a.name] = a.value;
+        return {
+          el,
+          target: {
+            tag: el.tagName.toLowerCase(),
+            cls: shortCls(el),
+            text: shortText(el),
+            selector: cssPath(el),
+            label: info && info.tagName === el.tagName.toLowerCase() && info.label ? info.label : autoLabel(el),
+            box: b.width > 0 && b.height > 0
+              ? { x: pctOf(b.x, compW), y: pctOf(b.y, compH), w: pctOf(b.width, compW), h: pctOf(b.height, compH) }
+              : null,
+            data: Object.keys(data).length ? data : null,
+          },
+        };
+      }
+      // Original heuristic, kept as the no-picker fallback: topmost element, walked up
+      // to the first ancestor with a class.
+      function legacyCandidate(ix, iy) {
         const el = compDoc.elementFromPoint(ix, iy);
         const root = compDoc.querySelector("[data-composition-id]") || compDoc.getElementById("root");
         if (!el || !root || !root.contains(el)) return null;
@@ -528,14 +621,120 @@
           node = node.parentElement;
         }
         if (!node || node === root) node = el;
-        const cls = typeof node.className === "string" ? node.className.trim().split(/\s+/).slice(0, 3).join(".") : "";
-        const text = (node.textContent || "").replace(/\s+/g, " ").trim().slice(0, 80);
-        return { tag: node.tagName.toLowerCase(), cls, text };
+        return toCandidate(node, null);
+      }
+      // All element candidates stacked under a screen point, topmost first. Enumerated
+      // with elementsFromPoint using the same filter as the picker API, so the picker's
+      // labels (fetched at the same point) align index-for-index when it's available.
+      const SKIP_TAGS = new Set(["script", "style", "link", "meta"]);
+      function captureCandidates(clientX, clientY) {
+        const { ix, iy } = compPoint(clientX, clientY);
+        const root = compDoc.querySelector("[data-composition-id]") || compDoc.getElementById("root");
+        if (compDoc.elementsFromPoint && root) {
+          const stack = [];
+          for (const el of compDoc.elementsFromPoint(ix, iy)) {
+            if (el === compDoc.body || el === compDoc.documentElement) continue;
+            if (SKIP_TAGS.has(el.tagName.toLowerCase())) continue;
+            stack.push(el);
+            if (stack.length >= 8) break;
+          }
+          let infos = [];
+          const api = pickerApi();
+          if (api) { try { infos = api.getCandidatesAtPoint(ix, iy, 8) || []; } catch {} }
+          const out = stack
+            .map((el, i) => ({ el, info: infos[i] }))
+            .filter((p) => root.contains(p.el))
+            .slice(0, PICK_MAX)
+            .map((p) => toCandidate(p.el, p.info));
+          if (out.length) return out;
+        }
+        const legacy = legacyCandidate(ix, iy);
+        return legacy ? [legacy] : [];
+      }
+      // Default pick mirrors the old heuristic: prefer the first candidate that has a
+      // class or id (skipping anonymous wrappers), else the topmost.
+      function defaultCandidate(cands) {
+        const i = cands.findIndex((c) => c.target.cls || (c.el && c.el.id));
+        return i >= 0 ? i : 0;
+      }
+      const targetLabel = (t) =>
+        `${t.tag}${t.cls ? "." + t.cls : ""}${t.text ? ` — “${t.text}”` : ""}`;
+
+      // ---- in-composition highlight + flash (vellum-owned styles, injected at mount) ----
+      function ensureCompStyles() {
+        if (!compDoc || compDoc.getElementById("__vellum-styles")) return;
+        const st = compDoc.createElement("style");
+        st.id = "__vellum-styles";
+        st.textContent = [
+          ".__vellum-pick { outline: 2px solid #5eead4 !important; outline-offset: 2px !important; }",
+          ".__vellum-flash { outline: 3px solid var(--vellum-c, #5eead4) !important; outline-offset: 3px !important; animation: __vellum-flash-pulse 900ms ease-out forwards !important; }",
+          "@keyframes __vellum-flash-pulse { 0%, 70% { outline-color: var(--vellum-c, #5eead4); } 100% { outline-color: transparent; } }",
+        ].join("\n");
+        compDoc.head.appendChild(st);
+      }
+      function flashEl(el, color) {
+        if (!el) return;
+        el.style.setProperty("--vellum-c", color || "#5eead4");
+        el.classList.remove("__vellum-flash");
+        void el.offsetWidth; // restart the animation if it's mid-pulse
+        el.classList.add("__vellum-flash");
+        clearTimeout(el.__vellumFlashT);
+        el.__vellumFlashT = setTimeout(() => el.classList.remove("__vellum-flash"), 950);
+      }
+      // Re-find a saved note's element in the live composition: exact selector first,
+      // then tag.cls (+ text) as a best-effort for legacy notes.
+      function resolveTargetEl(target) {
+        if (!target || !compDoc) return null;
+        try {
+          if (target.selector) {
+            const el = compDoc.querySelector(target.selector);
+            if (el) return el;
+          }
+          if (target.tag) {
+            const sel = `${target.tag}${target.cls ? "." + target.cls : ""}`;
+            const els = [...compDoc.querySelectorAll(sel)];
+            if (els.length === 1) return els[0];
+            if (target.text) {
+              const hit = els.find((e) => shortText(e).startsWith(target.text.slice(0, 40)));
+              if (hit) return hit;
+            }
+            return els[0] || null;
+          }
+        } catch {}
+        return null;
+      }
+      const flashTarget = (target, color) => flashEl(resolveTargetEl(target), color);
+
+      // ---- live hover highlight while armed ----
+      const hoverTag = document.getElementById("hover-tag");
+      let hoverEl = null;
+      let hoverRaf = 0;
+      function clearHover() {
+        if (hoverEl) hoverEl.classList.remove("__vellum-pick");
+        hoverEl = null;
+        hoverTag.style.display = "none";
+      }
+      function updateHover(e) {
+        const cands = captureCandidates(e.clientX, e.clientY);
+        const c = cands[defaultCandidate(cands)];
+        if (hoverEl && (!c || c.el !== hoverEl)) hoverEl.classList.remove("__vellum-pick");
+        hoverEl = c && c.el ? c.el : null;
+        if (hoverEl) hoverEl.classList.add("__vellum-pick");
+        if (c) {
+          const r = pins.getBoundingClientRect();
+          hoverTag.textContent = c.target.label ? `${c.target.label} · ${targetLabel(c.target)}` : targetLabel(c.target);
+          hoverTag.style.display = "block";
+          hoverTag.style.left = `${Math.min(e.clientX - r.left + 14, r.width - 120)}px`;
+          hoverTag.style.top = `${Math.min(e.clientY - r.top + 16, r.height - 26)}px`;
+        } else {
+          hoverTag.style.display = "none";
+        }
       }
 
       let dragStart = null;
       pins.addEventListener("mousedown", (e) => {
         if (!arming) return;
+        clearHover();
         const r = pins.getBoundingClientRect();
         dragStart = { x: e.clientX - r.left, y: e.clientY - r.top, cx: e.clientX, cy: e.clientY };
         dragbox.style.left = `${dragStart.x}px`;
@@ -545,7 +744,14 @@
         dragbox.style.display = "block";
       });
       pins.addEventListener("mousemove", (e) => {
-        if (!dragStart) return;
+        if (!dragStart) {
+          // Armed but not dragging: live-highlight the element under the crosshair so
+          // the user sees what the pin will attach to before clicking.
+          if (arming && !hoverRaf) {
+            hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; if (arming && !dragStart) updateHover(e); });
+          }
+          return;
+        }
         const r = pins.getBoundingClientRect();
         const cx = e.clientX - r.left, cy = e.clientY - r.top;
         dragbox.style.left = `${Math.min(dragStart.x, cx)}px`;
@@ -553,6 +759,7 @@
         dragbox.style.width = `${Math.abs(cx - dragStart.x)}px`;
         dragbox.style.height = `${Math.abs(cy - dragStart.y)}px`;
       });
+      pins.addEventListener("mouseleave", clearHover);
       pins.addEventListener("mouseup", (e) => {
         if (!arming || !dragStart) return;
         const r = pins.getBoundingClientRect();
@@ -560,19 +767,26 @@
         const dpx = Math.abs(ex - dragStart.x), dpy = Math.abs(ey - dragStart.y);
         dragbox.style.display = "none";
         const time = player.getTime();
-        const target = captureTarget(dragStart.cx, dragStart.cy);
         const toPct = (v, dim) => Math.round((v / dim) * 1000) / 10;
 
+        let candidates;
         if (dpx < 6 && dpy < 6) {
-          pending = { time, x: toPct(dragStart.x, r.width), y: toPct(dragStart.y, r.height), scene: sceneAt(time), target };
+          candidates = captureCandidates(dragStart.cx, dragStart.cy);
+          pending = { time, x: toPct(dragStart.x, r.width), y: toPct(dragStart.y, r.height), scene: sceneAt(time) };
         } else {
           const left = Math.min(dragStart.x, ex), top = Math.min(dragStart.y, ey);
+          // For a region the subject is what the box surrounds — capture at its center,
+          // not at the corner where the drag happened to start.
+          candidates = captureCandidates(r.left + left + dpx / 2, r.top + top + dpy / 2);
           pending = {
-            time, scene: sceneAt(time), target,
+            time, scene: sceneAt(time),
             x: toPct(left, r.width), y: toPct(top, r.height),
             w: toPct(dpx, r.width), h: toPct(dpy, r.height),
           };
         }
+        pending.candidates = candidates;
+        pending.candIndex = defaultCandidate(candidates);
+        pending.target = candidates[pending.candIndex] ? candidates[pending.candIndex].target : null;
         openComposer(e.clientX, e.clientY);
         dragStart = null;
         arming = false;
@@ -582,13 +796,40 @@
 
       const composerSaveBtn = document.getElementById("composer-save");
 
+      // Target line in the composer. With one candidate it's a plain label; with several
+      // (stacked/overlapping elements) it becomes a dropdown — picking an option flashes
+      // that element in the composition so the choice is visually confirmed.
+      function renderComposerTarget() {
+        composerTgt.innerHTML = "";
+        const cands = pending.candidates || [];
+        if (cands.length > 1) {
+          const sel = document.createElement("select");
+          cands.forEach((c, i) => {
+            const o = document.createElement("option");
+            o.value = String(i);
+            o.textContent = `${c.target.label ? c.target.label + " · " : ""}${targetLabel(c.target)}`;
+            sel.appendChild(o);
+          });
+          sel.value = String(pending.candIndex || 0);
+          sel.onchange = () => {
+            pending.candIndex = Number(sel.value);
+            pending.target = cands[pending.candIndex].target;
+            flashEl(cands[pending.candIndex].el);
+          };
+          composerTgt.append("on ", sel);
+        } else if (pending.target) {
+          composerTgt.textContent = `on ${targetLabel(pending.target)}`;
+        }
+      }
+
       function openComposer(clientX, clientY) {
         const region = pending.w != null;
         const editLabel = pending.editId ? `note-${pending.editId} · edit` : "new note";
         composerMeta.textContent = `${editLabel} · ${fmt(pending.time)} · ${pending.scene || ""} · ${region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`}`;
-        composerTgt.textContent = pending.target
-          ? `on ${pending.target.tag}${pending.target.cls ? "." + pending.target.cls : ""}${pending.target.text ? ` — “${pending.target.text}”` : ""}`
-          : "";
+        renderComposerTarget();
+        if (!pending.editId && pending.candidates && pending.candidates[pending.candIndex]) {
+          flashEl(pending.candidates[pending.candIndex].el);
+        }
         composerText.value = pending.text || "";
         composerSaveBtn.textContent = pending.editId ? "Save changes" : "Save note";
         const vp = document.getElementById("viewport").getBoundingClientRect();
@@ -615,7 +856,10 @@
           });
           if (!res.ok) { flash("Update failed"); return; }
         } else {
-          await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ ...pending, text }) });
+          // Explicit payload — pending also carries candidate DOM elements that must
+          // never be serialized.
+          const { time, x, y, w, h, scene, target } = pending;
+          await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ time, x, y, w, h, scene, target, text }) });
         }
         composer.style.display = "none";
         pending = null;
@@ -673,7 +917,8 @@
             marker.textContent = n.id;
           }
           marker.title = `${fmt(n.time)} — ${n.text}`;
-          marker.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
+          marker.onmouseenter = () => flashTarget(n.target, color);
+          marker.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); setTimeout(() => flashTarget(n.target, color), 120); };
           pins.appendChild(marker);
           const [start, end] = sceneWindow(n);
           markerEls.push({ el: marker, start, end });
@@ -740,11 +985,15 @@
           if (n.target) {
             const tg = document.createElement("div");
             tg.className = "ntg";
-            tg.textContent = `on ${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}${n.target.text ? ` — “${n.target.text}”` : ""}`;
+            tg.textContent = `on ${targetLabel(n.target)}`;
             item.append(tg);
           }
           item.append(nx);
-          item.onclick = () => { player.pause(); player.seek(n.time); };
+          // Hover a note row → flash its element in the composition (in the note's
+          // color), so you can verify the note still points at the right thing after
+          // edits. Click seeks first so the element's scene is actually on screen.
+          item.onmouseenter = () => flashTarget(n.target, colorFor(n.id));
+          item.onclick = () => { player.pause(); player.seek(n.time); setTimeout(() => flashTarget(n.target, colorFor(n.id)), 120); };
           noteList.appendChild(item);
         });
       }

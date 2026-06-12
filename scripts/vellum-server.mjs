@@ -276,9 +276,10 @@ function writeNotes(notes) {
       const tgt = n.target
         ? ` · on \`${escapeMd(n.target.tag)}${n.target.cls ? "." + escapeMd(n.target.cls) : ""}\`${targetText}`
         : "";
+      const sel = n.target && n.target.selector ? ` · at \`${escapeMd(n.target.selector)}\`` : "";
       const status = normalizeNoteStatus(n.status);
       const statusTag = status !== "open" ? ` · _(${status})_` : "";
-      return `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${statusTag}`;
+      return `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}`;
     }),
     "",
   ].join("\n");
@@ -397,10 +398,34 @@ function handleNotes(req, res) {
       const pct = (v) => boundedNumber(v, null, { min: 0, max: 100 });
       let target = null;
       if (parsed.target && typeof parsed.target === "object") {
+        // Element bounding box at pin time (percent of comp size) — lets vellum-review
+        // draw the actual element outline instead of a generic marker.
+        let box = null;
+        const b = parsed.target.box;
+        if (b && typeof b === "object") {
+          const candidate = { x: pct(b.x), y: pct(b.y), w: pct(b.w), h: pct(b.h) };
+          if (Object.values(candidate).every((v) => v != null)) box = candidate;
+        }
+        // data-* attributes captured from the element (e.g. data-start/data-duration) —
+        // timing context the agent can use directly. Keys/values capped defensively.
+        let data = null;
+        if (parsed.target.data && typeof parsed.target.data === "object" && !Array.isArray(parsed.target.data)) {
+          data = {};
+          for (const [k, v] of Object.entries(parsed.target.data)) {
+            if (!/^data-[\w-]{1,40}$/.test(k)) continue;
+            data[k] = String(v).slice(0, 120);
+            if (Object.keys(data).length >= 12) break;
+          }
+          if (!Object.keys(data).length) data = null;
+        }
         target = {
           tag: String(parsed.target.tag ?? "").slice(0, 20),
           cls: String(parsed.target.cls ?? "").slice(0, 120),
           text: String(parsed.target.text ?? "").slice(0, 120),
+          selector: parsed.target.selector ? String(parsed.target.selector).slice(0, 250) : null,
+          label: parsed.target.label ? String(parsed.target.label).slice(0, 80) : null,
+          box,
+          data,
         };
       }
       return withNotes(res, (notes) => {

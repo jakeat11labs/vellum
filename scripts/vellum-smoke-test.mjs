@@ -105,6 +105,33 @@ async function testServerApi() {
     assert.equal(res.status, 200);
     assert.deepEqual((await res.json()).notes, []);
 
+    // Rich element targets (from picker-capable HyperFrames runtimes) are sanitized
+    // field-by-field: box percentages clamp, non data-* keys drop, selector persists.
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        time: 2.4, x: 50, y: 41.2, text: "tighten this",
+        target: {
+          tag: "div", cls: "card", text: "Reliable",
+          selector: "#features > div.card:nth-of-type(2)",
+          label: "Text",
+          box: { x: 24.1, y: 30, w: 10, h: 120 },
+          data: { "data-start": "8", "bogus key": "dropped", "data-duration": "4" },
+        },
+      }),
+    });
+    assert.equal(res.status, 201);
+    const rich = await res.json();
+    assert.equal(rich.target.selector, "#features > div.card:nth-of-type(2)");
+    assert.equal(rich.target.label, "Text");
+    assert.deepEqual(rich.target.box, { x: 24.1, y: 30, w: 10, h: 100 });
+    assert.deepEqual(rich.target.data, { "data-start": "8", "data-duration": "4" });
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /at `#features > div\.card:nth-of-type\(2\)`/);
+    res = await fetch(`${base}/api/notes/${rich.id}`, { method: "DELETE" });
+    assert.equal(res.status, 200);
+
     res = await fetch(`${base}/api/mix`, {
       method: "POST",
       headers: { "content-type": "application/json" },

@@ -26,7 +26,7 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
    composition lives in a subfolder, notes are under that subdir (e.g. `compositions/hero/notes/`).
 
 2. **Read them.** `annotations.md` lists each note as:
-   `- **note-<id>** · **M:SS.ss** \`scene-id\` — <feedback>  _(pin x%, y% | box …)_ · on \`tag.class\` "text"`
+   `- **note-<id>** · **M:SS.ss** \`scene-id\` — <feedback>  _(pin x%, y% | box …)_ · on \`tag.class\` "text" · at \`<css selector>\``
    The `note-<id>` links to `notes/review/note-<id>.png`. Use `time`, `scene`, and `target` to find the edit in `index.html`.
    Notes may include status `(resolved)` or `(wontfix)` — skip those unless the user asks you to revisit them.
 
@@ -45,7 +45,14 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
 4. **Translate each note to an edit.**
    - The note's `time` is composition-time in seconds. Map it to the owning scene's
      `data-start`/`data-duration` in `index.html`, and to any timeline cue.
-   - The `target` (tag + class + text) identifies the on-screen element to change.
+   - The `target` identifies the on-screen element to change. When `target.selector` is
+     present (notes pinned with a picker-capable HyperFrames runtime) it is an **exact CSS
+     selector** captured live at pin time — trust it over the fuzzy tag/class/text triple.
+     `annotations.json` may also carry `target.label` (human-readable element name),
+     `target.box` (the element's bounding box at pin time, in % of comp size), and
+     `target.data` (the element's `data-*` attributes — e.g. `data-start`/`data-duration`,
+     which give you the element's own timing without hunting for it).
+   - Older notes carry only tag + class + text — match those against `index.html` manually.
    - Timing notes ("cut 2s here", "caption lands late") usually mean adjusting `data-start` /
      `data-duration` and re-syncing dependent cues — follow the `hyperframes` timing rules.
 

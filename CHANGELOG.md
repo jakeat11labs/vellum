@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.0] - June 11, 2026
+
+### Added
+- **Precise element targeting via the HyperFrames picker.** When the injected runtime exposes `__HF_PICKER_API` (the same element inspector Studio's layers panel uses), notes now capture an exact CSS selector, a human-readable label, the element's bounding box, and its `data-*` attributes (including `data-start`/`data-duration`) — so the agent gets an addressable element instead of a fuzzy tag/class/text guess. Older runtimes fall back to the previous heuristic automatically.
+- **Live hover highlight while arming.** With ＋ Add note armed, the element under the crosshair gets a teal outline and a floating name tag before you click — no more pinning blind.
+- **Overlap disambiguation in the composer.** When several elements stack under the pin point, the composer's target line becomes a dropdown of all candidates (topmost first); picking one flashes that element in the composition to confirm the choice.
+- **Flash-to-verify on notes.** Hovering a note row, pin, or region flashes its target element in the note's own color; clicking seeks to the note's time and then flashes — instant confirmation a note still points at the right thing after edits.
+- **Element outlines in review packets.** `vellum-review` now draws the target element's actual bounding box (plus a small dot at the click point) for pin notes that captured one, instead of the generic 40px square.
+
+### Changed
+- **Region notes capture their target at the box center** rather than the drag-start corner — the element a box surrounds is the subject, not whatever was under the first click.
+- `annotations.md` lines append `· at \`<selector>\`` when an exact selector was captured, and the agent skill now instructs agents to prefer `target.selector` over the tag/class/text triple.
+
 ## [0.3.7] - June 11, 2026
 
 ### Added
