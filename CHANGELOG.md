@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.1] - June 11, 2026
+
+### Added
+- **Sticky note mode.** ＋ Add note (or `N`) now toggles a mode instead of arming a single note: stay armed and keep clicking/dragging to pin note after note, then exit with the button, `N`, or `Esc`. `Esc` escalates — first close the open composer, then exit note mode, then close the notes panel. Clicking an existing pin while in note mode seeks to it without dropping a stray new note, and a composer with typed text must be saved or cancelled before the next placement (an empty one is simply replaced).
+- **Draggable composer.** The note composer has a top bar (grip + note metadata) you can grab to drag the popover out of the way when it covers the thing you're annotating. Clamped to the viewport.
+- **Composer wears the note's color.** The composer border, save button, target line, and grip now match the color the note's pin will get (predicted for new notes, exact for edits), and the element-confirmation flashes use the same color — so what you see while composing is what lands on the timeline.
+
 ## [0.4.0] - June 11, 2026
 
 ### Added

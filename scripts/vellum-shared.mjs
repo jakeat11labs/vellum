@@ -3,7 +3,7 @@ import path from "node:path";
 
 // Installed tool version. Keep in sync with package.json on release; `vellum update`
 // compares this against the published package.json version.
-export const VERSION = "0.4.0";
+export const VERSION = "0.4.1";
 
 export const NOTE_STATUSES = new Set(["open", "resolved", "wontfix"]);
 

@@ -28,11 +28,17 @@
       /* Floating label naming the element under the crosshair while arming */
       #hover-tag { position: absolute; z-index: 5; display: none; pointer-events: none; background: #0e0e11; border: 1px solid #2d4f49; color: #5eead4; font-size: 11px; padding: 2px 7px; border-radius: 6px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
 
-      /* Note composer popover */
-      #composer { position: absolute; z-index: 30; width: 340px; background: #17171b; border: 1px solid #2c2c32; border-radius: 12px; padding: 12px; box-shadow: 0 14px 50px rgba(0,0,0,0.6); display: none; }
+      /* Note composer popover — accented in the color the note's pin will get (--c) */
+      #composer { position: absolute; z-index: 30; width: 340px; background: #17171b; border: 1px solid color-mix(in srgb, var(--c, #5eead4) 40%, #2c2c32); border-radius: 12px; padding: 12px; box-shadow: 0 14px 50px rgba(0,0,0,0.6); display: none; }
+      /* Top bar doubles as a drag handle — grab it to move the composer off whatever it covers */
+      #composer-drag { display: flex; align-items: center; gap: 8px; margin: -12px -12px 8px; padding: 8px 12px; background: #1c1c21; border-bottom: 1px solid #2c2c32; border-radius: 12px 12px 0 0; cursor: grab; user-select: none; }
+      #composer-drag:active { cursor: grabbing; }
+      #composer-drag .grip { color: var(--c, #5a5a63); font-size: 11px; letter-spacing: 1px; flex-shrink: 0; }
       #composer .meta { font-size: 12px; color: #8b8b93; margin-bottom: 4px; }
-      #composer .tgt { font-size: 12px; color: #5eead4; margin-bottom: 8px; word-break: break-word; }
-      #composer .tgt select { width: 100%; margin-top: 2px; background: #0e0e11; color: #5eead4; border: 1px solid #2c2c32; border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
+      #composer-drag .meta { margin: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #composer .tgt { font-size: 12px; color: var(--c, #5eead4); margin-bottom: 8px; word-break: break-word; }
+      #composer .tgt select { width: 100%; margin-top: 2px; background: #0e0e11; color: var(--c, #5eead4); border: 1px solid #2c2c32; border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
+      #composer button.primary { background: var(--c, #5eead4); border-color: var(--c, #5eead4); }
       #composer textarea { width: 100%; height: 78px; resize: vertical; background: #0e0e11; color: #e8e8ea; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px; font: inherit; font-size: 14px; }
       #composer .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
       button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid #2c2c32; background: #1f1f25; color: #e8e8ea; padding: 7px 12px; }
@@ -115,7 +121,7 @@
         <div id="stage"><div class="hint" style="padding:40px">Loading composition…</div></div>
         <div id="pins"><div id="dragbox"></div><div id="hover-tag"></div></div>
         <div id="composer">
-          <div class="meta" id="composer-meta"></div>
+          <div id="composer-drag" title="Drag to move"><span class="grip">⠿</span><div class="meta" id="composer-meta"></div></div>
           <div class="tgt" id="composer-tgt"></div>
           <textarea id="composer-text" placeholder="What's the note? (e.g. make this bubble bigger, cut 2s here, caption lands late)"></textarea>
           <div class="row">
@@ -162,7 +168,7 @@
         <button id="save-mix" title="Save mix levels to notes/mix.json" style="margin-left:8px">Mix</button>
         <div class="sep"></div>
         <div class="actions">
-          <button id="arm" title="Add note — N, then click or drag">＋ Add note</button>
+          <button id="arm" title="Note mode — N toggles; click or drag to pin notes until you exit">＋ Add note</button>
           <button id="toggle-notes">Notes (0)</button>
           <button id="copy-prompt" title="Copy agent handoff prompt">📋</button>
           <button id="clear-all" title="Delete every note">🗑</button>
@@ -483,10 +489,17 @@
       document.getElementById("next-scene").onclick = () => jumpScene(1);
 
       window.addEventListener("keydown", (e) => {
-        if (e.code === "Escape") { composer.style.display = "none"; pending = null; notesPanel.classList.remove("open"); clearHover(); return; }
+        if (e.code === "Escape") {
+          // Escalating escape: open composer → close it; note mode on → exit it; else close the panel.
+          if (composer.style.display === "block") { composer.style.display = "none"; pending = null; return; }
+          if (arming) { armBtn.click(); return; }
+          notesPanel.classList.remove("open");
+          clearHover();
+          return;
+        }
         if (e.target.tagName === "TEXTAREA") return;
         if (e.code === "Space") { e.preventDefault(); player.isPlaying() ? player.pause() : player.play(); }
-        else if (e.code === "KeyN") { e.preventDefault(); if (!arming) armBtn.click(); }
+        else if (e.code === "KeyN") { e.preventDefault(); armBtn.click(); }
         else if (e.code === "ArrowLeft") { player.pause(); player.seek(Math.max(0, player.getTime() - (e.shiftKey ? 1 : 0.1))); }
         else if (e.code === "ArrowRight") { player.pause(); player.seek(Math.min(duration, player.getTime() + (e.shiftKey ? 1 : 0.1))); }
         else if (e.code === "ArrowUp") { e.preventDefault(); jumpScene(-1); }
@@ -513,12 +526,14 @@
       };
 
       // ---- annotation: point pin or drag region ----
+      // Note mode is sticky: arm once, pin as many notes as you like, toggle off with
+      // the button, N, or Esc. (It used to disarm after every note.)
       armBtn.onclick = () => {
         arming = !arming;
         armBtn.classList.toggle("active", arming);
         pins.classList.toggle("arming", arming);
         if (!arming) clearHover();
-        flash(arming ? "Click a spot, or drag a box, to mark feedback" : "Add-note off");
+        flash(arming ? "Note mode on — click or drag to pin notes · N or Esc to exit" : "Note mode off");
       };
 
       // ---- element targeting ----
@@ -734,6 +749,15 @@
       let dragStart = null;
       pins.addEventListener("mousedown", (e) => {
         if (!arming) return;
+        // Clicking an existing pin/region in note mode seeks to it — don't also start a new note.
+        if (e.target.closest && e.target.closest(".pin, .region")) return;
+        // A note is already being composed: typed text must be saved or cancelled first;
+        // an empty composer just gets replaced by the new placement.
+        if (pending) {
+          if (composerText.value.trim()) { flash("Save or cancel the open note first"); return; }
+          composer.style.display = "none";
+          pending = null;
+        }
         clearHover();
         const r = pins.getBoundingClientRect();
         dragStart = { x: e.clientX - r.left, y: e.clientY - r.top, cx: e.clientX, cy: e.clientY };
@@ -746,9 +770,10 @@
       pins.addEventListener("mousemove", (e) => {
         if (!dragStart) {
           // Armed but not dragging: live-highlight the element under the crosshair so
-          // the user sees what the pin will attach to before clicking.
-          if (arming && !hoverRaf) {
-            hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; if (arming && !dragStart) updateHover(e); });
+          // the user sees what the pin will attach to before clicking. Paused while a
+          // note is being composed so the outline doesn't flicker under the composer.
+          if (arming && !pending && !hoverRaf) {
+            hoverRaf = requestAnimationFrame(() => { hoverRaf = 0; if (arming && !dragStart && !pending) updateHover(e); });
           }
           return;
         }
@@ -789,9 +814,7 @@
         pending.target = candidates[pending.candIndex] ? candidates[pending.candIndex].target : null;
         openComposer(e.clientX, e.clientY);
         dragStart = null;
-        arming = false;
-        armBtn.classList.remove("active");
-        pins.classList.remove("arming");
+        // Stay in note mode — the next click pins the next note.
       });
 
       const composerSaveBtn = document.getElementById("composer-save");
@@ -814,7 +837,7 @@
           sel.onchange = () => {
             pending.candIndex = Number(sel.value);
             pending.target = cands[pending.candIndex].target;
-            flashEl(cands[pending.candIndex].el);
+            flashEl(cands[pending.candIndex].el, pending.color);
           };
           composerTgt.append("on ", sel);
         } else if (pending.target) {
@@ -822,13 +845,19 @@
         }
       }
 
+      // A new note's id is predictable (max + 1, matching the server), so the composer
+      // can wear the note's eventual pin color before it exists.
+      const nextNoteId = () => (notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1);
+
       function openComposer(clientX, clientY) {
         const region = pending.w != null;
         const editLabel = pending.editId ? `note-${pending.editId} · edit` : "new note";
+        pending.color = colorFor(pending.editId || nextNoteId());
+        composer.style.setProperty("--c", pending.color);
         composerMeta.textContent = `${editLabel} · ${fmt(pending.time)} · ${pending.scene || ""} · ${region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`}`;
         renderComposerTarget();
         if (!pending.editId && pending.candidates && pending.candidates[pending.candIndex]) {
-          flashEl(pending.candidates[pending.candIndex].el);
+          flashEl(pending.candidates[pending.candIndex].el, pending.color);
         }
         composerText.value = pending.text || "";
         composerSaveBtn.textContent = pending.editId ? "Save changes" : "Save note";
@@ -843,6 +872,31 @@
         pending = { ...note, editId: note.id };
         openComposer(clientX, clientY);
       }
+
+      // Drag the composer by its top bar to uncover whatever it's sitting on. The
+      // composer is absolutely positioned inside #viewport, so offsetLeft/Top are
+      // already viewport-relative; clamp so it can't be dragged out of reach.
+      const composerDrag = document.getElementById("composer-drag");
+      let composerGrab = null;
+      function onComposerDragMove(e) {
+        if (!composerGrab) return;
+        const vp = document.getElementById("viewport").getBoundingClientRect();
+        const x = Math.min(Math.max(0, e.clientX - composerGrab.dx), Math.max(0, vp.width - composer.offsetWidth));
+        const y = Math.min(Math.max(0, e.clientY - composerGrab.dy), Math.max(0, vp.height - composer.offsetHeight));
+        composer.style.left = `${x}px`;
+        composer.style.top = `${y}px`;
+      }
+      function endComposerDrag() {
+        composerGrab = null;
+        window.removeEventListener("mousemove", onComposerDragMove);
+        window.removeEventListener("mouseup", endComposerDrag);
+      }
+      composerDrag.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        composerGrab = { dx: e.clientX - composer.offsetLeft, dy: e.clientY - composer.offsetTop };
+        window.addEventListener("mousemove", onComposerDragMove);
+        window.addEventListener("mouseup", endComposerDrag);
+      });
 
       document.getElementById("composer-cancel").onclick = () => { composer.style.display = "none"; pending = null; };
       composerSaveBtn.onclick = async () => {
