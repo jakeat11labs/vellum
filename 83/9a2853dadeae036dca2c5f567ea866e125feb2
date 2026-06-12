@@ -1,0 +1,25 @@
+README.md
+  s_4e07e82c08e329::t_63564dd16e24b4 39-42
+package-lock.json
+  s_4e07e82c08e329::t_ec336cdff7c8bd 3,9
+CHANGELOG.md
+  s_4e07e82c08e329::t_eca64fa6f1a919 19
+scripts/vellum-shared.mjs
+  s_4e07e82c08e329::t_e601136e2cfd2d 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "839a2853dadeae036dca2c5f567ea866e125feb2",
+  "prompts": {},
+  "sessions": {
+    "s_4e07e82c08e329": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "b083eda5-ea64-4b0b-a9eb-7c7e37f30923",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
