@@ -516,13 +516,77 @@ start_vellum() {
 
 COMPOSITION_DIR="$(normalize_dir "$COMPOSITION_DIR")"
 
+# Logo banner — recreates the blue→purple "V" mark (assets/logo-mark.png) as
+# truecolor half-block pixel art, with the same gradient swept across the
+# letters: blue on the V, purple on the M, light at the top fading deep below.
+# mark=1 draws the V glyph beside the wordmark; mark=0 letters only.
+print_logo_banner() {
+  awk -v esc="$ESC" -v mark="$1" '
+function fgs(s, p) { split(s, p, " "); return esc "[38;2;" p[1] ";" p[2] ";" p[3] "m" }
+function bgs(s, p) { split(s, p, " "); return esc "[48;2;" p[1] ";" p[2] ";" p[3] "m" }
+# Pixel color of the V mark at pixel row r (0-11), col c (0-13); "" = transparent.
+# Left arm runs light blue → blue, right arm (in front) light violet → violet.
+function vc(r, c,  t, lx, rx) {
+  t = r / 11.0; lx = t * 5.0; rx = 14 - 3.6 - t * 5.0
+  if (c >= rx && c < rx + 3.6)
+    return int(196 + (124 - 196) * t + 0.5) " " int(181 + (58 - 181) * t + 0.5) " " int(253 + (237 - 253) * t + 0.5)
+  if (c >= lx && c < lx + 3.6)
+    return int(157 + (59 - 157) * t + 0.5) " " int(221 + (130 - 221) * t + 0.5) " " int(252 + (246 - 252) * t + 0.5)
+  return ""
+}
+BEGIN {
+  # gradient corner colors: blue top/bottom, purple top/bottom
+  bt[1] = 157; bt[2] = 221; bt[3] = 252;  bb[1] = 59;  bb[2] = 130; bb[3] = 246
+  pt[1] = 196; pt[2] = 181; pt[3] = 253;  pb[1] = 124; pb[2] = 58;  pb[3] = 237
+  split("██╗   ██╗|███████╗|██╗     |██╗     |██╗   ██╗|███╗   ███╗", art1, "|")
+  split("██║   ██║|██╔════╝|██║     |██║     |██║   ██║|████╗ ████║", art2, "|")
+  split("██║   ██║|█████╗  |██║     |██║     |██║   ██║|██╔████╔██║", art3, "|")
+  split("╚██╗ ██╔╝|██╔══╝  |██║     |██║     |██║   ██║|██║╚██╔╝██║", art4, "|")
+  split(" ╚████╔╝ |███████╗|███████╗|███████╗|╚██████╔╝|██║ ╚═╝ ██║", art5, "|")
+  split("  ╚═══╝  |╚══════╝|╚══════╝|╚══════╝| ╚═════╝ |╚═╝     ╚═╝", art6, "|")
+  for (i = 1; i <= 6; i++) {
+    art[1, i] = art1[i]; art[2, i] = art2[i]; art[3, i] = art3[i]
+    art[4, i] = art4[i]; art[5, i] = art5[i]; art[6, i] = art6[i]
+  }
+  for (row = 0; row < 6; row++) {
+    line = "  "
+    if (mark == 1) {
+      for (c = 0; c < 14; c++) {
+        top = vc(row * 2, c); bot = vc(row * 2 + 1, c)
+        if (top == "" && bot == "") line = line esc "[0m "
+        else if (top != "" && bot != "") line = line fgs(top) bgs(bot) "▀" esc "[0m"
+        else if (top != "") line = line esc "[0m" fgs(top) "▀" esc "[0m"
+        else line = line esc "[0m" fgs(bot) "▄" esc "[0m"
+      }
+      line = line "    "
+    }
+    for (i = 1; i <= 6; i++) {
+      h = (i - 1) / 5.0; t = row / 5.0
+      for (k = 1; k <= 3; k++) {
+        topk = bt[k] + (pt[k] - bt[k]) * h
+        botk = bb[k] + (pb[k] - bb[k]) * h
+        col[k] = int(topk + (botk - topk) * t + 0.5)
+      }
+      line = line esc "[38;2;" col[1] ";" col[2] ";" col[3] "m" art[row + 1, i]
+    }
+    print line esc "[0m"
+  }
+}' </dev/null
+}
+
 print_banner() {
   cols=80
   if [ -t 1 ] && command -v tput >/dev/null 2>&1; then
     cols="$(tput cols 2>/dev/null || printf '80')"
   fi
   say ""
-  if [ -n "$t1" ] && [ "${cols:-80}" -ge 60 ]; then
+  if [ "$TRUECOLOR" = "1" ] && [ "${cols:-80}" -ge 60 ] && command -v awk >/dev/null 2>&1; then
+    if [ "${cols:-80}" -ge 76 ]; then
+      print_logo_banner 1
+    else
+      print_logo_banner 0
+    fi
+  elif [ -n "$t1" ] && [ "${cols:-80}" -ge 60 ]; then
     say "  ${t1}██╗   ██╗███████╗██╗     ██╗     ██╗   ██╗███╗   ███╗${reset}"
     say "  ${t2}██║   ██║██╔════╝██║     ██║     ██║   ██║████╗ ████║${reset}"
     say "  ${t3}██║   ██║█████╗  ██║     ██║     ██║   ██║██╔████╔██║${reset}"

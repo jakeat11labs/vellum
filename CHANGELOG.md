@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.3.6] - June 11, 2026
+
+### Changed
+- **Installer banner now wears the logo.** The blue→purple layered "V" mark (`assets/logo-mark.png`) is recreated as truecolor half-block pixel art beside the VELLUM letters, and the same gradient sweeps the letters — blue on the V through purple on the M, light at the top fading deep below. Terminals 60–75 columns wide get the gradient letters without the mark; non-truecolor terminals keep the previous teal banner; piped/`NO_COLOR` output stays plain.
+- **`◆ vellum` wordmark matches the logo.** New blue→purple `brandGradient()` in `scripts/vellum-ui.mjs`, used by the server, updater, and review wordmark. Teal accents elsewhere (rules, spinners, progress bars) unchanged.
+
 ## [0.3.5] - June 11, 2026
 
 ### Added

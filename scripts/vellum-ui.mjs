@@ -36,6 +36,13 @@ const RAMP = [
   [45, 212, 191],
   [20, 184, 166],
 ];
+// Logo ramp — the blue→purple sweep of the layered "V" mark (assets/logo-mark.png).
+const BRAND_RAMP = [
+  [125, 211, 252],
+  [96, 165, 250],
+  [167, 139, 250],
+  [139, 92, 246],
+];
 
 function to256([r, g, b]) {
   const v = (c) => Math.round((c / 255) * 5);
@@ -70,22 +77,33 @@ function lerp(a, b, t) {
   return Math.round(a + (b - a) * t);
 }
 
-function rampAt(t) {
-  const pos = Math.min(0.9999, Math.max(0, t)) * (RAMP.length - 1);
+function rampAt(ramp, t) {
+  const pos = Math.min(0.9999, Math.max(0, t)) * (ramp.length - 1);
   const i = Math.floor(pos);
   const f = pos - i;
-  const [a, b] = [RAMP[i], RAMP[i + 1]];
+  const [a, b] = [ramp[i], ramp[i + 1]];
   return [lerp(a[0], b[0], f), lerp(a[1], b[1], f), lerp(a[2], b[2], f)];
+}
+
+function rampGradient(ramp, s, fallback) {
+  const str = String(s);
+  if (!styled) return str;
+  if (LEVEL < 2) return fg(fallback, str);
+  const chars = [...str];
+  const n = Math.max(1, chars.length - 1);
+  return (
+    chars.map((ch, i) => (ch === " " ? ch : `${fgCode(rampAt(ramp, i / n))}${ch}`)).join("") + "\x1b[39m"
+  );
 }
 
 // Per-character horizontal teal gradient. Falls back to plain cyan/plain text.
 export function gradient(s) {
-  const str = String(s);
-  if (!styled) return str;
-  if (LEVEL < 2) return fg(TEAL, str);
-  const chars = [...str];
-  const n = Math.max(1, chars.length - 1);
-  return chars.map((ch, i) => (ch === " " ? ch : `${fgCode(rampAt(i / n))}${ch}`)).join("") + "\x1b[39m";
+  return rampGradient(RAMP, s, TEAL);
+}
+
+// Per-character blue→purple logo gradient for the brand wordmark.
+export function brandGradient(s) {
+  return rampGradient(BRAND_RAMP, s, TEAL);
 }
 
 export function stripAnsi(s) {
@@ -110,7 +128,7 @@ export function link(url, text = url) {
 }
 
 export function wordmark(sub = "") {
-  const mark = bold(gradient("◆ vellum"));
+  const mark = bold(brandGradient("◆ vellum"));
   return `  ${mark}${sub ? `  ${dim(sub)}` : ""}`;
 }
 
