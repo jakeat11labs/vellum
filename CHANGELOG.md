@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.2] - June 11, 2026
+
+### Changed
+- **The note-mode button shows its state.** "＋ Add note" is now "Note mode" with a status dot: gray when off; when on, the dot lights up teal and the button gains a teal fill and a slow pulsing glow — so it's obvious at a glance that clicks will pin notes.
+
 ## [0.4.1] - June 11, 2026
 
 ### Added

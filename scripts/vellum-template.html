@@ -81,8 +81,17 @@
       /* Action group */
       #bar .actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
       #bar .actions button { padding: 5px 10px; font-size: 12px; height: 32px; flex-shrink: 0; }
-      #arm { background: rgba(94,234,212,0.08); border-color: rgba(94,234,212,0.22); color: #5eead4; font-size: 12px; }
+      /* Note mode toggle — status dot + glow make on/off readable at a glance */
+      #arm { background: rgba(94,234,212,0.08); border-color: rgba(94,234,212,0.22); color: #5eead4; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; }
       #arm:hover { background: rgba(94,234,212,0.15); border-color: rgba(94,234,212,0.35); }
+      #arm .dot { width: 7px; height: 7px; border-radius: 50%; background: #5a5a63; flex-shrink: 0; transition: background .15s ease, box-shadow .15s ease; }
+      #arm.active { background: rgba(94,234,212,0.18); border-color: #5eead4; color: #5eead4; font-weight: 600; animation: arm-glow 1.6s ease-in-out infinite; }
+      #arm.active:hover { filter: none; background: rgba(94,234,212,0.26); }
+      #arm.active .dot { background: #5eead4; box-shadow: 0 0 6px #5eead4, 0 0 12px rgba(94,234,212,0.7); }
+      @keyframes arm-glow {
+        0%, 100% { box-shadow: 0 0 5px rgba(94,234,212,0.3); }
+        50% { box-shadow: 0 0 14px rgba(94,234,212,0.65); }
+      }
       #copy-prompt { padding: 5px 8px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 14px; }
       #copy-prompt:hover { color: #b9b9c0; }
       #clear-all { padding: 5px 8px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 15px; }
@@ -168,7 +177,7 @@
         <button id="save-mix" title="Save mix levels to notes/mix.json" style="margin-left:8px">Mix</button>
         <div class="sep"></div>
         <div class="actions">
-          <button id="arm" title="Note mode — N toggles; click or drag to pin notes until you exit">＋ Add note</button>
+          <button id="arm" title="Note mode — N toggles; click or drag to pin notes until you exit"><span class="dot"></span>Note mode</button>
           <button id="toggle-notes">Notes (0)</button>
           <button id="copy-prompt" title="Copy agent handoff prompt">📋</button>
           <button id="clear-all" title="Delete every note">🗑</button>
@@ -419,7 +428,7 @@
         setInterval(() => { try { localStorage.setItem(timeKey, String(player.getTime())); } catch (e) {} }, 500);
         tick();
         loadNotes();
-        flash(savedT > 0 ? `Resumed at ${fmt(savedT)}` : "Ready — scrub, then ＋ Add note (click a spot or drag a box)");
+        flash(savedT > 0 ? `Resumed at ${fmt(savedT)}` : "Ready — scrub, then toggle Note mode (N) and click or drag to pin feedback");
       }
 
       function applyMix() {
