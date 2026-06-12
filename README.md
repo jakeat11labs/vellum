@@ -21,9 +21,9 @@ pin time-coded notes onto any [HyperFrames](https://hyperframes.heygen.com) fram
 
 <br>
 
-<img src="docs/screenshot-player.png" alt="Vellum review player — a HyperFrames composition with a pinned note and the notes drawer open" width="820" />
+<img src="assets/vellum-tui.gif" alt="Running vellum in a terminal — the blue-to-purple logo banner prints, the status panel opens with the review URL, and live note events stream in" width="820" />
 
-<sub>Scrub the real composition · pin point or region notes · balance the mix · hand off to your agent</sub>
+<sub>Run <code>vellum</code> · pin point or region notes in the browser · your agent reads them back</sub>
 
 <br>
 
@@ -35,10 +35,6 @@ pin time-coded notes onto any [HyperFrames](https://hyperframes.heygen.com) fram
 curl -fsSL https://tryvellum.vercel.app/install | sh
 vellum
 ```
-
-<br>
-
-<img src="assets/vellum-tui.gif" alt="Running vellum in a terminal — the blue-to-purple logo banner prints, the status panel opens with the review URL, and live note events stream in" width="820" />
 
 <sub>Pin your notes, then tell your agent: <i>“Address my Vellum review notes.”</i></sub>
 
