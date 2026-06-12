@@ -1,0 +1,44 @@
+README.md
+  s_67ba227f42ac88::t_7df23990379ba6 28-31
+  s_67ba227f42ac88::t_8374a460a0ae8a 173-183
+CHANGELOG.md
+  s_508056c31206e2::t_de15c013937bc9 10-20
+package.json
+  s_508056c31206e2::t_a0b65fd96b2f08 3
+scripts/vellum-template.html
+  s_508056c31206e2::t_75b9f33b6d6091 299-313
+  s_508056c31206e2::t_81261fc9ad5d0a 53-59
+  s_508056c31206e2::t_05ebf97895945e 708-709
+  s_508056c31206e2::t_06489e421d1d8e 21-26
+  s_508056c31206e2::t_dba73a6f42b584 60-61
+  s_508056c31206e2::t_159e0432a8a3bc 222-234
+  s_508056c31206e2::t_c9ca08510d5b82 369
+  s_508056c31206e2::t_5a0440881dbd1d 139-143
+  s_508056c31206e2::t_46969d08c957d6 696
+  s_508056c31206e2::t_d4489150e7f125 653,682-695,697-700
+  s_508056c31206e2::t_237f83cfdfb44a 662,672
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "481e49258b87720b617dfe55e1d858ef7854b733",
+  "prompts": {},
+  "sessions": {
+    "s_508056c31206e2": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a5a60391-b152-4b79-95a4-93a69f18c22f",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    },
+    "s_67ba227f42ac88": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "4709687b-e991-4925-b6f5-4d3c6f25752b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
