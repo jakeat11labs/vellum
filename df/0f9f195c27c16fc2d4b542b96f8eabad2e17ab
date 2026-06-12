@@ -1,0 +1,59 @@
+CHANGELOG.md
+  s_a468e2207e1e77::t_4ecaf84553290b 10-22
+scripts/vellum-server.mjs
+  s_a468e2207e1e77::t_ea18995d7def17 282
+  s_a468e2207e1e77::t_18562e0d5ca93e 401-420,425-428
+  s_a468e2207e1e77::t_9ee601b2438d04 279
+skills/vellum/SKILL.md
+  s_a468e2207e1e77::t_f00c24a7bfa090 29
+  s_a468e2207e1e77::t_7c58c153936045 48-55
+scripts/vellum-smoke-test.mjs
+  s_a468e2207e1e77::t_751a3b49bd8591 108-134
+package.json
+  s_a468e2207e1e77::t_06596b6537e2fb 3
+scripts/vellum-template.html
+  s_a468e2207e1e77::t_d6c943a4296b76 624
+  s_a468e2207e1e77::t_a85547a2424db6 35
+  s_a468e2207e1e77::t_37c06a9a2a7d0e 28-29
+  s_a468e2207e1e77::t_d0d2c8b987fca1 992-996
+  s_a468e2207e1e77::t_edbb62a4a05c70 520
+  s_a468e2207e1e77::t_bce89ef6b29da1 524,532-541,543-549,553,598-600,602,607-608,610-615,625,630-631,650-731
+  s_a468e2207e1e77::t_3233beee39ce3a 747-754,762
+  s_a468e2207e1e77::t_c25c50b8ff7987 550-552
+  s_a468e2207e1e77::t_3cc79c0ea6a7f6 920-921
+  s_a468e2207e1e77::t_bee251135b232e 486
+  s_a468e2207e1e77::t_9f8cf69d946f54 525-531
+  s_a468e2207e1e77::t_6cbb4894fb72e5 195
+  s_a468e2207e1e77::t_a9edfedc27cfd2 554-597,601,603-606,609
+  s_a468e2207e1e77::t_4d8810403f8fdb 626-629,632-649
+  s_a468e2207e1e77::t_062ef87f93bcd0 737
+  s_a468e2207e1e77::t_a625eb3841ed23 116
+  s_a468e2207e1e77::t_0309a27c9c6bef 772,774-775,778-780,782,787-789
+  s_a468e2207e1e77::t_f7593f900830dc 799-824,829-832
+  s_a468e2207e1e77::t_a86ecf98fbcfdf 859-862
+  s_a468e2207e1e77::t_28a89329d1b8c8 988
+  s_a468e2207e1e77::t_26c19d21b6d5bf 196-197
+  s_a468e2207e1e77::t_7e575a19e6bdf0 372
+scripts/vellum-review.mjs
+  s_a468e2207e1e77::t_2f7487213d02b7 163
+  s_a468e2207e1e77::t_b4350236d2c07f 73-89,101-108
+  s_a468e2207e1e77::t_70e91250fab807 158
+scripts/vellum-shared.mjs
+  s_a468e2207e1e77::t_3a920b6e3ed1e8 6
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.6",
+  "base_commit_sha": "df0f9f195c27c16fc2d4b542b96f8eabad2e17ab",
+  "prompts": {},
+  "sessions": {
+    "s_a468e2207e1e77": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "cc399c3b-cfb5-4a26-b182-876feab4a701",
+        "model": "claude-fable-5"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
