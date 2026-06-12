@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - **Pins, regions, and dots brighten in their own color on hover** (with a matching glow), replacing the old fixed teal/white hover state now that markers are individually colored.
-- **README leads with the demo.** Added the 52-second promo video (poster + link) to the hero and "Try the demo" sections.
+- **README leads with the demo.** Added the 52-second promo video (poster + link) to the hero and "Try the demo" sections, plus an animated terminal GIF (`assets/vellum-tui.gif`) showing the `vellum` startup — logo banner, status panel, and live note feed.
 
 ## [0.3.6] - June 11, 2026
 
