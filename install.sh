@@ -464,12 +464,12 @@ ensure_gitignore_notes() {
   if [ ! -f .gitignore ]; then
     return
   fi
-  if grep -q '^notes/$' .gitignore 2>/dev/null || grep -q '^notes/' .gitignore 2>/dev/null; then
+  if grep -q '^notes/' .gitignore 2>/dev/null; then
     has_notes=1
   else
     has_notes=0
   fi
-  if grep -q '^snapshots/$' .gitignore 2>/dev/null || grep -q '^snapshots/' .gitignore 2>/dev/null; then
+  if grep -q '^snapshots/' .gitignore 2>/dev/null; then
     has_snapshots=1
   else
     has_snapshots=0

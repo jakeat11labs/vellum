@@ -242,6 +242,7 @@
       const musicVal = document.getElementById("music-val");
       const noteDots = document.getElementById("note-dots");
       const sceneTicks = document.getElementById("scene-ticks");
+      const viewport = document.getElementById("viewport");
 
       // Per-note colors. Notes carry stable incrementing integer ids, so map id → palette
       // by (id-1) so adjacent notes always differ and a note keeps its color for life.
@@ -265,6 +266,7 @@
       let voiceEls = [];
       let musicEl = null;
       let allAudioEls = [];
+      let audioTimings = [];   // per-<audio> static data-* timing, parsed once at mount
       let voiceVol = 1;
       let musicVol = 0.2;
       let compW = 1920;
@@ -284,9 +286,13 @@
         flash._t = setTimeout(() => statusEl.classList.remove("show"), 2000);
       };
 
+      // Composition root: the [data-composition-id] node (or legacy #root). Defaults to
+      // the mounted iframe document; pass an explicit doc during the initial mount.
+      const compRoot = (doc = compDoc) => doc.querySelector("[data-composition-id]") || doc.getElementById("root");
+
       // ---- scenes (generic: read [data-start] direct children of the composition root) ----
       function buildScenes(doc) {
-        const root = doc.querySelector("[data-composition-id]") || doc.getElementById("root") || doc.body;
+        const root = compRoot(doc) || doc.body;
         const out = [];
         for (const el of root.children) {
           if (el.tagName === "AUDIO" || el.tagName === "SCRIPT") continue;
@@ -317,13 +323,15 @@
       const updateMarkerVisibility = (t) => {
         for (const m of markerEls) m.el.style.display = t >= m.start && t < m.end ? "" : "none";
       };
+      // Time → horizontal % position on the timeline (callers guard !duration before use).
+      const timelinePct = (t) => (duration ? (t / duration) * 100 : -1);
       // Faint vertical line on the scrubber at each scene's start — a visual preview of
       // where ⏮/⏭ (and ↑/↓) jump the playhead.
       function renderSceneTicks() {
         sceneTicks.innerHTML = "";
         if (!duration) return;
         for (const s of scenes) {
-          const pct = (s.start / duration) * 100;
+          const pct = timelinePct(s.start);
           if (pct < 0 || pct > 100) continue;
           const tick = document.createElement("div");
           tick.className = "scene-tick";
@@ -336,13 +344,14 @@
       function fitStage() {
         const iframe = stage.querySelector("#comp");
         if (!iframe) return;
-        const vp = document.getElementById("viewport").getBoundingClientRect();
+        const vp = viewport.getBoundingClientRect();
         const s = Math.min((vp.width - 40) / compW, (vp.height - 40) / compH);
         iframe.style.transform = `scale(${s})`;
-        stage.style.width = `${compW * s}px`;
-        stage.style.height = `${compH * s}px`;
-        pins.style.width = stage.style.width;
-        pins.style.height = stage.style.height;
+        const w = `${compW * s}px`, h = `${compH * s}px`;
+        stage.style.width = w;
+        stage.style.height = h;
+        pins.style.width = w;
+        pins.style.height = h;
         pins.style.left = `${(vp.width - compW * s) / 2}px`;
         pins.style.top = `${(vp.height - compH * s) / 2}px`;
       }
@@ -362,7 +371,7 @@
         });
         const win = iframe.contentWindow;
         compDoc = iframe.contentDocument;
-        const root = compDoc.querySelector("[data-composition-id]") || compDoc.getElementById("root");
+        const root = compRoot(compDoc);
         if (!root) throw new Error("no composition root ([data-composition-id] or #root) in index.html");
         compW = Number(root.getAttribute("data-width")) || root.offsetWidth || 1920;
         compH = Number(root.getAttribute("data-height")) || root.offsetHeight || 1080;
@@ -394,6 +403,12 @@
         // data-vellum-audio="music"|"voice" on an <audio> always wins; otherwise fall back
         // to a heuristic (id looks like music, else the longest clip spanning the comp).
         allAudioEls = [...compDoc.querySelectorAll("audio")];
+        audioTimings = allAudioEls.map((a) => ({
+          a,
+          start: Number(a.getAttribute("data-start")) || 0,
+          dur: Number(a.getAttribute("data-duration")) || 0,
+          mediaStart: Number(a.getAttribute("data-media-start")) || 0,
+        }));
         const audioRole = (a) => (a.getAttribute("data-vellum-audio") || "").toLowerCase();
         musicEl =
           allAudioEls.find((a) => audioRole(a) === "music") ||
@@ -442,10 +457,7 @@
       function syncAudio() {
         const t = player.getTime();
         const playing = player.isPlaying();
-        for (const a of allAudioEls) {
-          const start = Number(a.getAttribute("data-start")) || 0;
-          const dur = Number(a.getAttribute("data-duration")) || 0;
-          const mediaStart = Number(a.getAttribute("data-media-start")) || 0;
+        for (const { a, start, dur, mediaStart } of audioTimings) {
           const inWindow = t >= start && t < start + dur;
           if (playing && inWindow) {
             const want = t - start + mediaStart;
@@ -478,7 +490,7 @@
       scrub.oninput = () => { player.pause(); player.seek(Number(scrub.value)); };
 
       function jumpScene(dir) {
-        const starts = scenes.map((s) => s.start).sort((a, b) => a - b);
+        const starts = scenes.map((s) => s.start);
         if (!starts.length) return;
         const t = player.getTime();
         let target;
@@ -522,17 +534,16 @@
         await fetch("/api/mix", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ voice: voiceVol, music: musicVol }) });
         flash(`Mix saved — voice ${Math.round(voiceVol * 100)}%, music ${Math.round(musicVol * 100)}%`);
       };
-      document.getElementById("copy-scene").onclick = async () => {
+      const copyText = async (text, okMsg) => {
+        try { await navigator.clipboard.writeText(text); flash(okMsg); }
+        catch (e) { flash("Copy failed — clipboard blocked"); }
+      };
+      document.getElementById("copy-scene").onclick = () => {
         const name = sceneTag.textContent.trim();
-        if (!name) return;
-        try { await navigator.clipboard.writeText(name); flash(`Copied scene "${name}"`); }
-        catch (e) { flash("Copy failed — clipboard blocked"); }
+        if (name) copyText(name, `Copied scene "${name}"`);
       };
-      document.getElementById("copy-prompt").onclick = async () => {
-        const prompt = 'Address my Vellum review notes in notes/annotations.md';
-        try { await navigator.clipboard.writeText(prompt); flash("Copied agent prompt"); }
-        catch (e) { flash("Copy failed — clipboard blocked"); }
-      };
+      document.getElementById("copy-prompt").onclick = () =>
+        copyText("Address my Vellum review notes in notes/annotations.md", "Copied agent prompt");
 
       // ---- annotation: point pin or drag region ----
       // Note mode is sticky: arm once, pin as many notes as you like, toggle off with
@@ -638,7 +649,7 @@
       // to the first ancestor with a class.
       function legacyCandidate(ix, iy) {
         const el = compDoc.elementFromPoint(ix, iy);
-        const root = compDoc.querySelector("[data-composition-id]") || compDoc.getElementById("root");
+        const root = compRoot(compDoc);
         if (!el || !root || !root.contains(el)) return null;
         let node = el;
         while (node && node !== root && !(typeof node.className === "string" && node.className.trim())) {
@@ -653,7 +664,7 @@
       const SKIP_TAGS = new Set(["script", "style", "link", "meta"]);
       function captureCandidates(clientX, clientY) {
         const { ix, iy } = compPoint(clientX, clientY);
-        const root = compDoc.querySelector("[data-composition-id]") || compDoc.getElementById("root");
+        const root = compRoot(compDoc);
         if (compDoc.elementsFromPoint && root) {
           const stack = [];
           for (const el of compDoc.elementsFromPoint(ix, iy)) {
@@ -728,6 +739,8 @@
         return null;
       }
       const flashTarget = (target, color) => flashEl(resolveTargetEl(target), color);
+      // Pause, jump to a note's time, then flash its target so it's visible after the seek.
+      const seekToNote = (n, color) => { player.pause(); player.seek(n.time); setTimeout(() => flashTarget(n.target, color), 120); };
 
       // ---- live hover highlight while armed ----
       const hoverTag = document.getElementById("hover-tag");
@@ -801,12 +814,11 @@
         const dpx = Math.abs(ex - dragStart.x), dpy = Math.abs(ey - dragStart.y);
         dragbox.style.display = "none";
         const time = player.getTime();
-        const toPct = (v, dim) => Math.round((v / dim) * 1000) / 10;
 
         let candidates;
         if (dpx < 6 && dpy < 6) {
           candidates = captureCandidates(dragStart.cx, dragStart.cy);
-          pending = { time, x: toPct(dragStart.x, r.width), y: toPct(dragStart.y, r.height), scene: sceneAt(time) };
+          pending = { time, x: pctOf(dragStart.x, r.width), y: pctOf(dragStart.y, r.height), scene: sceneAt(time) };
         } else {
           const left = Math.min(dragStart.x, ex), top = Math.min(dragStart.y, ey);
           // For a region the subject is what the box surrounds — capture at its center,
@@ -814,8 +826,8 @@
           candidates = captureCandidates(r.left + left + dpx / 2, r.top + top + dpy / 2);
           pending = {
             time, scene: sceneAt(time),
-            x: toPct(left, r.width), y: toPct(top, r.height),
-            w: toPct(dpx, r.width), h: toPct(dpy, r.height),
+            x: pctOf(left, r.width), y: pctOf(top, r.height),
+            w: pctOf(dpx, r.width), h: pctOf(dpy, r.height),
           };
         }
         pending.candidates = candidates;
@@ -870,7 +882,7 @@
         }
         composerText.value = pending.text || "";
         composerSaveBtn.textContent = pending.editId ? "Save changes" : "Save note";
-        const vp = document.getElementById("viewport").getBoundingClientRect();
+        const vp = viewport.getBoundingClientRect();
         composer.style.left = `${Math.min(clientX - vp.left, vp.width - 360)}px`;
         composer.style.top = `${Math.min(clientY - vp.top + 14, vp.height - 220)}px`;
         composer.style.display = "block";
@@ -889,7 +901,7 @@
       let composerGrab = null;
       function onComposerDragMove(e) {
         if (!composerGrab) return;
-        const vp = document.getElementById("viewport").getBoundingClientRect();
+        const vp = viewport.getBoundingClientRect();
         const x = Math.min(Math.max(0, e.clientX - composerGrab.dx), Math.max(0, vp.width - composer.offsetWidth));
         const y = Math.min(Math.max(0, e.clientY - composerGrab.dy), Math.max(0, vp.height - composer.offsetHeight));
         composer.style.left = `${x}px`;
@@ -958,30 +970,25 @@
         notes.forEach((n) => {
           if (n.x == null) return;
           const color = colorFor(n.id);
-          let marker;
+          const marker = document.createElement("div");
+          marker.style.left = `${n.x}%`;
+          marker.style.top = `${n.y}%`;
+          marker.style.setProperty("--c", color);
           if (n.w != null) {
-            marker = document.createElement("div");
             marker.className = "region";
-            marker.style.left = `${n.x}%`;
-            marker.style.top = `${n.y}%`;
             marker.style.width = `${n.w}%`;
             marker.style.height = `${n.h}%`;
-            marker.style.setProperty("--c", color);
             const badge = document.createElement("div");
             badge.className = "rbadge";
             badge.textContent = n.id;
             marker.appendChild(badge);
           } else {
-            marker = document.createElement("div");
             marker.className = "pin";
-            marker.style.left = `${n.x}%`;
-            marker.style.top = `${n.y}%`;
-            marker.style.setProperty("--c", color);
             marker.textContent = n.id;
           }
           marker.title = `${fmt(n.time)} — ${n.text}`;
           marker.onmouseenter = () => flashTarget(n.target, color);
-          marker.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); setTimeout(() => flashTarget(n.target, color), 120); };
+          marker.onclick = (ev) => { ev.stopPropagation(); seekToNote(n, color); };
           pins.appendChild(marker);
           const [start, end] = sceneWindow(n);
           markerEls.push({ el: marker, start, end });
@@ -996,7 +1003,7 @@
         if (!duration) return;
         notes.forEach((n) => {
           if (n.time == null) return;
-          const pct = (n.time / duration) * 100;
+          const pct = timelinePct(n.time);
           if (pct < 0 || pct > 100) return;
           const dot = document.createElement("div");
           dot.className = "note-dot";
@@ -1011,14 +1018,15 @@
         noteList.innerHTML = "";
         notes.forEach((n) => {
           const status = n.status || "open";
+          const statusCls = status !== "open" ? ` ${status}` : "";
           const item = document.createElement("div");
-          item.className = `note-item${status !== "open" ? ` ${status}` : ""}`;
+          item.className = `note-item${statusCls}`;
           item.style.borderLeftColor = colorFor(n.id);
           item.style.borderLeftWidth = "3px";
           const actions = document.createElement("div");
           actions.className = "actions";
           const statusBtn = document.createElement("button");
-          statusBtn.className = `status${status !== "open" ? ` ${status}` : ""}`;
+          statusBtn.className = `status${statusCls}`;
           statusBtn.title = "Cycle status";
           statusBtn.textContent = status;
           statusBtn.onclick = (ev) => cycleStatus(n, ev);
@@ -1056,7 +1064,7 @@
           // color), so you can verify the note still points at the right thing after
           // edits. Click seeks first so the element's scene is actually on screen.
           item.onmouseenter = () => flashTarget(n.target, colorFor(n.id));
-          item.onclick = () => { player.pause(); player.seek(n.time); setTimeout(() => flashTarget(n.target, colorFor(n.id)), 120); };
+          item.onclick = () => seekToNote(n, colorFor(n.id));
           noteList.appendChild(item);
         });
       }

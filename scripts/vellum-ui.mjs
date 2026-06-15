@@ -30,12 +30,6 @@ export const TEAL_DEEP = [20, 184, 166]; // #14b8a6
 export const GREEN = [134, 239, 172];
 export const YELLOW = [253, 224, 71];
 export const RED = [252, 165, 165];
-const RAMP = [
-  [153, 246, 228],
-  [94, 234, 212],
-  [45, 212, 191],
-  [20, 184, 166],
-];
 // Logo ramp — the blue→purple sweep of the layered "V" mark (assets/logo-mark.png).
 const BRAND_RAMP = [
   [125, 211, 252],
@@ -96,11 +90,6 @@ function rampGradient(ramp, s, fallback) {
   );
 }
 
-// Per-character horizontal teal gradient. Falls back to plain cyan/plain text.
-export function gradient(s) {
-  return rampGradient(RAMP, s, TEAL);
-}
-
 // Per-character blue→purple logo gradient for the brand wordmark.
 export function brandGradient(s) {
   return rampGradient(BRAND_RAMP, s, TEAL);
@@ -154,13 +143,6 @@ export function box(lines, { indent = "  ", pad = 1 } = {}) {
     (l) => `${indent}${edge}${padStr}${l}${" ".repeat(width - visibleWidth(l))}${padStr}${edge}`
   );
   return [top, ...body, bottom].join("\n");
-}
-
-// Section rule: ── label ───────────…
-export function rule(label = "", width = 46) {
-  const head = label ? `── ${label} ` : "";
-  const rest = Math.max(0, width - visibleWidth(head));
-  return `  ${fg(TEAL_DEEP, head + "─".repeat(rest))}`;
 }
 
 export function bar(frac, width = 18) {

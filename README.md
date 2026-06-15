@@ -27,7 +27,7 @@ pin time-coded notes onto any [HyperFrames](https://hyperframes.heygen.com) fram
 
 <br>
 
-<sub>▶ <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo.mp4">Watch the 52-second demo</a></sub>
+<sub>▶ <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo-light.mp4">Watch the 52-second demo</a></sub>
 
 <br><br>
 
@@ -171,11 +171,11 @@ The agent then:
 ## Try the demo
 
 <div align="center">
-  <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo.mp4">
-    <img src="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo-poster.jpg" alt="Watch the Vellum demo — see the whole review loop in 52 seconds" width="820" />
+  <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo-light.mp4">
+    <img src="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo-light-poster.jpg" alt="Watch the Vellum demo — see the whole review loop in 52 seconds" width="820" />
   </a>
   <br>
-  <sub>▶ <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo.mp4">Watch the 52-second walkthrough</a> — see, pin, hand off, fixed.</sub>
+  <sub>▶ <a href="https://e4yhvggcsuu9vhwa.public.blob.vercel-storage.com/vellum-promo-light.mp4">Watch the 52-second walkthrough</a> — see, pin, hand off, fixed.</sub>
 </div>
 
 <br>

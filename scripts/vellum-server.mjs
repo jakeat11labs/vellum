@@ -22,7 +22,7 @@ import path from "node:path";
 import os from "node:os";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { fmtTime, normalizeNoteStatus, resolveComposition, VERSION } from "./vellum-shared.mjs";
+import { fmtTime, normalizeNoteStatus, resolveComposition, resolveInside, VERSION } from "./vellum-shared.mjs";
 import * as ui from "./vellum-ui.mjs";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
@@ -69,12 +69,6 @@ function noteLabel(note) {
 }
 
 const { compDir: COMP_DIR, compAbs: COMP_ABS } = resolveComposition(ROOT);
-
-function resolveInside(base, target) {
-  const full = path.resolve(base, target);
-  if (full !== base && !full.startsWith(base + path.sep)) return null;
-  return full;
-}
 
 // HyperFrames runtime resolution. The runtime the player injects is NOT referenced by
 // the composition's HTML, and its filename is not declared in the hyperframes package
@@ -133,6 +127,8 @@ const HF_VERSION = detectHyperframesVersion();
 const HF_LOCAL_DIR = path.join(ROOT, "node_modules", "hyperframes");
 const HF_LOCAL_RUNTIME = findRuntimeFile(HF_LOCAL_DIR);
 const HF_NPX_DIR = HF_LOCAL_RUNTIME ? null : findNpxRuntimeDir(HF_VERSION);
+const HF_NPX_RUNTIME = HF_NPX_DIR ? findRuntimeFile(HF_NPX_DIR) : null;
+const HF_VER_TAG = HF_VERSION === "latest" ? "" : `@${HF_VERSION}`;
 
 function streamFile(res, filePath) {
   const st = fs.statSync(filePath);
@@ -146,14 +142,13 @@ function streamFile(res, filePath) {
 // Stable endpoint the player injects. Resolves the real runtime file (local → npx cache),
 // else redirects to the CDN — so the client never hardcodes the dist filename.
 function serveRuntime(res) {
-  const local = HF_LOCAL_RUNTIME || (HF_NPX_DIR ? findRuntimeFile(HF_NPX_DIR) : null);
+  const local = HF_LOCAL_RUNTIME || HF_NPX_RUNTIME;
   if (local) {
     try {
       return streamFile(res, local);
     } catch {}
   }
-  const verTag = HF_VERSION === "latest" ? "" : `@${HF_VERSION}`;
-  res.writeHead(302, { location: `${HF_CDN}${verTag}/dist/hyperframe.runtime.iife.js`, "cache-control": "no-cache" });
+  res.writeHead(302, { location: `${HF_CDN}${HF_VER_TAG}/dist/hyperframe.runtime.iife.js`, "cache-control": "no-cache" });
   return res.end();
 }
 
@@ -168,8 +163,7 @@ function serveHyperframesRuntime(req, res, pathname) {
       } catch {}
     }
   }
-  const verTag = HF_VERSION === "latest" ? "" : `@${HF_VERSION}`;
-  res.writeHead(302, { location: `${HF_CDN}${verTag}${rest}`, "cache-control": "no-cache" });
+  res.writeHead(302, { location: `${HF_CDN}${HF_VER_TAG}${rest}`, "cache-control": "no-cache" });
   return res.end();
 }
 const NOTES_DIR = path.join(COMP_ABS, "notes");
@@ -224,14 +218,6 @@ function withNotes(res, fn) {
     return sendJson(res, 500, { error: err.message });
   }
   return fn(notes);
-}
-
-function sendNotes(res, code, notes) {
-  return sendJson(res, code, notes);
-}
-
-function sendNotesObject(res, code, body) {
-  return sendJson(res, code, body);
 }
 
 function recoverableWriteNotes(res, notes) {
@@ -385,11 +371,11 @@ function handleNoteById(req, res, idValue) {
 
 function handleNotes(req, res) {
   if (req.method === "OPTIONS") return sendJson(res, 204, {});
-  if (req.method === "GET") return withNotes(res, (notes) => sendNotes(res, 200, notes));
+  if (req.method === "GET") return withNotes(res, (notes) => sendJson(res, 200, notes));
   if (req.method === "DELETE") {
     if (!recoverableWriteNotes(res, [])) return;
     logEvent(ui.glyph.del, "all notes cleared");
-    return sendNotesObject(res, 200, { ok: true, notes: [] });
+    return sendJson(res, 200, { ok: true, notes: [] });
   }
   if (req.method === "POST") {
     return readBody(req, res, 1e6, (parsed) => {
@@ -580,7 +566,8 @@ let activePort = PORT;
 
 function onListen() {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
-  if (!fs.existsSync(NOTES_JSON)) writeNotes(emptyNotesOnMissing());
+  const existing = emptyNotesOnMissing();
+  if (!fs.existsSync(NOTES_JSON)) writeNotes(existing);
   const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
   const url = `http://127.0.0.1:${activePort}${ANNOTATE_PATH}`;
   const hfSource = HF_LOCAL_RUNTIME
@@ -588,7 +575,6 @@ function onListen() {
     : HF_NPX_DIR
       ? `npx cache ${ui.dim(`(hyperframes@${HF_VERSION})`)}`
       : `jsDelivr CDN ${ui.dim(`(hyperframes@${HF_VERSION})`)}`;
-  const existing = emptyNotesOnMissing();
 
   console.log("");
   console.log(ui.wordmark(`v${VERSION} · HyperFrames review layer`));

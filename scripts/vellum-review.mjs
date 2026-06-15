@@ -29,6 +29,10 @@ const ACCENT = "0x5EEAD4";
 
 const { W, H } = compSize(COMP);
 
+// Percent-of-composition → pixel. Notes store coordinates as 0–100% of comp size.
+const px = (pct) => Math.round((pct / 100) * W);
+const py = (pct) => Math.round((pct / 100) * H);
+
 function readNotes() {
   try {
     return JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
@@ -80,24 +84,24 @@ function targetBox(note) {
   const vals = [b.x, b.y, b.w, b.h].map(Number);
   if (!vals.every(Number.isFinite) || vals[2] <= 0 || vals[3] <= 0) return null;
   return {
-    x: Math.round((vals[0] / 100) * W),
-    y: Math.round((vals[1] / 100) * H),
-    w: Math.max(4, Math.round((vals[2] / 100) * W)),
-    h: Math.max(4, Math.round((vals[3] / 100) * H)),
+    x: px(vals[0]),
+    y: py(vals[1]),
+    w: Math.max(4, px(vals[2])),
+    h: Math.max(4, py(vals[3])),
   };
 }
 
 function drawMarker(srcPng, note, outPng) {
   let filter;
   if (note.w != null) {
-    const x = Math.round((note.x / 100) * W);
-    const y = Math.round((note.y / 100) * H);
-    const w = Math.round((note.w / 100) * W);
-    const h = Math.round((note.h / 100) * H);
+    const x = px(note.x);
+    const y = py(note.y);
+    const w = px(note.w);
+    const h = py(note.h);
     filter = `drawbox=x=${x}:y=${y}:w=${w}:h=${h}:color=${ACCENT}@1.0:t=5`;
   } else if (note.x != null) {
-    const cx = Math.round((note.x / 100) * W);
-    const cy = Math.round((note.y / 100) * H);
+    const cx = px(note.x);
+    const cy = py(note.y);
     const box = targetBox(note);
     if (box) {
       const d = 9;

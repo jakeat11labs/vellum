@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.4.3] - June 15, 2026
+
+### Changed
+- **Codebase cleanup pass (no behavior change).** Removed duplicated and dead code and pulled repeated logic into shared helpers across the server, review, shared, terminal-UI, and browser-player modules: the server reuses the shared `resolveInside` path guard instead of a second copy, percent→pixel and timeline-position math collapse into single helpers, `<audio>` timing attributes are parsed once at mount instead of on every animation frame, and unused UI exports were dropped. Smoke tests unchanged and passing.
+- **Demo video uses the light-theme cut.** README hero and "Try the demo" now point at the light promo video and poster.
+
 ## [0.4.2] - June 11, 2026
 
 ### Changed
