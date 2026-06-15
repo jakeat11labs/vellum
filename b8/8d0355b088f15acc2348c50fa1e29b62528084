@@ -1,0 +1,77 @@
+package.json
+  s_f3c320aae25b3c::t_4b0730ae9be018 3
+README.md
+  s_7da3016e23ce44::t_c56e2a7174ebf0 30,174,178
+  s_7da3016e23ce44::t_3b85ebecf6c495 175
+scripts/vellum-review.mjs
+  s_f3c320aae25b3c::t_564f653e57a53d 32-35
+  s_f3c320aae25b3c::t_f445d1331ab909 97-100
+  s_f3c320aae25b3c::t_54161061767b8e 87-90
+  s_f3c320aae25b3c::t_d179af07e8e372 103-104
+scripts/vellum-server.mjs
+  s_f3c320aae25b3c::t_4adbd480fa2b4f 166
+  s_f3c320aae25b3c::t_2033d8094d3866 569-570
+  s_f3c320aae25b3c::t_92f26f7fe3b097 378
+  s_f3c320aae25b3c::t_4b4453bdc7f5d4 130-131
+  s_f3c320aae25b3c::t_7a52befe6f2f73 25
+  s_f3c320aae25b3c::t_c8aa4e756d7928 145
+  s_f3c320aae25b3c::t_856e117e115897 374
+  s_f3c320aae25b3c::t_ed17a47c42a95b 151
+install.sh
+  s_f3c320aae25b3c::t_bfb1cfb87d487c 467,472
+scripts/vellum-shared.mjs
+  s_f3c320aae25b3c::t_9130adc9ef2c44 10-15
+  s_f3c320aae25b3c::t_5a5f3de7dad1f6 42
+  s_f3c320aae25b3c::t_f811cf843d8f87 51-52,55
+  s_f3c320aae25b3c::t_0a98b316fa6e9a 26
+  s_f3c320aae25b3c::t_acf61026abe4ea 6
+CHANGELOG.md
+  s_f3c320aae25b3c::t_e93f0caebe3f65 10-15
+scripts/vellum-template.html
+  s_f3c320aae25b3c::t_bc39255a4a1ab6 406-411
+  s_f3c320aae25b3c::t_3cd157deaa0967 742-743
+  s_f3c320aae25b3c::t_e7267200c8ee5b 1067
+  s_f3c320aae25b3c::t_35144f13f3140b 973-976
+  s_f3c320aae25b3c::t_c6c0a9cb910a7d 289-292
+  s_f3c320aae25b3c::t_a21b11b3a7e764 326-327
+  s_f3c320aae25b3c::t_8533943efaa1fe 374,652,667
+  s_f3c320aae25b3c::t_2512ef140b2759 460
+  s_f3c320aae25b3c::t_bee2a0d588a7fc 821
+  s_f3c320aae25b3c::t_34f3b42a4aeda3 991
+  s_f3c320aae25b3c::t_eb1e057d3b1ace 829-830
+  s_f3c320aae25b3c::t_593ea163e231e7 269
+  s_f3c320aae25b3c::t_d9365bf6548532 1029
+  s_f3c320aae25b3c::t_191b7a72b93538 1021,1023
+  s_f3c320aae25b3c::t_16dc2bcc0df33e 350-354
+  s_f3c320aae25b3c::t_51124bc34316f3 537-538,541-543,545-546
+  s_f3c320aae25b3c::t_67712bab02a2fa 245
+  s_f3c320aae25b3c::t_32c33352cca12c 334
+  s_f3c320aae25b3c::t_774697cdb9fc8e 1006
+  s_f3c320aae25b3c::t_1bd8e9d03c31fc 295
+  s_f3c320aae25b3c::t_545e6117013752 493
+  s_f3c320aae25b3c::t_e0cc5c4019877a 347,885,904
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "b88d0355b088f15acc2348c50fa1e29b62528084",
+  "prompts": {},
+  "sessions": {
+    "s_7da3016e23ce44": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "49d5f907-5387-49c7-836d-8dd82d65849b",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    },
+    "s_f3c320aae25b3c": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "9d4d9220-4c5a-442f-b44f-25a8e18b52db",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
