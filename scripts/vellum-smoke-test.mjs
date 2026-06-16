@@ -57,7 +57,7 @@ async function withServer(cwd, env, fn) {
   child.stdout.on("data", (chunk) => (child.stdoutText += chunk));
   child.stderr.on("data", (chunk) => (child.stderrText += chunk));
   try {
-    await waitFor(`http://127.0.0.1:${port}/annotate.html`, child);
+    await waitFor(`http://127.0.0.1:${port}/vellum`, child);
     await fn(`http://127.0.0.1:${port}`);
   } finally {
     child.kill("SIGTERM");
@@ -152,7 +152,7 @@ async function testServerApi() {
     assert.equal(res.headers.get("content-range"), "bytes 6-9/10");
     assert.equal(await res.text(), "6789");
 
-    res = await fetch(`${base}/other/annotate.html`);
+    res = await fetch(`${base}/other/vellum`);
     assert.equal(res.status, 404);
   });
 }

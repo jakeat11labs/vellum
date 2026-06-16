@@ -173,10 +173,12 @@ const MIX_JSON = path.join(NOTES_DIR, "mix.json");
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_FILE = path.join(HERE, "vellum-template.html");
-// Path the player opens — "/annotate.html" at root, or "/<dir>/annotate.html" for a subfolder composition.
-const ANNOTATE_PATH = COMP_DIR
-  ? `/${COMP_DIR.split(path.sep).map(encodeURIComponent).join("/")}/annotate.html`
-  : "/annotate.html";
+// Path the player opens — "/vellum" at root, or "/<dir>/vellum" for a subfolder composition.
+// Extension-less and fully virtual: serveStatic matches this before any disk lookup and
+// returns the player template; the iframe inside loads index.html relative to this URL.
+const PLAYER_PATH = COMP_DIR
+  ? `/${COMP_DIR.split(path.sep).map(encodeURIComponent).join("/")}/vellum`
+  : "/vellum";
 
 const MIME = {
   ".html": "text/html; charset=utf-8",
@@ -486,7 +488,7 @@ function serveStatic(req, res) {
 
   // The player template is served only at the configured review URL. This keeps
   // iframe composition paths aligned with the notes directory.
-  if (pathname === "/" || pathname === ANNOTATE_PATH) {
+  if (pathname === "/" || pathname === PLAYER_PATH) {
     return serveTemplate(res);
   }
 
@@ -569,7 +571,7 @@ function onListen() {
   const existing = emptyNotesOnMissing();
   if (!fs.existsSync(NOTES_JSON)) writeNotes(existing);
   const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
-  const url = `http://127.0.0.1:${activePort}${ANNOTATE_PATH}`;
+  const url = `http://127.0.0.1:${activePort}${PLAYER_PATH}`;
   const hfSource = HF_LOCAL_RUNTIME
     ? `node_modules/hyperframes ${ui.dim(`(${path.basename(HF_LOCAL_RUNTIME)})`)}`
     : HF_NPX_DIR

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.0] - June 15, 2026
+
+### Added
+- **The installer can scaffold a HyperFrames project.** Run the install script in a folder with no composition and it now offers to create one in place — `npx hyperframes init .` for the `index.html` (pick a blank composition or a starter example), the full `/hyperframes` + GSAP agent skill set via `npx hyperframes skills`, and `npm install` so the runtime is local on the first `vellum` run. Then it wires the Vellum tool and skill on top, leaving an empty folder ready to edit and review in one command. Force it with `--init` / `VELLUM_INIT=1`, or skip with `--no-init` / `VELLUM_INIT=0`; it never fires when a composition already exists or you pass `--dir`.
+
+### Changed
+- **The review player opens at `/vellum`** (extension-less) instead of `/annotate.html` — `http://127.0.0.1:4848/vellum`, or `/<dir>/vellum` for a subfolder composition. Purely the player's URL; the notes API, files, and `annotations.md`/`annotations.json` are unchanged.
+
 ## [0.4.3] - June 15, 2026
 
 ### Changed

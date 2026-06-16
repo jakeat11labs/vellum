@@ -19,6 +19,7 @@ PORT_VALUE="${VELLUM_PORT_VALUE:-${VELLUM_PORT:-}}"
 NO_PROMPT="${VELLUM_NO_PROMPT:-}"
 NO_PACKAGE_SCRIPTS="${VELLUM_NO_PACKAGE_SCRIPTS:-}"
 START_AFTER="${VELLUM_START:-0}"
+INIT_MODE="${VELLUM_INIT:-ask}"
 INSTALL_BIN="${VELLUM_INSTALL_BIN:-}"
 BIN_DIR="${VELLUM_BIN_DIR:-$HOME/.local/bin}"
 HAS_VELLUM_SCRIPT=0
@@ -37,6 +38,8 @@ Options:
   --port <number>    Default Vellum port for npm scripts
   --tool-only        Install scripts only
   --skill-only       Install the agent skill only
+  --init             Scaffold a new HyperFrames project here if none exists
+  --no-init          Never scaffold; just warn when no composition is found
   --start            Launch the review player when install finishes
   --no-bin           Don't install the global vellum command (installed by default)
   --no-prompt, -y    Accept defaults; useful for CI/automation
@@ -47,7 +50,7 @@ Environment:
   VELLUM_COMPOSITION_DIR, VELLUM_PORT, VELLUM_INSTALL=all|tool|skill,
   VELLUM_SKILL_TARGETS (space-separated dirs), VELLUM_SKILL_DIR (single dir),
   VELLUM_NO_PROMPT=1, VELLUM_NO_PACKAGE_SCRIPTS=1, VELLUM_INSTALL_BIN=0|1,
-  VELLUM_BIN_DIR=~/.local/bin, VELLUM_START=1, VELLUM_REF=<git-ref>
+  VELLUM_INIT=ask|1|0, VELLUM_BIN_DIR=~/.local/bin, VELLUM_START=1, VELLUM_REF=<git-ref>
 EOF
 }
 
@@ -71,6 +74,12 @@ while [ "$#" -gt 0 ]; do
       ;;
     --start)
       START_AFTER=1
+      ;;
+    --init)
+      INIT_MODE=1
+      ;;
+    --no-init)
+      INIT_MODE=0
       ;;
     --no-bin)
       INSTALL_BIN=0
@@ -298,6 +307,62 @@ pick_composition_dir() {
     say ""
     info "Re-run with: curl -fsSL …/install.sh | sh -s -- --dir <folder>"
   fi
+}
+
+pick_hf_example() {
+  HF_EXAMPLE="blank"
+  if can_prompt; then
+    say ""
+    info "${bold}Start your new HyperFrames project from:${reset}"
+    tty_say "    ${t3}1${reset}) Blank composition ${dim}(empty stage — recommended)${reset}"
+    tty_say "    ${t3}2${reset}) Starter example ${dim}(sample scenes to review right away)${reset}"
+    choice="$(pick_number "Choose" "1" "2")"
+    case "$choice" in
+      1) HF_EXAMPLE="blank" ;;
+      2) HF_EXAMPLE="warm-grain" ;;
+    esac
+  fi
+}
+
+# Scaffold a HyperFrames project in the current directory (in place), then layer on the
+# full /hyperframes agent skill set and install deps so the first `vellum` run is ready.
+# All subprocesses read from /dev/null so they can't consume a piped `curl ... | sh` script.
+# Returns non-zero (without aborting the installer) if the scaffold can't proceed.
+scaffold_hyperframes() {
+  if ! command -v npx >/dev/null 2>&1; then
+    warn "npx not found (needs Node >= 18) — skipping project scaffold"
+    return 1
+  fi
+  section "New HyperFrames project"
+  pick_hf_example
+  info "${t3}▸${reset} Scaffolding composition ${dim}(example: $HF_EXAMPLE)${reset}…"
+  if ! npx hyperframes@latest init . --non-interactive --skip-skills --skip-transcribe -e "$HF_EXAMPLE" </dev/null; then
+    warn "hyperframes init failed — continuing without a scaffolded project"
+    return 1
+  fi
+  ok "created HyperFrames project (index.html, package.json)"
+
+  info "${t3}▸${reset} Installing HyperFrames + GSAP agent skills…"
+  if npx hyperframes@latest skills </dev/null; then
+    ok "installed the /hyperframes skill set"
+  else
+    warn "could not install HyperFrames skills (run 'npx hyperframes skills' later)"
+  fi
+
+  # `hyperframes init` scaffolds scripts that call `npx --yes hyperframes@<ver>` rather than
+  # listing hyperframes as a dependency, so a bare `npm install` installs nothing. Install the
+  # runtime explicitly so the first `vellum` run resolves it from local node_modules (no CDN).
+  if command -v npm >/dev/null 2>&1; then
+    info "${t3}▸${reset} Installing the HyperFrames runtime ${dim}(npm install hyperframes)${reset}…"
+    if npm install hyperframes </dev/null >/dev/null 2>&1; then
+      ok "HyperFrames runtime installed (node_modules/hyperframes)"
+    else
+      warn "could not install hyperframes — the runtime loads from the CDN on first run"
+    fi
+  else
+    warn "npm not found — run 'npm install hyperframes' to fetch the runtime locally"
+  fi
+  return 0
 }
 
 pick_install_mode() {
@@ -619,6 +684,30 @@ esac
 
 pick_bin_install
 pick_skill_targets
+
+# Nothing to review yet? Offer to scaffold a HyperFrames project here (in place), pull in the
+# /hyperframes skill set, and install deps — then the rest of the install wires up against it.
+if [ "$WANT_TOOL" -eq 1 ] && [ -z "$COMPOSITION_DIR" ] && [ "$COMP_COUNT" -eq 0 ]; then
+  do_init=0
+  case "$INIT_MODE" in
+    1) do_init=1 ;;
+    0) do_init=0 ;;
+    *)
+      if can_prompt; then
+        answer="$(ask "No HyperFrames project here — create one? (installs HF skills + deps)" "Y")"
+        case "$answer" in
+          y|Y|yes|YES|Yes) do_init=1 ;;
+        esac
+      fi
+      ;;
+  esac
+  if [ "$do_init" -eq 1 ] && scaffold_hyperframes; then
+    # Re-detect now that index.html exists; the composition is the project root.
+    COMPOSITIONS="$(find_compositions)"
+    COMP_COUNT="$(printf '%s\n' "$COMPOSITIONS" | count_lines)"
+    COMPOSITION_DIR=""
+  fi
+fi
 
 section "Project check"
 

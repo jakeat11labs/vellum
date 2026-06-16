@@ -73,6 +73,8 @@ vellum
 
 The installer drops the review tool into `scripts/`, adds a global `vellum` command to `~/.local/bin`, wires npm scripts when you have a `package.json`, and installs the agent skill to `.agents/skills/vellum/`. Pick Claude Code during install and `.claude/skills/vellum/` becomes a **symlink** to the same skill — one copy, both agents stay in sync.
 
+**No HyperFrames project yet?** Run the installer in an empty folder and it offers to scaffold one in place — `hyperframes init` for the composition, the full `/hyperframes` + GSAP agent skill set, and `npm install` — then layers Vellum on top. Force it with `--init` (or `VELLUM_INIT=1`), skip it with `--no-init`.
+
 Composition in a subfolder? Pass `--dir` during install:
 
 ```bash
@@ -84,7 +86,7 @@ curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --dir compositions/he
 <details>
 <summary>Installer flags &amp; other install paths</summary>
 
-**Flags:** `--dir <path>` · `--port <number>` · `--start` · `--tool-only` · `--skill-only` · `--no-bin` · `--no-prompt` · `--no-package`
+**Flags:** `--dir <path>` · `--port <number>` · `--init` · `--no-init` · `--start` · `--tool-only` · `--skill-only` · `--no-bin` · `--no-prompt` · `--no-package`
 
 **Clone & run**
 
