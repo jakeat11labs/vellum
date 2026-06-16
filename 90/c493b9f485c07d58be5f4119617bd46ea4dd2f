@@ -1,0 +1,44 @@
+install.sh
+  s_05ea00fbbe504d::t_78bfb3719b5885 312-351,355,359,361-362,364-367
+  s_05ea00fbbe504d::t_ddb0549399338f 22
+  s_05ea00fbbe504d::t_b1423518029a75 78-83
+  s_05ea00fbbe504d::t_00289b69d53563 41-42,53
+  s_05ea00fbbe504d::t_5698cf6cb18f1f 352-354,356-358,360,363
+  s_05ea00fbbe504d::t_fdcbb0b98a3613 688-711
+scripts/vellum-server.mjs
+  s_05ea00fbbe504d::t_99477d245fa9c2 491
+  s_05ea00fbbe504d::t_d1463117e2b1ef 176-181
+  s_05ea00fbbe504d::t_586191dd365c10 574
+scripts/vellum-template.html
+  s_05ea00fbbe504d::t_a94b0115b331a9 6
+.github/workflows/release.yml
+  s_05ea00fbbe504d::t_bebdcc90c6ad3e 1-44
+CHANGELOG.md
+  s_05ea00fbbe504d::t_e678d99d187e2c 10-17
+scripts/vellum-shared.mjs
+  s_05ea00fbbe504d::t_7fccceed273068 6
+README.md
+  s_05ea00fbbe504d::t_d7908fbde6310a 89
+  s_05ea00fbbe504d::t_48540ed42cf1f9 76-77
+scripts/vellum-smoke-test.mjs
+  s_05ea00fbbe504d::t_9e15bf8d5c0885 60
+  s_05ea00fbbe504d::t_c726b7bf966e88 155
+package.json
+  s_05ea00fbbe504d::t_f52ec464016821 3
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "90c493b9f485c07d58be5f4119617bd46ea4dd2f",
+  "prompts": {},
+  "sessions": {
+    "s_05ea00fbbe504d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30ed0e37-db7b-4575-905c-8f5b118d1d79",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
