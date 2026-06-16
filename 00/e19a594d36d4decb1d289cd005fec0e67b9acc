@@ -1,0 +1,21 @@
+README.md
+  s_05ea00fbbe504d::t_c046549651309e 92-100
+  s_05ea00fbbe504d::t_7a71a77fc320b8 108
+  s_05ea00fbbe504d::t_47dbeedb79eaca 14
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.5.7",
+  "base_commit_sha": "00e19a594d36d4decb1d289cd005fec0e67b9acc",
+  "prompts": {},
+  "sessions": {
+    "s_05ea00fbbe504d": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "30ed0e37-db7b-4575-905c-8f5b118d1d79",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
