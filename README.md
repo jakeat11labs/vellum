@@ -11,6 +11,7 @@
 pin time-coded notes onto any [HyperFrames](https://hyperframes.heygen.com) frame, and your coding agent reads them back and makes the edits.**
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-5eead4)](LICENSE)
+[![npm](https://img.shields.io/npm/v/vellum-hf?color=5eead4&logo=npm&logoColor=white)](https://www.npmjs.com/package/vellum-hf)
 [![Node >= 18](https://img.shields.io/badge/node-%E2%89%A5%2018-339933?logo=node.js&logoColor=white)](package.json)
 [![CI](https://github.com/jakeat11labs/vellum/actions/workflows/test.yml/badge.svg)](https://github.com/jakeat11labs/vellum/actions/workflows/test.yml)
 [![Made for HyperFrames](https://img.shields.io/badge/made%20for-HyperFrames-0b0b0d)](https://hyperframes.heygen.com)
@@ -88,6 +89,15 @@ curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --dir compositions/he
 
 **Flags:** `--dir <path>` · `--port <number>` · `--init` · `--no-init` · `--start` · `--tool-only` · `--skill-only` · `--no-bin` · `--no-prompt` · `--no-package`
 
+**npm**
+
+```bash
+npm i -g vellum-hf   # global vellum + vellum-review commands
+npx vellum-hf        # one-off, no install — run in a HyperFrames project
+```
+
+Installs the **commands only**. The curl installer above also sets up the agent skill, npm scripts, and (in an empty folder) a fresh HyperFrames project — so it's still the recommended path for the full loop. Need just the skill? `curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --skill-only`.
+
 **Clone & run**
 
 ```bash
@@ -95,7 +105,7 @@ git clone https://github.com/jakeat11labs/vellum.git
 node /path/to/vellum/scripts/vellum-server.mjs   # from your HF project root
 ```
 
-Or copy `scripts/` (+ `skills/vellum/` for the agent). Prefer a package? `vellum` and `vellum-review` bins ship in `package.json`.
+Or copy `scripts/` (+ `skills/vellum/` for the agent). Prefer a package manager? `npm i -g vellum-hf` (see **npm** above) ships the `vellum` and `vellum-review` bins.
 
 **shadcn registry** (projects already using [shadcn/ui](https://ui.shadcn.com/docs/registry/github)):
 
