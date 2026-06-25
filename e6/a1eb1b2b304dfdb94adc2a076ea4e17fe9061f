@@ -1,0 +1,32 @@
+scripts/vellum-template.html
+  s_7e650d5b741e91::t_dfa0400e4232f5 468
+  s_7e650d5b741e91::t_4b002c0bd9a6e9 311
+  s_7e650d5b741e91::t_df2bc118981643 943-984,986-987,991-997,1003,1005-1006,1009,1017-1020
+scripts/vellum-smoke-test.mjs
+  s_7e650d5b741e91::t_504861026cd61e 154,156,165-166,169-170,174-176
+scripts/vellum-shared.mjs
+  s_7e650d5b741e91::t_9b8139a98af293 6
+package.json
+  s_7e650d5b741e91::t_c277864b71dd0b 3
+scripts/vellum-server.mjs
+  s_7e650d5b741e91::t_22569b2ce7ca82 287-289,293-300
+  s_7e650d5b741e91::t_1b9405fa9be17e 80,84
+CHANGELOG.md
+  s_7e650d5b741e91::t_f1624c2426231b 10-13
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.2",
+  "base_commit_sha": "e6a1eb1b2b304dfdb94adc2a076ea4e17fe9061f",
+  "prompts": {},
+  "sessions": {
+    "s_7e650d5b741e91": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81d98667-f8c9-4e37-aeed-f31e5eb12f51",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
