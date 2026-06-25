@@ -42,6 +42,19 @@
       /* Keyboard-shortcut hint riding inside the Save button — dark inset so it reads as a key cap on the bright fill */
       #composer-save { display: inline-flex; align-items: center; gap: 7px; }
       #composer-save .kbd-hint { font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 4px; background: rgba(14,14,17,0.32); color: #0e0e11; opacity: 0.72; font-variant-numeric: tabular-nums; }
+      /* Feedback-scope dock — left edge of the viewport (the notes drawer owns the right). Drop a
+         note on "Scene" (whole visual slide now) or "Audio" (what's playing now) without clicking an element. */
+      #feedback-dock { position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 20; display: flex; align-items: flex-start; }
+      #dock-targets { display: flex; flex-direction: column; gap: 8px; padding: 10px 10px 10px 12px; background: #15151a; border: 1px solid #2c2c32; border-left: 0; border-radius: 0 12px 12px 0; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+      #feedback-dock.collapsed #dock-targets { display: none; }
+      .dock-target { display: flex; align-items: center; gap: 8px; width: 116px; padding: 9px 10px; background: #1c1c21; border: 1px solid #2c2c32; border-radius: 9px; color: #c9c9d0; font-size: 12px; text-align: left; transition: border-color .12s ease, background .12s ease, color .12s ease; }
+      .dock-target .ico { font-size: 14px; line-height: 1; flex-shrink: 0; }
+      .dock-target .lbl { font-weight: 600; }
+      .dock-target:hover { background: #23232a; border-color: #5eead4; color: #5eead4; }
+      .dock-target.audio:hover { border-color: #f0a6d8; color: #f0a6d8; }
+      /* Toggle tab — the always-visible handle to collapse/expand the dock */
+      #dock-toggle { align-self: center; width: 18px; height: 46px; padding: 0; background: #15151a; border: 1px solid #2c2c32; border-left: 0; border-radius: 0 8px 8px 0; color: #8b8b93; font-size: 11px; line-height: 1; }
+      #dock-toggle:hover { color: #5eead4; border-color: #3a5d57; }
       #composer textarea { width: 100%; height: 78px; resize: vertical; background: #0e0e11; color: #e8e8ea; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px; font: inherit; font-size: 14px; }
       #composer .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
       button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid #2c2c32; background: #1f1f25; color: #e8e8ea; padding: 7px 12px; }
@@ -73,6 +86,9 @@
       /* Invisible padded hit area so the cursor catches the dot without pixel-perfect aim */
       .note-dot::before { content: ""; position: absolute; left: 50%; top: 50%; width: 30px; height: 26px; transform: translate(-50%, -50%); }
       .note-dot:hover { transform: translateX(-50%) scale(1.4); filter: brightness(1.2); }
+      /* Scoped notes read differently at a glance: scene dots are square, audio dots are hollow rings */
+      .note-dot.dot-scene { border-radius: 2px; }
+      .note-dot.dot-audio { background: #121216; border-color: var(--c, #5eead4); box-shadow: 0 0 0 1.5px var(--c, #5eead4), 0 0 4px rgba(0,0,0,0.55); }
       /* Hover preview for a timeline dot — fixed so it floats above the viewer, accented in the note's color (--c).
          JS sets left/top from the dot's screen position; transform keeps it centered over the dot. */
       #note-tip { position: fixed; z-index: 100; width: 240px; max-width: 240px; transform: translateX(-50%); background: #17171b; border: 1px solid color-mix(in srgb, var(--c, #5eead4) 40%, #2c2c32); border-radius: 10px; padding: 8px 10px; box-shadow: 0 10px 36px rgba(0,0,0,0.6); pointer-events: none; display: none; }
@@ -128,6 +144,8 @@
       .note-item .nt { font-variant-numeric: tabular-nums; color: #5eead4; font-size: 12px; font-weight: 700; }
       .note-item .ns { color: #8b8b93; font-size: 11px; }
       .note-item .ntg { color: #6f8fa6; font-size: 11px; margin-top: 2px; word-break: break-word; }
+      .note-item .nkind { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #5eead4; border: 1px solid #2d4f49; border-radius: 999px; padding: 1px 7px; margin-top: 3px; }
+      .note-item .nkind.audio { color: #f0a6d8; border-color: #5a3a52; }
       .note-item .nx { font-size: 14px; margin-top: 3px; white-space: pre-wrap; }
       .note-item .del { float: right; color: #8b8b93; border: none; background: none; padding: 0 2px; }
       .note-item .del:hover { color: #ff6b6b; }
@@ -141,6 +159,13 @@
       <div id="viewport">
         <div id="stage"><div class="hint" style="padding:40px">Loading composition…</div></div>
         <div id="pins"><div id="dragbox"></div><div id="hover-tag"></div></div>
+        <div id="feedback-dock">
+          <div id="dock-targets">
+            <button id="scene-target" class="dock-target scene" title="Leave a note about the whole current scene"><span class="ico">▣</span><span class="lbl">Whole scene</span></button>
+            <button id="audio-target" class="dock-target audio" title="Leave a note about the audio playing right now"><span class="ico">🔊</span><span class="lbl">Audio</span></button>
+          </div>
+          <button id="dock-toggle" title="Collapse / expand feedback targets">‹</button>
+        </div>
         <div id="composer">
           <div id="composer-drag" title="Drag to move"><span class="grip">⠿</span><div class="meta" id="composer-meta"></div></div>
           <div class="tgt" id="composer-tgt"></div>
@@ -873,6 +898,8 @@
       // that element in the composition so the choice is visually confirmed.
       function renderComposerTarget() {
         composerTgt.innerHTML = "";
+        if (pending.kind === "scene") { composerTgt.textContent = "on the whole scene"; return; }
+        if (pending.kind === "audio") { composerTgt.textContent = audioSummary(pending.audio); return; }
         const cands = pending.candidates || [];
         if (cands.length > 1) {
           const sel = document.createElement("select");
@@ -898,12 +925,69 @@
       // can wear the note's eventual pin color before it exists.
       const nextNoteId = () => (notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1);
 
+      // ---- scoped notes: whole-scene & audio feedback (no element click needed) ----
+      const round2 = (n) => Math.round(n * 100) / 100;
+      const audioBasename = (a) => { const s = (a && a.getAttribute("src")) || ""; const base = s.split(/[\\/]/).pop() || null; try { return base ? decodeURIComponent(base) : null; } catch { return base; } };
+      // Best-effort VO script text: HyperFrames doesn't embed it on <audio>, but if a
+      // composition tags clips with a caption/transcript/label attribute, surface it.
+      function clipScript(a) {
+        if (!a) return null;
+        for (const attr of ["data-transcript", "data-caption", "data-script", "data-text", "aria-label", "title", "data-label"]) {
+          const v = a.getAttribute(attr);
+          if (v && v.trim()) return v.trim().slice(0, 500);
+        }
+        return null;
+      }
+      const clipActiveAt = (x, t) => t >= x.start && (x.dur ? t < x.start + x.dur : true);
+      // Snapshot the audio at composition-time t: the active VO + music clips (filename +
+      // local timestamp), plus the previous/next VO clips so an agent has series context.
+      function captureAudioContext(t) {
+        const voiceTim = audioTimings.filter((x) => voiceEls.includes(x.a)).sort((p, q) => p.start - q.start);
+        const musicTim = audioTimings.filter((x) => x.a === musicEl);
+        const detail = (x) => x ? { src: audioBasename(x.a), start: round2(x.start), dur: x.dur || null, at: round2(Math.max(0, (t - x.start) + (x.mediaStart || 0))), script: clipScript(x.a) } : null;
+        const brief = (x) => x ? { src: audioBasename(x.a), start: round2(x.start) } : null;
+        const activeVoice = voiceTim.find((x) => clipActiveAt(x, t)) || null;
+        const activeMusic = musicTim.find((x) => clipActiveAt(x, t)) || musicTim[0] || null;
+        let prev = null, next = null;
+        if (activeVoice) {
+          const i = voiceTim.indexOf(activeVoice);
+          prev = brief(voiceTim[i - 1]); next = brief(voiceTim[i + 1]);
+        } else {
+          prev = brief([...voiceTim].reverse().find((x) => x.start < t)); // most recent before t
+          next = brief(voiceTim.find((x) => x.start >= t));               // next upcoming
+        }
+        const music = activeMusic ? { src: audioBasename(activeMusic.a), start: round2(activeMusic.start), dur: activeMusic.dur || null, at: round2(Math.max(0, (t - activeMusic.start) + (activeMusic.mediaStart || 0))) } : null;
+        return { voice: detail(activeVoice), music, prev, next };
+      }
+      // One-line summary of an audio note's captured context, for the composer/tooltip/list.
+      function audioSummary(a) {
+        if (!a) return "on the audio at this moment";
+        const bits = [];
+        if (a.voice && a.voice.src) bits.push(`VO ${a.voice.src}${a.voice.at != null ? ` @ ${fmt(a.voice.at)}` : ""}`);
+        if (a.music && a.music.src) bits.push(`music ${a.music.src}`);
+        return bits.length ? `on ${bits.join(" · ")}` : "on the audio at this moment";
+      }
+      // Open the composer for a whole-scene or audio note at the current moment, anchored
+      // beside the left dock. Works outside note mode; refuses to clobber an unsaved note.
+      function openScopedComposer(kind, anchorEl) {
+        if (pending && composerText.value.trim()) { flash("Save or cancel the open note first"); return; }
+        clearHover();
+        const t = player ? player.getTime() : 0;
+        pending = { kind, time: t, scene: sceneAt(t) };
+        if (kind === "audio") pending.audio = captureAudioContext(t);
+        const r = (anchorEl || dock).getBoundingClientRect();
+        openComposer(r.right + 10, r.top);
+      }
+
       function openComposer(clientX, clientY) {
         const region = pending.w != null;
         const editLabel = pending.editId ? `note-${pending.editId} · edit` : "new note";
         pending.color = colorFor(pending.editId || nextNoteId());
         composer.style.setProperty("--c", pending.color);
-        composerMeta.textContent = `${editLabel} · ${fmt(pending.time)} · ${pending.scene || ""} · ${region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`}`;
+        const where = pending.kind === "scene" ? "whole scene"
+          : pending.kind === "audio" ? "audio"
+          : region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`;
+        composerMeta.textContent = `${editLabel} · ${fmt(pending.time)} · ${pending.scene || ""} · ${where}`;
         renderComposerTarget();
         if (!pending.editId && pending.candidates && pending.candidates[pending.candIndex]) {
           flashEl(pending.candidates[pending.candIndex].el, pending.color);
@@ -961,8 +1045,11 @@
         } else {
           // Explicit payload — pending also carries candidate DOM elements that must
           // never be serialized.
-          const { time, x, y, w, h, scene, target } = pending;
-          await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ time, x, y, w, h, scene, target, text }) });
+          const { time, x, y, w, h, scene, target, kind, audio } = pending;
+          const payload = { time, x, y, w, h, scene, target, text };
+          if (kind) payload.kind = kind;
+          if (audio) payload.audio = audio;
+          await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
         }
         composer.style.display = "none";
         pending = null;
@@ -977,6 +1064,21 @@
           composerSaveBtn.click();
         }
       });
+
+      // ---- left feedback dock ----
+      const dock = document.getElementById("feedback-dock");
+      const dockToggle = document.getElementById("dock-toggle");
+      const DOCK_KEY = "vellum-dock-collapsed";
+      function setDockCollapsed(collapsed) {
+        dock.classList.toggle("collapsed", collapsed);
+        dockToggle.textContent = collapsed ? "›" : "‹";
+        dockToggle.title = collapsed ? "Show feedback targets" : "Hide feedback targets";
+        try { localStorage.setItem(DOCK_KEY, collapsed ? "1" : "0"); } catch (e) {}
+      }
+      setDockCollapsed((() => { try { return localStorage.getItem(DOCK_KEY) === "1"; } catch (e) { return false; } })());
+      dockToggle.onclick = () => setDockCollapsed(!dock.classList.contains("collapsed"));
+      document.getElementById("scene-target").onclick = (e) => openScopedComposer("scene", e.currentTarget);
+      document.getElementById("audio-target").onclick = (e) => openScopedComposer("audio", e.currentTarget);
 
       const STATUS_CYCLE = ["open", "resolved", "wontfix"];
       async function cycleStatus(note, ev) {
@@ -1042,7 +1144,7 @@
           const pct = timelinePct(n.time);
           if (pct < 0 || pct > 100) return;
           const dot = document.createElement("div");
-          dot.className = "note-dot";
+          dot.className = `note-dot${n.kind === "scene" ? " dot-scene" : n.kind === "audio" ? " dot-audio" : ""}`;
           dot.style.left = `${pct}%`;
           dot.style.setProperty("--c", colorFor(n.id));
           dot.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
@@ -1054,9 +1156,11 @@
       // Hover preview floating above a timeline dot: scene + timecode, then the note text.
       // Fixed-positioned from the dot's on-screen rect so it sits above the viewer rather
       // than being clipped by it; centered over the dot and clamped to the window edges.
+      const kindGlyph = (n) => n.kind === "scene" ? "▣ " : n.kind === "audio" ? "🔊 " : "";
       function showNoteTip(n, dot) {
         noteTip.style.setProperty("--c", colorFor(n.id));
-        noteTipMeta.textContent = `note-${n.id} · ${fmt(n.time)}${n.scene ? ` · ${n.scene}` : ""}`;
+        const scope = n.kind === "scene" ? " · whole scene" : n.kind === "audio" ? " · audio" : "";
+        noteTipMeta.textContent = `${kindGlyph(n)}note-${n.id} · ${fmt(n.time)}${n.scene ? ` · ${n.scene}` : ""}${scope}`;
         const text = (n.text || "").trim();
         noteTipText.textContent = text || "(no text)";
         noteTipText.classList.toggle("empty", !text);
@@ -1107,7 +1211,18 @@
           const nx = document.createElement("div");
           nx.className = "nx"; nx.textContent = n.text;
           item.append(actions, nt, ns);
-          if (n.target) {
+          if (n.kind === "scene" || n.kind === "audio") {
+            const badge = document.createElement("div");
+            badge.className = `nkind${n.kind === "audio" ? " audio" : ""}`;
+            badge.textContent = n.kind === "scene" ? "▣ whole scene" : "🔊 audio";
+            item.append(badge);
+            if (n.kind === "audio") {
+              const tg = document.createElement("div");
+              tg.className = "ntg";
+              tg.textContent = audioSummary(n.audio);
+              item.append(tg);
+            }
+          } else if (n.target) {
             const tg = document.createElement("div");
             tg.className = "ntg";
             tg.textContent = `on ${targetLabel(n.target)}`;

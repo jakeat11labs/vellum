@@ -68,6 +68,33 @@ function noteLabel(note) {
   return `${ui.bold(`note-${note.id}`)} ${ui.dim(`@ ${fmtTime(note.time)}`)}`;
 }
 
+// Sanitize the audio snapshot carried by an audio-scoped note into a fixed shape with
+// bounded strings/numbers — never trust the browser's payload verbatim. `detail` clips
+// (active VO/music) keep timing + optional script text; `brief` clips (prev/next VO for
+// series context) keep just a filename and start time.
+function sanitizeAudioClip(c, detail) {
+  if (!c || typeof c !== "object") return null;
+  const num = (v) => boundedNumber(v, null, { min: 0, decimals: 100 });
+  const clip = { src: c.src != null ? String(c.src).slice(0, 200) : null };
+  if (c.start != null) clip.start = num(c.start);
+  if (detail) {
+    if (c.dur != null) clip.dur = num(c.dur);
+    if (c.at != null) clip.at = num(c.at);
+    if (c.script != null) clip.script = String(c.script).slice(0, 500);
+  }
+  return clip;
+}
+function sanitizeAudio(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const out = {
+    voice: sanitizeAudioClip(raw.voice, true),
+    music: sanitizeAudioClip(raw.music, true),
+    prev: sanitizeAudioClip(raw.prev, false),
+    next: sanitizeAudioClip(raw.next, false),
+  };
+  return Object.values(out).some(Boolean) ? out : null;
+}
+
 const { compDir: COMP_DIR, compAbs: COMP_ABS } = resolveComposition(ROOT);
 
 // HyperFrames runtime resolution. The runtime the player injects is NOT referenced by
@@ -248,6 +275,27 @@ function escapeMd(value) {
     .trim();
 }
 
+// One-line "where" for an audio note: which VO/music clip was playing (filename + local time).
+function audioWhere(a) {
+  if (!a) return "audio";
+  const parts = [];
+  if (a.voice && a.voice.src) parts.push(`VO ${escapeMd(a.voice.src)}${a.voice.at != null ? ` @ ${fmtTime(a.voice.at)}` : ""}`);
+  if (a.music && a.music.src) parts.push(`music ${escapeMd(a.music.src)}`);
+  return `audio: ${parts.join(", ") || "this moment"}`;
+}
+// Extra indented context lines for an audio note: the VO script text (when embedded) and
+// the surrounding clip order, so the coding agent can reason about a clip within a series.
+function audioDetailLines(a) {
+  if (!a) return [];
+  const lines = [];
+  if (a.voice && a.voice.script) lines.push(`  - VO script: "${escapeMd(a.voice.script)}"`);
+  const ctx = [];
+  if (a.prev && a.prev.src) ctx.push(`prev ${escapeMd(a.prev.src)}${a.prev.start != null ? ` (${fmtTime(a.prev.start)})` : ""}`);
+  if (a.next && a.next.src) ctx.push(`next ${escapeMd(a.next.src)}${a.next.start != null ? ` (${fmtTime(a.next.start)})` : ""}`);
+  if (ctx.length) lines.push(`  - clip order: ${ctx.join(", ")}`);
+  return lines;
+}
+
 function writeNotes(notes) {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
   fs.writeFileSync(NOTES_JSON, `${JSON.stringify(notes, null, 2)}\n`);
@@ -258,16 +306,21 @@ function writeNotes(notes) {
     `${notes.length} note(s). Times are composition-time (M:SS.ss).`,
     "",
     ...sorted.map((n) => {
-      const where = n.w != null ? `box ${n.x},${n.y} ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%, ${n.y}%` : "";
+      // Scoped notes (whole scene / audio) describe their subject instead of a pin/box + element.
+      const scoped = n.kind === "scene" || n.kind === "audio";
+      const where = n.kind === "scene" ? "whole scene"
+        : n.kind === "audio" ? audioWhere(n.audio)
+        : n.w != null ? `box ${n.x},${n.y} ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%, ${n.y}%` : "";
       const noteText = escapeMd(n.text);
-      const targetText = n.target && n.target.text ? ` "${escapeMd(n.target.text)}"` : "";
-      const tgt = n.target
+      const targetText = !scoped && n.target && n.target.text ? ` "${escapeMd(n.target.text)}"` : "";
+      const tgt = !scoped && n.target
         ? ` · on \`${escapeMd(n.target.tag)}${n.target.cls ? "." + escapeMd(n.target.cls) : ""}\`${targetText}`
         : "";
-      const sel = n.target && n.target.selector ? ` · at \`${escapeMd(n.target.selector)}\`` : "";
+      const sel = !scoped && n.target && n.target.selector ? ` · at \`${escapeMd(n.target.selector)}\`` : "";
       const status = normalizeNoteStatus(n.status);
       const statusTag = status !== "open" ? ` · _(${status})_` : "";
-      return `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}`;
+      const head = `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}`;
+      return n.kind === "audio" ? [head, ...audioDetailLines(n.audio)].join("\n") : head;
     }),
     "",
   ].join("\n");
@@ -416,6 +469,10 @@ function handleNotes(req, res) {
           data,
         };
       }
+      // Scope: "scene" (the whole current slide) or "audio" (what's playing now). Anything
+      // else is a normal element/region/pin note, so kind stays null and isn't stored.
+      const kind = parsed.kind === "scene" || parsed.kind === "audio" ? parsed.kind : null;
+      const audio = kind === "audio" ? sanitizeAudio(parsed.audio) : null;
       return withNotes(res, (notes) => {
         const note = {
           id: notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1,
@@ -426,6 +483,8 @@ function handleNotes(req, res) {
           h: pct(parsed.h),
           scene: parsed.scene ? String(parsed.scene).slice(0, 60) : null,
           target,
+          ...(kind ? { kind } : {}),
+          ...(audio ? { audio } : {}),
           text,
           status: "open",
           createdAt: new Date().toISOString(),

@@ -132,6 +132,47 @@ async function testServerApi() {
     res = await fetch(`${base}/api/notes/${rich.id}`, { method: "DELETE" });
     assert.equal(res.status, 200);
 
+    // Scoped notes: a whole-scene note keeps kind but no target; an audio note carries a
+    // sanitized audio snapshot (bounded clip metadata) and renders enriched markdown.
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 3, scene: "intro", kind: "scene", text: "whole slide feels crowded" }),
+    });
+    assert.equal(res.status, 201);
+    const sceneNote = await res.json();
+    assert.equal(sceneNote.kind, "scene");
+    assert.equal(sceneNote.target, null);
+    assert.equal(sceneNote.audio, undefined);
+
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        time: 8.6, scene: "features", kind: "audio", text: "VO is rushed here",
+        audio: {
+          voice: { src: "vo-02.mp3", start: 8, dur: 4, at: 0.6, script: "Build it once.", bogus: "x" },
+          music: { src: "bed.mp3", start: 0, at: 8.6 },
+          prev: { src: "vo-01.mp3", start: 2 },
+          next: { src: "vo-03.mp3", start: 12 },
+        },
+      }),
+    });
+    assert.equal(res.status, 201);
+    const audioNote = await res.json();
+    assert.equal(audioNote.kind, "audio");
+    assert.equal(audioNote.audio.voice.src, "vo-02.mp3");
+    assert.equal(audioNote.audio.voice.script, "Build it once.");
+    assert.equal(audioNote.audio.voice.bogus, undefined); // unknown clip fields dropped
+    assert.equal(audioNote.audio.prev.src, "vo-01.mp3");
+    assert.equal(audioNote.audio.prev.at, undefined); // brief clips carry no local time
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /_\(whole scene\)_/);
+    assert.match(md, /_\(audio: VO vo-02\.mp3 @ 0:00\.60, music bed\.mp3\)_/);
+    assert.match(md, /VO script: "Build it once\."/);
+    assert.match(md, /clip order: prev vo-01\.mp3 \(0:02\.00\), next vo-03\.mp3 \(0:12\.00\)/);
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
     res = await fetch(`${base}/api/mix`, {
       method: "POST",
       headers: { "content-type": "application/json" },

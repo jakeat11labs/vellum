@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.2] - June 24, 2026
+## [0.5.3] - June 25, 2026
+
+### Added
+- **Whole-scene and audio feedback notes.** A collapsible dock on the left edge of the player lets you drop a note scoped to the entire current scene (▣) or to the audio playing right now (🔊) — no element click needed, and it works outside note mode. Audio notes auto-capture the active VO and music clips (filename + local timestamp) plus the previous/next VO clips for series context, and surface the VO script text when the composition embeds it on the clip. Scoped notes get distinct timeline markers (square for scene, ring for audio), a kind badge in the notes drawer, and render in `annotations.md` as `_(whole scene)_` / `_(audio: VO … @ m:ss, music …)_` with indented script/clip-order context — so a coding agent knows exactly what each note is about.
 
 ### Added
 - **The Save button shows its keyboard shortcut.** "Save note" / "Save changes" now carries a key-cap hint — `⌘↵` on macOS, `Ctrl+↵` on Windows/Linux — so the ⌘/Ctrl+Enter save shortcut is discoverable.
