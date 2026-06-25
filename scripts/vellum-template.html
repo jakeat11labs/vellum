@@ -39,6 +39,9 @@
       #composer .tgt { font-size: 12px; color: var(--c, #5eead4); margin-bottom: 8px; word-break: break-word; }
       #composer .tgt select { width: 100%; margin-top: 2px; background: #0e0e11; color: var(--c, #5eead4); border: 1px solid #2c2c32; border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
       #composer button.primary { background: var(--c, #5eead4); border-color: var(--c, #5eead4); }
+      /* Keyboard-shortcut hint riding inside the Save button — dark inset so it reads as a key cap on the bright fill */
+      #composer-save { display: inline-flex; align-items: center; gap: 7px; }
+      #composer-save .kbd-hint { font-size: 11px; line-height: 1; padding: 2px 5px; border-radius: 4px; background: rgba(14,14,17,0.32); color: #0e0e11; opacity: 0.72; font-variant-numeric: tabular-nums; }
       #composer textarea { width: 100%; height: 78px; resize: vertical; background: #0e0e11; color: #e8e8ea; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px; font: inherit; font-size: 14px; }
       #composer .row { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
       button { font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid #2c2c32; background: #1f1f25; color: #e8e8ea; padding: 7px 12px; }
@@ -144,7 +147,7 @@
           <textarea id="composer-text" placeholder="What's the note? (e.g. make this bubble bigger, cut 2s here, caption lands late)"></textarea>
           <div class="row">
             <button id="composer-cancel">Cancel</button>
-            <button id="composer-save" class="primary">Save note</button>
+            <button id="composer-save" class="primary">Save note<span class="kbd-hint"></span></button>
           </div>
         </div>
         <div id="status"></div>
@@ -853,6 +856,17 @@
       });
 
       const composerSaveBtn = document.getElementById("composer-save");
+      // Mirror the ⌘/Ctrl+Enter save shortcut on the button so it's discoverable.
+      const IS_MAC = /Mac|iPhone|iPad/i.test(navigator.platform || navigator.userAgent || "");
+      const SAVE_HINT = IS_MAC ? "⌘↵" : "Ctrl+↵";
+      function setSaveLabel(label) {
+        composerSaveBtn.textContent = label; // wipes any prior label/hint
+        const hint = document.createElement("span");
+        hint.className = "kbd-hint";
+        hint.textContent = SAVE_HINT;
+        composerSaveBtn.appendChild(hint);
+      }
+      setSaveLabel("Save note"); // seed the default before the composer first opens
 
       // Target line in the composer. With one candidate it's a plain label; with several
       // (stacked/overlapping elements) it becomes a dropdown — picking an option flashes
@@ -895,7 +909,7 @@
           flashEl(pending.candidates[pending.candIndex].el, pending.color);
         }
         composerText.value = pending.text || "";
-        composerSaveBtn.textContent = pending.editId ? "Save changes" : "Save note";
+        setSaveLabel(pending.editId ? "Save changes" : "Save note");
         const vp = viewport.getBoundingClientRect();
         composer.style.left = `${Math.min(clientX - vp.left, vp.width - 360)}px`;
         composer.style.top = `${Math.min(clientY - vp.top + 14, vp.height - 220)}px`;

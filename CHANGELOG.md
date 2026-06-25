@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.2] - June 24, 2026
+
+### Added
+- **The Save button shows its keyboard shortcut.** "Save note" / "Save changes" now carries a key-cap hint — `⌘↵` on macOS, `Ctrl+↵` on Windows/Linux — so the ⌘/Ctrl+Enter save shortcut is discoverable.
+
 ## [0.5.1] - June 24, 2026
 
 ### Added
