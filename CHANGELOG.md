@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - June 25, 2026
+
+A pass at making the handoff artifact carry more of its own context, so the consuming coding agent gets things right on the first pass.
+
+### Added
+- **`composition.json` manifest.** The player now writes `notes/composition.json` describing the composition the way an agent needs it — the scene map (`id`/`start`/`duration`), dimensions, duration, fps, the VO/music clip layout, and whether captions exist — so an agent can resolve any note's scene and timing without re-parsing the source. New `/api/composition` endpoint; the browser posts it once at mount.
+- **`annotations.md` is now a self-sufficient work order.** Each element-targeted note surfaces the picker label, the element's on-frame bounds, and its captured timing attrs (`data-start`/`data-duration`) on an indented sub-line, and the file carries a legend plus composition dimensions and a pointer to `composition.json` — so an agent can act from the Markdown alone, without cross-referencing the JSON or the skill.
+
+### Fixed
+- **Atomic note/mix/manifest writes.** `annotations.json`, `mix.json`, and `composition.json` are written via a temp file + atomic rename, so a crash mid-write can't truncate the notes file and wedge the review API.
+
 ## [0.5.4] - June 25, 2026
 
 ### Added

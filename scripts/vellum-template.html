@@ -466,6 +466,7 @@
         }
         voiceEls = allAudioEls.filter((a) => a !== musicEl);
         await loadCaptions(); // VO transcript for audio-note enrichment (best-effort; absent in many comps)
+        postComposition(compDoc); // persist the scene/timing map for the consuming agent (best-effort)
 
         // Seed mix sliders from the saved mix, falling back to the composition's data-volume.
         let savedMix = {};
@@ -929,6 +930,24 @@
       // ---- scoped notes: whole-scene & audio feedback (no element click needed) ----
       const round2 = (n) => Math.round(n * 100) / 100;
       const audioBasename = (a) => { const s = (a && a.getAttribute("src")) || ""; const base = s.split(/[\\/]/).pop() || null; try { return base ? decodeURIComponent(base) : null; } catch { return base; } };
+      // Persist the parsed composition (scene map, dims, audio clip layout, captions flag) to
+      // notes/composition.json so the consuming agent can resolve any note's scene/timing without
+      // re-running the GSAP timeline. The browser is the source of truth; best-effort, never blocks.
+      function postComposition(doc) {
+        try {
+          const root = compRoot(doc);
+          const fps = root ? Number(root.getAttribute("data-fps")) : NaN;
+          const clip = (a) => { const x = audioTimings.find((t) => t.a === a) || {}; return { src: audioBasename(a), start: round2(x.start || 0), dur: x.dur || null }; };
+          const manifest = {
+            width: compW, height: compH, duration: round2(duration),
+            fps: Number.isFinite(fps) && fps > 0 ? fps : null,
+            scenes: scenes.map((s) => ({ id: s.id, start: round2(s.start), duration: s.duration != null ? round2(s.duration) : null })),
+            audio: { voice: voiceEls.map(clip), music: musicEl ? [clip(musicEl)] : [] },
+            captions: vttCues.length > 0,
+          };
+          fetch("/api/composition", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(manifest) });
+        } catch (e) {}
+      }
       // Best-effort VO script text: HyperFrames doesn't embed it on <audio>, but if a
       // composition tags clips with a caption/transcript/label attribute, surface it.
       function clipScript(a) {

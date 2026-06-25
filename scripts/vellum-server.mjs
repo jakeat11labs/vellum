@@ -198,6 +198,17 @@ const NOTES_DIR = path.join(COMP_ABS, "notes");
 const NOTES_JSON = path.join(NOTES_DIR, "annotations.json");
 const NOTES_MD = path.join(NOTES_DIR, "annotations.md");
 const MIX_JSON = path.join(NOTES_DIR, "mix.json");
+const COMP_JSON = path.join(NOTES_DIR, "composition.json"); // scene/timing manifest the player POSTs at mount
+
+// Write via a temp file + rename so a crash mid-write can't leave a half-written
+// annotations.json that wedges every subsequent /api/notes read. Rename is atomic
+// within the same directory.
+function writeFileAtomic(file, data) {
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, file);
+}
+const writeJsonAtomic = (file, obj) => writeFileAtomic(file, `${JSON.stringify(obj, null, 2)}\n`);
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_FILE = path.join(HERE, "vellum-template.html");
@@ -301,14 +312,33 @@ function audioDetailLines(a) {
   return lines;
 }
 
+// Indented detail for an element-targeted note: the picker label, the element's bounds,
+// and its captured data-* attrs (e.g. data-start/data-duration) — the timing/layout context
+// an agent needs to act, which the note already stores but the headline line omits.
+function elementDetailLine(t) {
+  if (!t) return null;
+  const bits = [];
+  if (t.label) bits.push(`label "${escapeMd(t.label)}"`);
+  if (t.box && t.box.x != null) bits.push(`box ${t.box.x},${t.box.y} ${t.box.w}×${t.box.h}%`);
+  if (t.data && Object.keys(t.data).length) {
+    bits.push(`data ${Object.entries(t.data).map(([k, v]) => `${escapeMd(k)}=${escapeMd(String(v))}`).join(", ")}`);
+  }
+  return bits.length ? `  - element: ${bits.join(" · ")}` : null;
+}
+
 function writeNotes(notes) {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
-  fs.writeFileSync(NOTES_JSON, `${JSON.stringify(notes, null, 2)}\n`);
+  writeJsonAtomic(NOTES_JSON, notes);
   const sorted = [...notes].sort((a, b) => a.time - b.time);
+  let manifest = null;
+  try { manifest = JSON.parse(fs.readFileSync(COMP_JSON, "utf8")); } catch {}
+  const dims = manifest && manifest.width && manifest.height ? ` on a ${manifest.width}×${manifest.height} composition` : "";
+  const hasMap = manifest && Array.isArray(manifest.scenes) && manifest.scenes.length;
   const md = [
     `# Review notes${COMP_DIR ? ` — ${COMP_DIR}` : ""}`,
     "",
-    `${notes.length} note(s). Times are composition-time (M:SS.ss).`,
+    `${notes.length} note(s)${dims}. Times are composition-time (M:SS.ss).${hasMap ? " Scene & clip timings: `composition.json` (same folder)." : ""}`,
+    "Legend: `_(where)_` = pin/box/whole-scene/audio · `on tag.cls` = targeted element · `at selector` = exact DOM path · `box` = element bounds x,y w×h (% of frame) · `data-*` = the element's own timing attrs · status ∈ open / resolved / wontfix.",
     "",
     ...sorted.map((n) => {
       // Scoped notes (whole scene / audio) describe their subject instead of a pin/box + element.
@@ -325,11 +355,14 @@ function writeNotes(notes) {
       const status = normalizeNoteStatus(n.status);
       const statusTag = status !== "open" ? ` · _(${status})_` : "";
       const head = `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}`;
-      return n.kind === "audio" ? [head, ...audioDetailLines(n.audio)].join("\n") : head;
+      const extra = n.kind === "audio" ? audioDetailLines(n.audio)
+        : scoped ? []
+        : [elementDetailLine(n.target)].filter(Boolean);
+      return [head, ...extra].join("\n");
     }),
     "",
   ].join("\n");
-  fs.writeFileSync(NOTES_MD, md);
+  writeFileAtomic(NOTES_MD, md);
 }
 
 function sendJson(res, code, body) {
@@ -521,9 +554,49 @@ function handleMix(req, res) {
         savedAt: new Date().toISOString(),
       };
       fs.mkdirSync(NOTES_DIR, { recursive: true });
-      fs.writeFileSync(MIX_JSON, `${JSON.stringify(mix, null, 2)}\n`);
+      writeJsonAtomic(MIX_JSON, mix);
       logEvent(ui.glyph.music, `mix saved ${ui.dim(`— voice ${Math.round(mix.voice * 100)}% · music ${Math.round(mix.music * 100)}%`)}`);
       return sendJson(res, 201, mix);
+    });
+  }
+  return sendJson(res, 405, { error: "method not allowed" });
+}
+
+// notes/composition.json — a bounded scene/timing manifest the player POSTs once at mount.
+// It gives the consuming agent the full scene map + audio clip layout to resolve any note's
+// scene window and timing without re-parsing the composition. The browser is the source of
+// truth (it ran the GSAP timeline); the server only sanitizes and persists.
+function handleComposition(req, res) {
+  if (req.method === "OPTIONS") return sendJson(res, 204, {});
+  if (req.method === "GET") {
+    try { return sendJson(res, 200, JSON.parse(fs.readFileSync(COMP_JSON, "utf8"))); }
+    catch { return sendJson(res, 200, {}); }
+  }
+  if (req.method === "POST") {
+    return readBody(req, res, 2e5, (parsed) => {
+      const num = (v) => boundedNumber(v, null, { min: 0, decimals: 1000 });
+      const clip = (c) => c && typeof c === "object"
+        ? { src: c.src != null ? String(c.src).slice(0, 200) : null, start: num(c.start), dur: c.dur != null ? num(c.dur) : null }
+        : null;
+      const clips = (x) => (Array.isArray(x) ? x.slice(0, 100).map(clip).filter(Boolean) : []);
+      const scenes = Array.isArray(parsed.scenes)
+        ? parsed.scenes.slice(0, 300).map((s) => ({ id: String((s && s.id) ?? "").slice(0, 80), start: num(s && s.start), duration: s && s.duration != null ? num(s.duration) : null }))
+        : [];
+      const manifest = {
+        composition: COMP_DIR ? `${COMP_DIR}/index.html` : "index.html",
+        width: boundedNumber(parsed.width, null, { min: 0, max: 100000 }),
+        height: boundedNumber(parsed.height, null, { min: 0, max: 100000 }),
+        duration: num(parsed.duration),
+        fps: parsed.fps != null ? boundedNumber(parsed.fps, null, { min: 0, max: 1000, decimals: 1000 }) : null,
+        scenes,
+        audio: { voice: clips(parsed.audio && parsed.audio.voice), music: clips(parsed.audio && parsed.audio.music) },
+        captions: Boolean(parsed.captions),
+        tool: `vellum ${VERSION}`,
+        savedAt: new Date().toISOString(),
+      };
+      fs.mkdirSync(NOTES_DIR, { recursive: true });
+      writeJsonAtomic(COMP_JSON, manifest);
+      return sendJson(res, 201, { ok: true, scenes: manifest.scenes.length });
     });
   }
   return sendJson(res, 405, { error: "method not allowed" });
@@ -622,6 +695,7 @@ const server = http.createServer((req, res) => {
   if (noteMatch) return handleNoteById(req, res, noteMatch[1]);
   if (pathname === "/api/notes") return handleNotes(req, res);
   if (pathname === "/api/mix") return handleMix(req, res);
+  if (pathname === "/api/composition") return handleComposition(req, res);
   return serveStatic(req, res);
 });
 

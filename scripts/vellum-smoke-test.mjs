@@ -129,8 +129,42 @@ async function testServerApi() {
     assert.deepEqual(rich.target.data, { "data-start": "8", "data-duration": "4" });
     md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
     assert.match(md, /at `#features > div\.card:nth-of-type\(2\)`/);
+    // Self-sufficient work order: legend + the element sub-line surfacing label/box/data-*.
+    assert.match(md, /^Legend: /m);
+    assert.match(md, /- element: label "Text" · box 24\.1,30 10×100% · data data-start=8, data-duration=4/);
     res = await fetch(`${base}/api/notes/${rich.id}`, { method: "DELETE" });
     assert.equal(res.status, 200);
+
+    // Composition manifest: the player POSTs a scene/timing map; the server sanitizes
+    // (clamps numbers, caps strings, fixed shape) and persists notes/composition.json.
+    res = await fetch(`${base}/api/composition`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        width: 1920, height: 1080, duration: 21, fps: 30,
+        scenes: [{ id: "intro", start: 0, duration: 6 }, { id: "outro", start: 6, duration: 5 }],
+        audio: { voice: [{ src: "assets/vo-01.mp3", start: 0.9, dur: 26.1 }], music: [{ src: "bed.mp3", start: 0, dur: 245 }] },
+        captions: true,
+      }),
+    });
+    assert.equal(res.status, 201);
+    assert.equal((await res.json()).scenes, 2);
+    const comp = await (await fetch(`${base}/api/composition`)).json();
+    assert.equal(comp.width, 1920);
+    assert.equal(comp.scenes.length, 2);
+    assert.equal(comp.audio.voice[0].src, "assets/vo-01.mp3"); // src stored verbatim in manifest (player already basenames per-note)
+    assert.equal(comp.captions, true);
+    assert.match(comp.tool, /^vellum /);
+    assert.ok(comp.savedAt, "manifest stamped with savedAt");
+    // With a manifest present, annotations.md header points the agent at it.
+    await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 1, scene: "intro", text: "after-manifest note" }),
+    });
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /1920×1080 composition/);
+    assert.match(md, /composition\.json/);
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
 
     // Scoped notes: a whole-scene note keeps kind but no target; an audio note carries a
     // sanitized audio snapshot (bounded clip metadata) and renders enriched markdown.
