@@ -12,6 +12,7 @@
     "vellum:review": "node scripts/vellum-review.mjs",
     "annotate": "node scripts/vellum-server.mjs",
     "review": "node scripts/vellum-review.mjs",
+    "version": "node scripts/sync-version.mjs && git add scripts/vellum-shared.mjs",
     "test": "node scripts/vellum-smoke-test.mjs"
   },
   "keywords": [

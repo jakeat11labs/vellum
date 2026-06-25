@@ -265,6 +265,17 @@ function testVellumShimFindsProject() {
   assert.match(result.stdout, /shim-ok/);
 }
 
+async function testVersionSourcesAgree() {
+  const pkg = JSON.parse(fs.readFileSync(path.join(REPO, "package.json"), "utf8")).version;
+  const { VERSION } = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
+  assert.equal(
+    VERSION,
+    pkg,
+    `version drift — package.json '${pkg}' vs vellum-shared.mjs '${VERSION}'. Run \`npm version\` or \`node scripts/sync-version.mjs\` to resync.`
+  );
+}
+
+await testVersionSourcesAgree();
 await testServerApi();
 await testMalformedNotesArePreserved();
 testVellumDirGuard();
