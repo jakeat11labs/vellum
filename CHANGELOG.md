@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.5.1] - June 24, 2026
+
+### Added
+- **Hover a timeline note dot for a quick preview.** Mousing over a note's color-coded dot now pops a small card above the timeline showing the note's id, timecode, scene, and text — scan notes without opening the drawer. The card floats above the viewer in the note's color.
+- **⌘/Ctrl+Enter saves a note.** In the note composer, press ⌘+Enter (macOS) or Ctrl+Enter (Windows/Linux) to save without reaching for the button.
+
+### Changed
+- **Timeline note dots are easier to hit.** Each dot now has a larger invisible hit area, so the cursor catches it without pixel-perfect aim.
+
 ## [0.5.0] - June 15, 2026
 
 ### Added

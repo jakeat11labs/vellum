@@ -67,7 +67,16 @@
       /* Colored dots above the bar, one per note, at its point on the timeline */
       .note-dots { position: absolute; left: 0; right: 0; top: 50%; height: 0; pointer-events: none; z-index: 2; }
       .note-dot { position: absolute; top: -11px; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); background: var(--c, #5eead4); border: 1.5px solid #121216; box-shadow: 0 0 4px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; transition: transform .12s ease, filter .12s ease; }
+      /* Invisible padded hit area so the cursor catches the dot without pixel-perfect aim */
+      .note-dot::before { content: ""; position: absolute; left: 50%; top: 50%; width: 30px; height: 26px; transform: translate(-50%, -50%); }
       .note-dot:hover { transform: translateX(-50%) scale(1.4); filter: brightness(1.2); }
+      /* Hover preview for a timeline dot — fixed so it floats above the viewer, accented in the note's color (--c).
+         JS sets left/top from the dot's screen position; transform keeps it centered over the dot. */
+      #note-tip { position: fixed; z-index: 100; width: 240px; max-width: 240px; transform: translateX(-50%); background: #17171b; border: 1px solid color-mix(in srgb, var(--c, #5eead4) 40%, #2c2c32); border-radius: 10px; padding: 8px 10px; box-shadow: 0 10px 36px rgba(0,0,0,0.6); pointer-events: none; display: none; }
+      #note-tip::after { content: ""; position: absolute; top: 100%; left: 50%; transform: translateX(-50%); border: 6px solid transparent; border-top-color: #17171b; }
+      #note-tip .tip-meta { font-size: 11px; color: var(--c, #5eead4); font-variant-numeric: tabular-nums; margin-bottom: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      #note-tip .tip-text { font-size: 13px; color: #e8e8ea; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
+      #note-tip .tip-text.empty { color: #6f6f78; font-style: italic; }
       #tc { font-variant-numeric: tabular-nums; font-size: 12px; color: #b9b9c0; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.02em; }
       #scene-tag { font-size: 11px; color: #5eead4; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; margin: 0 6px; }
       #copy-scene { padding: 4px 6px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 13px; flex-shrink: 0; }
@@ -158,6 +167,7 @@
           <div class="scene-ticks" id="scene-ticks"></div>
           <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" />
           <div class="note-dots" id="note-dots"></div>
+          <div id="note-tip"><div class="tip-meta"></div><div class="tip-text"></div></div>
         </div>
         <span id="tc">0:00.00 / 0:00.00</span>
         <div class="sep"></div>
@@ -241,6 +251,10 @@
       const voiceVal = document.getElementById("voice-val");
       const musicVal = document.getElementById("music-val");
       const noteDots = document.getElementById("note-dots");
+      const noteTip = document.getElementById("note-tip");
+      const noteTipMeta = noteTip.querySelector(".tip-meta");
+      const noteTipText = noteTip.querySelector(".tip-text");
+      const scrubWrap = document.getElementById("scrubwrap");
       const sceneTicks = document.getElementById("scene-ticks");
       const viewport = document.getElementById("viewport");
 
@@ -942,6 +956,14 @@
         loadNotes();
       };
 
+      // ⌘+Enter (mac) / Ctrl+Enter (win/linux) saves without reaching for the button.
+      composerText.addEventListener("keydown", (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+          e.preventDefault();
+          composerSaveBtn.click();
+        }
+      });
+
       const STATUS_CYCLE = ["open", "resolved", "wontfix"];
       async function cycleStatus(note, ev) {
         ev.stopPropagation();
@@ -1009,11 +1031,29 @@
           dot.className = "note-dot";
           dot.style.left = `${pct}%`;
           dot.style.setProperty("--c", colorFor(n.id));
-          dot.title = `note-${n.id} · ${fmt(n.time)} — ${n.text || ""}`;
           dot.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
+          dot.addEventListener("mouseenter", () => showNoteTip(n, dot));
+          dot.addEventListener("mouseleave", hideNoteTip);
           noteDots.appendChild(dot);
         });
       }
+      // Hover preview floating above a timeline dot: scene + timecode, then the note text.
+      // Fixed-positioned from the dot's on-screen rect so it sits above the viewer rather
+      // than being clipped by it; centered over the dot and clamped to the window edges.
+      function showNoteTip(n, dot) {
+        noteTip.style.setProperty("--c", colorFor(n.id));
+        noteTipMeta.textContent = `note-${n.id} · ${fmt(n.time)}${n.scene ? ` · ${n.scene}` : ""}`;
+        const text = (n.text || "").trim();
+        noteTipText.textContent = text || "(no text)";
+        noteTipText.classList.toggle("empty", !text);
+        noteTip.style.display = "block"; // show first so offsetWidth/Height measure correctly
+        const r = dot.getBoundingClientRect();
+        const half = noteTip.offsetWidth / 2;
+        const cx = Math.min(Math.max(r.left + r.width / 2, half + 8), window.innerWidth - half - 8);
+        noteTip.style.left = `${cx}px`;
+        noteTip.style.top = `${r.top - noteTip.offsetHeight - 12}px`;
+      }
+      function hideNoteTip() { noteTip.style.display = "none"; }
       function renderList() {
         noteList.innerHTML = "";
         notes.forEach((n) => {
