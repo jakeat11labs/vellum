@@ -151,9 +151,9 @@ async function testServerApi() {
       body: JSON.stringify({
         time: 8.6, scene: "features", kind: "audio", text: "VO is rushed here",
         audio: {
-          voice: { src: "vo-02.mp3", start: 8, dur: 4, at: 0.6, script: "Build it once.", bogus: "x" },
+          voice: { src: "vo-02.mp3", start: 8, dur: 4, at: 0.6, line: "Build it once.", script: "Build it once. Then reuse it.", bogus: "x" },
           music: { src: "bed.mp3", start: 0, at: 8.6 },
-          prev: { src: "vo-01.mp3", start: 2 },
+          prev: { src: "vo-01.mp3", start: 2, script: "Here's the idea." },
           next: { src: "vo-03.mp3", start: 12 },
         },
       }),
@@ -162,15 +162,18 @@ async function testServerApi() {
     const audioNote = await res.json();
     assert.equal(audioNote.kind, "audio");
     assert.equal(audioNote.audio.voice.src, "vo-02.mp3");
-    assert.equal(audioNote.audio.voice.script, "Build it once.");
+    assert.equal(audioNote.audio.voice.line, "Build it once.");
+    assert.equal(audioNote.audio.voice.script, "Build it once. Then reuse it.");
     assert.equal(audioNote.audio.voice.bogus, undefined); // unknown clip fields dropped
     assert.equal(audioNote.audio.prev.src, "vo-01.mp3");
-    assert.equal(audioNote.audio.prev.at, undefined); // brief clips carry no local time
+    assert.equal(audioNote.audio.prev.script, "Here's the idea."); // brief clips keep a short script
+    assert.equal(audioNote.audio.prev.at, undefined); // ...but no local time
     md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
     assert.match(md, /_\(whole scene\)_/);
     assert.match(md, /_\(audio: VO vo-02\.mp3 @ 0:00\.60, music bed\.mp3\)_/);
-    assert.match(md, /VO script: "Build it once\."/);
-    assert.match(md, /clip order: prev vo-01\.mp3 \(0:02\.00\), next vo-03\.mp3 \(0:12\.00\)/);
+    assert.match(md, /VO line: "Build it once\."/);
+    assert.match(md, /VO clip script: "Build it once\. Then reuse it\."/);
+    assert.match(md, /clip order: prev vo-01\.mp3 \(0:02\.00\) — "Here's the idea\."; next vo-03\.mp3 \(0:12\.00\)/);
     await fetch(`${base}/api/notes`, { method: "DELETE" });
 
     res = await fetch(`${base}/api/mix`, {

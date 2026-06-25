@@ -67,7 +67,7 @@
       #bar .sep { width: 1px; height: 20px; background: #25252b; margin: 0 10px; flex-shrink: 0; }
       /* Logo */
       #bar .brandwrap { display: flex; align-items: center; gap: 7px; padding-right: 2px; flex-shrink: 0; }
-      #bar .brand-mark { width: 26px; height: 26px; display: block; flex-shrink: 0; filter: drop-shadow(0 0 5px rgba(94,234,212,0.45)); }
+      #bar .brand-mark { width: 26px; height: 26px; display: block; flex-shrink: 0; filter: drop-shadow(0 1px 4px rgba(125,140,255,0.45)); }
       #bar .brand { font-weight: 700; letter-spacing: 0.06em; color: #c8c8d0; font-size: 12px; }
       /* Transport */
       #bar .transport { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
@@ -180,9 +180,7 @@
 
       <div id="bar">
         <span class="brandwrap">
-          <svg class="brand-mark" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M4 4l6 16M20 4l-6 16M10 20h4" stroke="#5eead4" stroke-width="3" stroke-linecap="round"/>
-          </svg>
+          <img class="brand-mark" id="brand-mark" alt="Vellum" />
           <span class="brand">VELLUM</span>
         </span>
         <div class="sep"></div>
@@ -252,11 +250,12 @@
       // [data-start] children. If a future runtime renames any of these, update them here.
 
       // Vellum mark (stacked "vellum" sheets forming a V) — used as favicon + bar icon.
-      const MARK = "data:image/png;base64,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";
+      const MARK = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAAAAXNSR0IArs4c6QAAAJhlWElmTU0AKgAAAAgABAEaAAUAAAABAAAAPgEbAAUAAAABAAAARgEoAAMAAAABAAIAAIdpAAQAAAABAAAATgAAAAAAAABIAAAAAQAAAEgAAAABAASQBAACAAAAFAAAAISgAQADAAAAAQABAACgAgAEAAAAAQAAAECgAwAEAAAAAQAAAEAAAAAAMjAyNjowNjoxMCAxNDo0MTo0NwCbGkKQAAAACXBIWXMAAAsTAAALEwEAmpwYAAABsmlUWHRYTUw6Y29tLmFkb2JlLnhtcAAAAAAAPHg6eG1wbWV0YSB4bWxuczp4PSJhZG9iZTpuczptZXRhLyIgeDp4bXB0az0iWE1QIENvcmUgNi4wLjAiPgogICA8cmRmOlJERiB4bWxuczpyZGY9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkvMDIvMjItcmRmLXN5bnRheC1ucyMiPgogICAgICA8cmRmOkRlc2NyaXB0aW9uIHJkZjphYm91dD0iIgogICAgICAgICAgICB4bWxuczp4bXA9Imh0dHA6Ly9ucy5hZG9iZS5jb20veGFwLzEuMC8iPgogICAgICAgICA8eG1wOkNyZWF0b3JUb29sPkFkb2JlIFBob3Rvc2hvcCAyNy43IChNYWNpbnRvc2gpPC94bXA6Q3JlYXRvclRvb2w+CiAgICAgICAgIDx4bXA6Q3JlYXRlRGF0ZT4yMDI2LTA2LTEwVDE0OjQxOjQ3PC94bXA6Q3JlYXRlRGF0ZT4KICAgICAgPC9yZGY6RGVzY3JpcHRpb24+CiAgIDwvcmRmOlJERj4KPC94OnhtcG1ldGE+CnD6T7AAABd4SURBVHgB7VttjFxXeT7nfs737sx+2Y43cZzYCWsSkoaKUpUQt0GFNKkIrfOnSmgBtRWtqiLUSm1/4PyBIkQpUSgQJW2hSiPsCFO1FYaSuojPQCmYkpBkEye211/7NTM7c+d+n9PnObPjbOLdeL1OqNT62tf3zp0755z3eZ/3ed9z7rUQl7ZLCFxC4BIClxC4hMD/WwTkei3f+4SuXO51i+1ulp6w4vRbwYT6zozIxV0yWW8br819Wt73DuFdOSns8es7xbzqFLK8ndz8ns1z6+lvXQA8+lzwxl/YXHzEEaKaKZ3kWiSZUioXVqK0WtJapEqLXEoAIuWipRVAkQtH22Lfr25zv72egax1z749++w3/+m73ukWxS3ocEhIIbUSZaFEzXKFIy1RsIVV01K7ti2LOJZsS6SLJ7K/uuqt/kfXandwHTadfzvasapv2SqvRk8iV1Jo/EQLCzYKYVs44oKFc+4AQdj44+GeYV+99/7DwVv/8A3l/zp/L6vfcfO9d947usX+C3YDAITK0J3q35vjs0TfcIBQHBeuay1FsSzE/FF5/eotvvQqmj3/9sEvnf7OkWb6YxoI9+s41Toyu1C9SOsw1iqMhQpw3ov6x04i9ETRqtw44f/e+XtY/Y5v7+td5tfs9ycwutcTutdDX2g/5h4KnUQa51qnsdB5Cgyw6xz3tbRoPaUPrN7qS6+uCwCx98roSEd/ITPOljoD4hnQ5p4C+RSfU37GEeGBUfSPIa5dVpZ3/O6hpdGXdru+T5M7/TsrNVmHpzW9bDy/fISh6ATXlncygwwB/WVrRh39/iPhY+vpZX0AoKWvz4gvzrRUTwlt0VAaDQHo7+jYAIBjDqMNCPgOTBETZWvzndsKv7aeway8Z98ebfs1/VsK7Sm0xaOhOvowxtJg7imuY1cYlMZnC/c1X1D//P5vDjdXtrfW+boBeGC3/9RzS/prridhNEPB7JLnND6BOPSZoGUfBAkmSM2wubJm3Y1h4mz9264PhDcVytZNCehtYhv96Rz6ByPzZcNVhrhP0Y8BAc1DgjundXrqMfH59fZ0QYP68++mb/vt65wvZ5mwYiKOXiDK+KM19FE6gNOzpHZgrGtL0f8sZKx0fOBI9qbff713eL0DO/HT/JPjW60/6nXh/AxaR8OBsM4gezCYxmbQhDwAsAAHg9GWI2XQVEv2hP47t2Y5ti98+GYxi7K/ly5UCluah90dP/diinzFLPDwj1v12pC/y6aoYwDzce4eaVpnQOstXYigAYAQ4sQFCkUbSYAXAYREz/yKzhkqSv8NDXkPPn4Q+3m3bzys615Z3QmxI/0lPQ7DAQC8jQSrYUqyABy66AoUQ9ijM43OwThX1oY22X9swTKkTrEUqHlQ9KCUbgdNyEzlmw8dOtTcvXs3WhViTQD27NP2L16RfWG45LwtBcIUvByB+N9zkBolNTyNVAzU0TWtZvrpYnAW8p8FRCzkQ8YjQYgw4M1F+64/+5r+8EdulQvnQ2DT6/LbS2V7kvRHejMhABBkBjRz9BHOaSkBhnQJUL81C4xLe1q4YwjRGDWJAiSOsLJMP6qS9KTl+o62E8vznfbAeP4S41992/8kjJMyKQIiG86GUdoBveuwfCnqCzJjnfHP2sAFIAXc20Na4HUjXGADB5hmQo1W5dZ3XpvfvnpvK69qWaqJezgyoyWZljDCsAChoMM2nJEAFHyfwTFxT4guIG3NwNtn8DnE55NadGe0WDyKYk2JKTlc+rjTsO+zi/77cm2XDx/ujA96XBMAsVeq57v6o0GsUhYhwFtT1EbLUrQjZYQwhFciECnGQHqIT3qbYCQ52IEj0yF3GsIwGS+K95JZg85XO/7nY+mNfsl6C+jfFz/0ybZY9CQJ+gvwKwCdggk0uHUCx1N9ALRrAsF4TvpwSs2SlRH75tqwfXupYv+K7Yjpgpd1Kp4eHvS9JgAPPqEb7ch55lSgHo/AuDYMXIyU7EF80lxL0h0AGOP7Ry15pPD1SFVYnuM+MoAgoIDRFc968++8Pvz5QeerHccus+8ulqTP3M+8brzPI3Z6m0AAUBl2AAi8bdpnQwg9tw5mEF6EBo9OFWNQTEboP8wfF4E6mKR20atU5wd9A8tzt2PN5AP1kv4TuNSai6xChAoL2U9qxhkMGq/Y+gQ84UD06Fn2iXgBQ4Sse1LHMJwDhij3CxjDAi2qJelsr3t34/bvnturEAf3tRt+Sf5GX/xgNPqiwWyL8W+8D4AzaEMcQGfxvakNALxbA0sLaJWxit0qCGlh0OiaxFSoFB+yCiq2cu1s3SrO1girMgCqtqniyc0lV06M+bJGUSu7UhcdqQv4xUhBIiaVoX8IaWUYcEesG1Yw94eUf/RuPEQWYAcLRNWz3vWP3+1OrAbAFTuKd5QrchJpVmVkDwynCBr6Q0hx3WyIc6MJ+NpkQB69EfwDdyqHxQe9T6dAFD0hk0R/L43Sr6Yqq4S5njOqbVpaQwRnmtmng1TPEzqIoPbhYnoD/pQ0zkUHDV+IAGEQwFBSP8Qoejh24n59wPOUtQK9T2PAQ3hSVSty0/WbvN9c7v/sYS+GW6o67x5oBg03nqf6oy3Sn3xL0R9Uvh8K6JP6IkswGAwgABJOspD+bLKBMzNgkqfZA0U36ynHy6emame9zy9fzgB59GirXo+7C/Od7HNL6GwOcUYDT+M4Dw/OYT+DdKOhjAFUmYbyPopgzdMmE8S4RuEiOwxNKaCwDF4VNKBast9z333TgPDF7bZvpTf5BfFLZIkxnMZh5znEz7ALtmoaDzHTHgwuQMqQ6hD7aIfTT+6IfxfeZ1x6CIMkyb8nk+yrmeUOO040v9L7uOulADDbBbmuXXPNaPT8YvbX84E6heLfSuC9AAOZT6WexQCPB1Ic60nRoWcwqg6MGgHqcLRw0XEJQLA2gHZAMPteojEEI8LsrVy0brz5Hdtu4QAG21DDvscvShfeNpQ/azz7ICgQsxTFF1glK5dpaVcAwBjAnBx4H1RD3xZgdUvov+9aDYZ8tuxE3SRJ5OWXD7UG/Q2OL2EA0Mm9khM+OTfn795Rmokz9ZlqUQrf0rKOhsEuCR0wXvbxywJUjnMBjIlKw+xgQqIMT1R9EVULumfhtw5iEYJpNtyiHUfIWlm+bzCIgwd1o1CUd/a9j5zPsKF+4AbPB6sqWlZHdFQcEqIG9UAk6rkXhJg9CoNBfwnwMTg0jL5KSFk4R+xbKbyftaMvty1Ztwr57Mu9z/5fAgAvtGYqTTuSjChxqhN/NgjUMReGlmBAwWYigLDgV9SFCuhnBoqRLiBEbMQc5wHHWlJOzws12xWHF0OwJ0b+RuWWmfoA4YJ49l3rtq//IH4d+9myJf91vyAvi7GGkGPCw5jnTrq3m1K05mXeOi2D9hlpL5xAOKGP+hXQoUktig14G7SXGAurUA+LIcAO/gBbUvWpoUI5VKrobts2jBLq3O0cAN74RhSZjp9MTy/Ubt1eORPG6n4fHdD7dXSATGiML8CrJZt7v9FjHSmehbwcbUuxGEAibFnuRipNUtFiKLyYDYwYauT60pZx6x7+2itY714WPBPrBgCEFVNfhuIHNO6gBHZZDnNe0J7DIGAwPoqgK4WNcREEvwIHIVu5KIGTRD2eLMQHu1486gTnxv4AinMA4BeHv1lt5j6IB66dXHT+FisxL5AFVXTC0njAAKbEIaLPHwH2bsL5ANWbRRDiPbcmsYI0TQ0x18CUgcqT7rZtvevxH6S/DFF7cwBhRdHTFz4yYBmABPdhuhtDPGtok7WGCBDJzVMQXwDOLMOJD9YH4X3EBoeDaMiz/FPDpUqUBbF9+XXnxj6HzG1VAO66S+ZuGgcvtFpDt75OLkRx/jdA1dw8hEIHM78+C+D9Eq6XsdPDrP4SCIKpCZAV4NXJbqyOY5ksjU1GYGVmqjMBZlCptpWq4hNIkT7CQ2WY6jJL0PjldEfvB3miLcwDbHjfCCSMNEuSPtSehnNgHnTA4diY9+Ps+8lC8pUlN6oPT9TOrBb7xvq1AOCX27fXl7oLqgoW2Edmew91u+oIpsUWaC8Z/5wNcpHUsIAUxB+KIVWfcwNUjJBq6SD+twCIYxFKaObsQV1PKoehdrPcuR7GQt37+Z6Gs6AC9VnxcfGjiWlwhfdjXy6O0B9AZ7yb2Me5j6xgvI+xayXvz0tRlCRpodEQKJrX3lZlAG8nalYtbz51ojP89l1Di3GSfxLqbcpe0r6vBViBxTWKYQ3XWLlxMpRC7FgLGE8q65ooyaehA2AHrpl7+scwZpXH1IbP2MEKU/SY38FYXE+wEJLB+8UB/U11Ce54MNh2SSItfBZCTH+YDKWJ+mGyEB6s2OWhwhrKvxKONQHgTbvGx7s6iz2wwDkRuJ/vdNVPPRcZAQZj8QMsYGboh0MDlRerRIURsmpEGJi0CBbUu5mVRoloIhOYOYIxFh7Gii48CuYs0x4e1uac3qf4ZXoJ4jfE+6kpRkg5MDIPeQorQGZnKMDv8JlxwmeqdtDLteWtpfy8e7C9IgC8qWpHrefOdBu7r5Stdi//BDuh96tA3yX6HAz2KsKATAD9DM0R05os4HpemIirkzR/imEAL5PiEkvpZlGT01pWeqbag9EEwHzGogZWgboAYojAGADAcYqgA7C52iPRL2MfFZ9wINJxpH6S59Y/dctuQ7nh4ivF/roBmJycDEU3ENPT0/5TT7ceQV3wQw9Cg8mR0QGygCBwH8VgGIikKVlAyqeJWdG9Gow4CeXHnESzOsyxStTLIYwEgDtj3sR//7MFo9u4VoDhPDdtsl3uRXifqY+7Tx3AGPoPTvL73dMzS05WctbjfYJwXgbwpquummim7nDjrt3jXXjuY4x12CsrZAHYQCEEG005TDYQBNwDujMlooDgglxsbYH3jyEboD4X7SSGsxnzNB5iNwABxY+5ZgBIRYPXjXiyTQ6Y4Yc5gIV+DACIf6RRtKl+UtLul6KxkZFmGDXX433ati4A0Fhqx3568uTJ0omf2ge6vfxxpBtRYe5FC8ss0D4GRy3oP8BgXqcOwEDQGh6/Bs8Jnuf6INQ/wGJGFfFt0t6ABcZY6kGGeVQsfMzhPQCJiZTB1Hi/gHj3SswwAB7eJxDUnizPP91M5nsYauGGG1av+mjwy7d1AcAfHT5cbTZjp7Z7t4zCOP8YCxsbPZcAAr2PuQHHJCYqZjEGyMLzGDcFDDtmALKx2FOgtD4ah7IAZUetju9WeJ8LnrjOfRHFTxUAMOahwWiYOxosN/qUt9Gvj0kP5xWI/afiXnrA8yoN19UL6/U+WlwfA3gji6OCcsLZWV15/kfev3QD9Q2mHbKAlaEHQWQ41Hwhh8AOnJpB03sEgI+w8sTaqRN1BgsaDVZ4eKbXFz8e+RkGY88BANYuRGXZeFZ3wK8vfCVMiAQmWCb1oUPGv8rzT41ZvS5qDPeKK9b3RIjD47ZuBvBmFkdnurPl226TcRhlH+Zg+SyuDBA4EeJUmGuCE6Apl6Uxcs5cOA+Q8CZynhzr9awSH2bSeLPTcDKhv6McFG1Ufix7+VtDe/bNrYzYZ763MTHxIbgQPiuJ1NNBkOwPRGU0z5Nzprv9X6797wUBQGq5idVbXNRD+x/yv9YL868gIwhOfwcMIGcBAJbPEArwmnEfczioDYmQ821Rwbz+NENjGQQDxnIWUBC/AJVfDaD1qU/nY00OQicqmPmRWg76YwgY5U/zzwwPl5dynbo7d1YX1jZ19W8uCAA2ce21Y53Zbq/8oQ/hEXWqPxJGOoEUyLIPcNAanh1wvUCOQqCgDQQBUUyGAASKXiw3oQKc5VR3Off3GQD6gyVJGokKvO/A++Z3NBjkkix1i1VyCrEP7zP2k1hNp510X5I0x0CMC4r9ARwXDAB/aMdRF8XR6DVb3G+GkTrACUiBixFozbP7Ax9nrsZg+yzoF0wxqI9VzEI30DYywyKoj9J1ORUuCyBYUQNb8OIJOsLv6WWqaxXiZ6EPMoEZiMqPpx4PxHanrVTJveza6uLAqAs5bgiAHTtGlpIo4gMjpxeov4yQ1mC8LBotoMO0qMNLLJnxF9qAeTqOVHWKIZ7sTMaJPsXqzmQJXKdQwngPxuMNG9wMA6lQJt+7Qpex7kcxXPa+FceYZreSh6vVoVGlkvaFKD+aObttCAD+umqPtp58IRjddaX3I6Sh/R7W4JkSIYQmFFgTjGIpi3bwkRkVnhsdR3xQFTJFpqb2hx7AaAql2Wgot4H3ixWEAJe+MFoPXDexn+sHiyOzzTyInY3Efr8Hg/Hg9MKOk5MyVDrQ09MaBUv+cRjUwnQZU2XQFPykEZuG8RAVxuOxpFkRQsboOxYxjVnhWJLqNkDAlBDsAAOYMgebKW8pdIj12gim/6AQqQ/xg/fVc05i/UOeT4z1lN3ZqPfZ14YZYH4czjddt9e4+nL/J1GUP8yMUMSiRD/uodrw1ijEi0WRSZEwwngVqo5Bj5r5AnSBocDSmXThbqo7AOcAAEx0dLVhconwfeCKLIOHMg8GWiy4ynIPHKjMD0DbyJEMvajt6ZNLo3WnGp1pxxONuvdtzMrGO3hxIcbyGI3pYAH02eN8oQkVG150Svh8D+dpDyoeimznVcJqz+K9HphRKuIhDAQVhmvO8ApFIat1LbZciZIAy3PFMh/vq2fCMH573ce8E6sek7vkhsRvYPRFMYCN7NzMEjkcum5H4Tm8tfUQVdrnPB3f0dF1pMMyHlAUwYYCGEKW0LM0cmoKT+yxjLRlG5iyiQkfgs/vOL3ljt/U8MgLWUDid5g76gBz7c9dXyrORVjt2Tr14jM+jmUj20UDAN6iRE56MzNLI5lKHwoDcYrVIXe+JkOjhxEGJRhU5I7sAM8KCJsYwbtjzUUspIIVo1sxt6DREDvO9Sl6nOpWUf2xpMS7SS0EwBOWkx84YkUTuWttWPlXAnXRALAxPnHppHm16rVQ4anP08sQvh5SI6dBslFFoQSjyjCoBMOKNBLGPn1EipvehKfGw1rMnEIWqSMEAAx3zPhErQ5RLeI5h6NnpFSnEP0HrTDr5HnsXLvBvL/SeJ6DsBe/UYWPHz9+pqdGx6FmX+x19W7w+cvQgBuQDXbjUVmvXJBjmC/gzSXEN2heAL1DPExp4j2fGMtiNbDBLKwAPKo9QkbWGjpAZnkGa0z/ij6eRzL9t7wQhydmGgs7d/aF8WJHf9EiuHIAXDVC8qtFkbTGxsrdxBZDVp5eHiZqLsn8R6H2NwQ9lNArlr6qZT4wxSN2TIoMOIh3Lr5W8DZwpSr26HTxMRZeK/t5Nc9fVQBeaWBHTug/wPT5fj4QMXMAToZQ+PCpEys/rhWylMY9JlRQIv/7zu3ibfD8iurglXrY2Hc/MwBYNr9wMr9bSvsOMGESRU8RBZCHZzmoIYWLc4Xip4Maah4x/yMsHnxi27YiaP/abj8zAFaaATAovu7cHByOV95RHFlLS0ti69YalrQkOHJp+7+HALzON6YGu0UW7N2Lt3hWHFd8/zNj5qveEY3Yv3+/tWfPHr1/v5n7iLGx/5DV6i3ySPFJKZ4QYteuKXHUe/Zs31fgLaYwnNL8fjuWjDudm/Qtt6CCgD4uU6E/reyvL72q7Dg7iI22SoPvvZeG3iumpj4kaez4+LgpsI5ijrwDDc9gglBd4DslWLZZmJObNuE1jxXbaZyP4D/dLOB102oDj1WPozbA29jj49vUE+JJMTY7paAX+km8vYqVKAMKa48VTWz4dMMA0PAVvdLrMH4Mnq7KTmfE3ro103NzBWvB49wQeb3oWC7rXjEilpyWbIiGyIYxtVvellotWcuG8ZxA60ZD4ajABL6BhBez5npqbGxKgRUKYAuC8L8OwGDgWLgzk3+yYGqqD8Lc3Li1fXuoi8WiHLCAYHjLYNDTmPsIep6b8f6CJUdG8D+y8EYFvc/r4+M9FZqQ6CAkbiEYr6r32cdrsq0Us71791Lo5L59+7iEZh86dMh5+XEfrpsd7xHju74w9o9GNF+TQV5qtI/A/wB+vxA8wYV5VwAAAABJRU5ErkJggg==";
       (() => {
         const fav = document.createElement("link");
         fav.rel = "icon"; fav.type = "image/png"; fav.href = MARK;
         document.head.appendChild(fav);
+        const bm = document.getElementById("brand-mark"); if (bm) bm.src = MARK;
       })();
       const stage = document.getElementById("stage");
       const pins = document.getElementById("pins");
@@ -309,6 +308,7 @@
       let musicEl = null;
       let allAudioEls = [];
       let audioTimings = [];   // per-<audio> static data-* timing, parsed once at mount
+      let vttCues = [];        // composition-time caption cues from timing/voiceover-captions.vtt
       let voiceVol = 1;
       let musicVol = 0.2;
       let compW = 1920;
@@ -465,6 +465,7 @@
           }
         }
         voiceEls = allAudioEls.filter((a) => a !== musicEl);
+        await loadCaptions(); // VO transcript for audio-note enrichment (best-effort; absent in many comps)
 
         // Seed mix sliders from the saved mix, falling back to the composition's data-volume.
         let savedMix = {};
@@ -939,25 +940,73 @@
         return null;
       }
       const clipActiveAt = (x, t) => t >= x.start && (x.dur ? t < x.start + x.dur : true);
+
+      // ---- VO transcript (WebVTT) ----
+      // HyperFrames' TTS/transcribe step writes timing/voiceover-captions.vtt with
+      // composition-time cues. Vellum reads it (no hyperframes changes) to attach the real
+      // spoken line to audio notes. Absent in many comps → enrichment quietly degrades.
+      function vttTime(s) {
+        const m = String(s).trim().match(/(?:(\d+):)?(\d{1,2}):(\d{2})(?:[.,](\d{1,3}))?/);
+        if (!m) return null;
+        return (+(m[1] || 0)) * 3600 + (+m[2]) * 60 + (+m[3]) + (+((m[4] || "0").padEnd(3, "0"))) / 1000;
+      }
+      function parseVtt(text) {
+        const cues = [];
+        for (const block of text.replace(/\r/g, "").split(/\n\n+/)) {
+          const lines = block.split("\n").filter((l) => l.trim());
+          const ti = lines.findIndex((l) => l.includes("-->"));
+          if (ti < 0) continue;
+          const [a, b] = lines[ti].split("-->");
+          const start = vttTime(a), end = vttTime(b);
+          if (start == null || end == null) continue;
+          const txt = lines.slice(ti + 1).join(" ").trim();
+          if (txt) cues.push({ start, end, text: txt });
+        }
+        return cues;
+      }
+      async function loadCaptions() {
+        vttCues = [];
+        try {
+          const r = await fetch("timing/voiceover-captions.vtt", { cache: "no-cache" });
+          if (!r.ok) return;
+          const t = await r.text();
+          if (t.includes("WEBVTT")) vttCues = parseVtt(t);
+        } catch (e) {}
+      }
+      const cueAt = (t) => vttCues.find((c) => t >= c.start && t < c.end) || null;
+      // The spoken text overlapping a clip's [start, end) window, joined — the clip's script.
+      function scriptForWindow(start, dur, cap) {
+        if (!vttCues.length || start == null) return null;
+        const hi = dur ? start + dur : Infinity;
+        const txt = vttCues.filter((c) => c.end > start && c.start < hi).map((c) => c.text).join(" ").trim();
+        return txt ? txt.slice(0, cap) : null;
+      }
+
       // Snapshot the audio at composition-time t: the active VO + music clips (filename +
-      // local timestamp), plus the previous/next VO clips so an agent has series context.
+      // local timestamp + spoken line/script), plus the previous/next VO clips (with a short
+      // script) so an agent has the words and the series context.
       function captureAudioContext(t) {
         const voiceTim = audioTimings.filter((x) => voiceEls.includes(x.a)).sort((p, q) => p.start - q.start);
         const musicTim = audioTimings.filter((x) => x.a === musicEl);
-        const detail = (x) => x ? { src: audioBasename(x.a), start: round2(x.start), dur: x.dur || null, at: round2(Math.max(0, (t - x.start) + (x.mediaStart || 0))), script: clipScript(x.a) } : null;
-        const brief = (x) => x ? { src: audioBasename(x.a), start: round2(x.start) } : null;
+        const winScript = (x, cap) => scriptForWindow(x.start, x.dur, cap) || clipScript(x.a);
+        const voiceDetail = (x) => x ? {
+          src: audioBasename(x.a), start: round2(x.start), dur: x.dur || null,
+          at: round2(Math.max(0, (t - x.start) + (x.mediaStart || 0))),
+          line: (cueAt(t) || {}).text || null, script: winScript(x, 800),
+        } : null;
+        const voiceBrief = (x) => x ? { src: audioBasename(x.a), start: round2(x.start), script: winScript(x, 200) } : null;
         const activeVoice = voiceTim.find((x) => clipActiveAt(x, t)) || null;
         const activeMusic = musicTim.find((x) => clipActiveAt(x, t)) || musicTim[0] || null;
         let prev = null, next = null;
         if (activeVoice) {
           const i = voiceTim.indexOf(activeVoice);
-          prev = brief(voiceTim[i - 1]); next = brief(voiceTim[i + 1]);
+          prev = voiceBrief(voiceTim[i - 1]); next = voiceBrief(voiceTim[i + 1]);
         } else {
-          prev = brief([...voiceTim].reverse().find((x) => x.start < t)); // most recent before t
-          next = brief(voiceTim.find((x) => x.start >= t));               // next upcoming
+          prev = voiceBrief([...voiceTim].reverse().find((x) => x.start < t)); // most recent before t
+          next = voiceBrief(voiceTim.find((x) => x.start >= t));               // next upcoming
         }
         const music = activeMusic ? { src: audioBasename(activeMusic.a), start: round2(activeMusic.start), dur: activeMusic.dur || null, at: round2(Math.max(0, (t - activeMusic.start) + (activeMusic.mediaStart || 0))) } : null;
-        return { voice: detail(activeVoice), music, prev, next };
+        return { voice: voiceDetail(activeVoice), music, prev, next };
       }
       // One-line summary of an audio note's captured context, for the composer/tooltip/list.
       function audioSummary(a) {
@@ -965,7 +1014,10 @@
         const bits = [];
         if (a.voice && a.voice.src) bits.push(`VO ${a.voice.src}${a.voice.at != null ? ` @ ${fmt(a.voice.at)}` : ""}`);
         if (a.music && a.music.src) bits.push(`music ${a.music.src}`);
-        return bits.length ? `on ${bits.join(" · ")}` : "on the audio at this moment";
+        let s = bits.length ? `on ${bits.join(" · ")}` : "on the audio at this moment";
+        const line = a.voice && (a.voice.line || a.voice.script);
+        if (line) s += ` — “${line.length > 60 ? line.slice(0, 57) + "…" : line}”`;
+        return s;
       }
       // Open the composer for a whole-scene or audio note at the current moment, anchored
       // beside the left dock. Works outside note mode; refuses to clobber an unsaved note.

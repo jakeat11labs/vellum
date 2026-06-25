@@ -77,10 +77,11 @@ function sanitizeAudioClip(c, detail) {
   const num = (v) => boundedNumber(v, null, { min: 0, decimals: 100 });
   const clip = { src: c.src != null ? String(c.src).slice(0, 200) : null };
   if (c.start != null) clip.start = num(c.start);
+  if (c.script != null) clip.script = String(c.script).slice(0, detail ? 800 : 200);
   if (detail) {
     if (c.dur != null) clip.dur = num(c.dur);
     if (c.at != null) clip.at = num(c.at);
-    if (c.script != null) clip.script = String(c.script).slice(0, 500);
+    if (c.line != null) clip.line = String(c.line).slice(0, 500);
   }
   return clip;
 }
@@ -283,16 +284,20 @@ function audioWhere(a) {
   if (a.music && a.music.src) parts.push(`music ${escapeMd(a.music.src)}`);
   return `audio: ${parts.join(", ") || "this moment"}`;
 }
-// Extra indented context lines for an audio note: the VO script text (when embedded) and
-// the surrounding clip order, so the coding agent can reason about a clip within a series.
+// Extra indented context lines for an audio note: the spoken VO line at the playhead, the
+// active clip's full script, and the surrounding clips (with their scripts) — so the coding
+// agent reads the actual words and can place a clip within a series.
 function audioDetailLines(a) {
   if (!a) return [];
   const lines = [];
-  if (a.voice && a.voice.script) lines.push(`  - VO script: "${escapeMd(a.voice.script)}"`);
-  const ctx = [];
-  if (a.prev && a.prev.src) ctx.push(`prev ${escapeMd(a.prev.src)}${a.prev.start != null ? ` (${fmtTime(a.prev.start)})` : ""}`);
-  if (a.next && a.next.src) ctx.push(`next ${escapeMd(a.next.src)}${a.next.start != null ? ` (${fmtTime(a.next.start)})` : ""}`);
-  if (ctx.length) lines.push(`  - clip order: ${ctx.join(", ")}`);
+  const v = a.voice;
+  if (v && v.line) lines.push(`  - VO line: "${escapeMd(v.line)}"`);
+  if (v && v.script && v.script !== v.line) lines.push(`  - VO clip script: "${escapeMd(v.script)}"`);
+  const neighbor = (n, label) => n && n.src
+    ? `${label} ${escapeMd(n.src)}${n.start != null ? ` (${fmtTime(n.start)})` : ""}${n.script ? ` — "${escapeMd(n.script)}"` : ""}`
+    : null;
+  const ctx = [neighbor(a.prev, "prev"), neighbor(a.next, "next")].filter(Boolean);
+  if (ctx.length) lines.push(`  - clip order: ${ctx.join("; ")}`);
   return lines;
 }
 

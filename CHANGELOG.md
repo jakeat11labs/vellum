@@ -7,7 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.5.3] - June 25, 2026
+## [0.5.4] - June 25, 2026
+
+### Added
+- **Audio notes carry the real VO script.** When a composition ships a `timing/voiceover-captions.vtt` (HyperFrames' TTS/transcribe step writes one), Vellum now reads it and attaches the spoken words to audio notes — the exact line at the playhead, the active clip's full script, and the previous/next VO clips with their text for series context. It renders in `annotations.md` as `VO line:` / `VO clip script:` / `clip order:` lines, so a coding agent gets the actual narration, not just a filename. Compositions without captions degrade silently to the filename + timestamp. No changes required to HyperFrames — Vellum reads the artifact the pipeline already emits.
 
 ### Added
 - **Whole-scene and audio feedback notes.** A collapsible dock on the left edge of the player lets you drop a note scoped to the entire current scene (▣) or to the audio playing right now (🔊) — no element click needed, and it works outside note mode. Audio notes auto-capture the active VO and music clips (filename + local timestamp) plus the previous/next VO clips for series context, and surface the VO script text when the composition embeds it on the clip. Scoped notes get distinct timeline markers (square for scene, ring for audio), a kind badge in the notes drawer, and render in `annotations.md` as `_(whole scene)_` / `_(audio: VO … @ m:ss, music …)_` with indented script/clip-order context — so a coding agent knows exactly what each note is about.
