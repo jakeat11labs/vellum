@@ -312,6 +312,10 @@ function audioDetailLines(a) {
   return lines;
 }
 
+// Whitelist of computed-style keys accepted on target.style — mirrors the player.
+const STYLE_KEYS = new Set(["fontSize", "fontWeight", "fontFamily", "color", "backgroundColor", "lineHeight", "letterSpacing", "textAlign", "opacity"]);
+const STYLE_LABELS = { fontSize: "font-size", fontWeight: "weight", fontFamily: "font", color: "color", backgroundColor: "bg", lineHeight: "line-height", letterSpacing: "tracking", textAlign: "align", opacity: "opacity" };
+
 // Indented detail for an element-targeted note: the picker label, the element's bounds,
 // and its captured data-* attrs (e.g. data-start/data-duration) — the timing/layout context
 // an agent needs to act, which the note already stores but the headline line omits.
@@ -324,6 +328,13 @@ function elementDetailLine(t) {
     bits.push(`data ${Object.entries(t.data).map(([k, v]) => `${escapeMd(k)}=${escapeMd(String(v))}`).join(", ")}`);
   }
   return bits.length ? `  - element: ${bits.join(" · ")}` : null;
+}
+// The element's current computed style at pin time — what an "make it bigger/bolder/another
+// color" edit starts from. Ordered + relabeled for readability.
+function styleDetailLine(t) {
+  if (!t || !t.style) return null;
+  const bits = Object.keys(STYLE_LABELS).filter((k) => t.style[k]).map((k) => `${STYLE_LABELS[k]} ${escapeMd(String(t.style[k]))}`);
+  return bits.length ? `  - style: ${bits.join(" · ")}` : null;
 }
 
 function writeNotes(notes) {
@@ -357,7 +368,7 @@ function writeNotes(notes) {
       const head = `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}`;
       const extra = n.kind === "audio" ? audioDetailLines(n.audio)
         : scoped ? []
-        : [elementDetailLine(n.target)].filter(Boolean);
+        : [elementDetailLine(n.target), styleDetailLine(n.target)].filter(Boolean);
       return [head, ...extra].join("\n");
     }),
     "",
@@ -497,6 +508,16 @@ function handleNotes(req, res) {
           }
           if (!Object.keys(data).length) data = null;
         }
+        // Computed style at pin time (whitelisted) — the current value an edit starts from.
+        let style = null;
+        if (parsed.target.style && typeof parsed.target.style === "object" && !Array.isArray(parsed.target.style)) {
+          style = {};
+          for (const [k, v] of Object.entries(parsed.target.style)) {
+            if (!STYLE_KEYS.has(k)) continue;
+            style[k] = String(v).slice(0, 80);
+          }
+          if (!Object.keys(style).length) style = null;
+        }
         target = {
           tag: String(parsed.target.tag ?? "").slice(0, 20),
           cls: String(parsed.target.cls ?? "").slice(0, 120),
@@ -505,6 +526,7 @@ function handleNotes(req, res) {
           label: parsed.target.label ? String(parsed.target.label).slice(0, 80) : null,
           box,
           data,
+          style,
         };
       }
       // Scope: "scene" (the whole current slide) or "audio" (what's playing now). Anything

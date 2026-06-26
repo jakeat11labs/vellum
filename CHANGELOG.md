@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - June 25, 2026
+
+The rest of the feature-evaluation "Now" tier — sharper capture for the reviewer, clearer signal for the agent.
+
+### Added
+- **Computed style captured with element notes.** A note on an element now records its current font size / weight / family, color, background, line-height, tracking, alignment, and opacity — surfaced on a `style:` line in `annotations.md` — so "make this bigger" or "use another color" is an edit from a known value, not a guess.
+- **Live VO captions while scrubbing.** When a composition ships captions, a **CC** toggle appears (or press **C**) and the current VO line shows as a subtitle over the video, so VO/visual desync is obvious at a glance. The toggle state persists.
+- **Frame-accurate stepping.** `,` and `.` nudge the playhead one frame — the composition's fps when it declares `data-fps`, otherwise a fine 1/30s step (finer than the 0.1s arrow keys).
+- **Stale-note flag.** When a note's targeted element no longer resolves in the composition (it changed underneath the note), the note shows an "unresolved — re-verify" badge in the drawer and an amber ring on its timeline dot — so drift after edits is visible instead of silent.
+
 ## [0.6.0] - June 25, 2026
 
 A pass at making the handoff artifact carry more of its own context, so the consuming coding agent gets things right on the first pass.

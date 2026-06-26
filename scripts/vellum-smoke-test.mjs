@@ -118,6 +118,7 @@ async function testServerApi() {
           label: "Text",
           box: { x: 24.1, y: 30, w: 10, h: 120 },
           data: { "data-start": "8", "bogus key": "dropped", "data-duration": "4" },
+          style: { fontSize: "24px", fontWeight: "600", color: "rgb(168, 155, 255)", junk: "dropped" },
         },
       }),
     });
@@ -127,11 +128,14 @@ async function testServerApi() {
     assert.equal(rich.target.label, "Text");
     assert.deepEqual(rich.target.box, { x: 24.1, y: 30, w: 10, h: 100 });
     assert.deepEqual(rich.target.data, { "data-start": "8", "data-duration": "4" });
+    assert.deepEqual(rich.target.style, { fontSize: "24px", fontWeight: "600", color: "rgb(168, 155, 255)" }); // non-whitelisted keys dropped
     md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
     assert.match(md, /at `#features > div\.card:nth-of-type\(2\)`/);
     // Self-sufficient work order: legend + the element sub-line surfacing label/box/data-*.
     assert.match(md, /^Legend: /m);
     assert.match(md, /- element: label "Text" · box 24\.1,30 10×100% · data data-start=8, data-duration=4/);
+    // Computed style at pin time → a separate sub-line, relabeled for readability.
+    assert.match(md, /- style: font-size 24px · weight 600 · color rgb\(168, 155, 255\)/);
     res = await fetch(`${base}/api/notes/${rich.id}`, { method: "DELETE" });
     assert.equal(res.status, 200);
 

@@ -27,6 +27,8 @@
       #dragbox { position: absolute; border: 2px dashed #5eead4; background: rgba(94,234,212,0.12); display: none; pointer-events: none; }
       /* Floating label naming the element under the crosshair while arming */
       #hover-tag { position: absolute; z-index: 5; display: none; pointer-events: none; background: #0e0e11; border: 1px solid #2d4f49; color: #5eead4; font-size: 11px; padding: 2px 7px; border-radius: 6px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+      /* Live VO caption while scrubbing — surfaces the parsed VTT cue so VO/visual desync is visible */
+      #vo-subtitle { position: absolute; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 6; display: none; max-width: 82%; padding: 6px 14px; background: rgba(10,10,14,0.74); color: #fff; font-size: 18px; line-height: 1.3; text-align: center; border-radius: 8px; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,0.85); }
 
       /* Note composer popover — accented in the color the note's pin will get (--c) */
       #composer { position: absolute; z-index: 30; width: 340px; background: #17171b; border: 1px solid color-mix(in srgb, var(--c, #5eead4) 40%, #2c2c32); border-radius: 12px; padding: 12px; box-shadow: 0 14px 50px rgba(0,0,0,0.6); display: none; }
@@ -73,6 +75,8 @@
       #bar .transport { display: flex; align-items: center; gap: 1px; flex-shrink: 0; }
       #bar .transport button { width: 32px; height: 32px; padding: 0; font-size: 12px; display: flex; align-items: center; justify-content: center; background: transparent; border-color: transparent; border-radius: 6px; }
       #bar .transport button:hover { background: #1f1f25; border-color: #2c2c32; }
+      #cc-toggle { font-size: 11px; font-weight: 600; letter-spacing: 0.04em; padding: 5px 9px; color: #8b8b93; }
+      #cc-toggle.active { color: #5eead4; border-color: #2d4f49; background: rgba(94,234,212,0.1); }
       #bar #play { width: 36px; height: 36px; font-size: 14px; background: #1f1f25; border-color: #2c2c32; }
       /* Scrubber + time + scene */
       #scrubwrap { position: relative; flex: 1; min-width: 80px; margin: 0 10px; display: flex; align-items: center; }
@@ -89,6 +93,7 @@
       /* Scoped notes read differently at a glance: scene dots are square, audio dots are hollow rings */
       .note-dot.dot-scene { border-radius: 2px; }
       .note-dot.dot-audio { background: #121216; border-color: var(--c, #5eead4); box-shadow: 0 0 0 1.5px var(--c, #5eead4), 0 0 4px rgba(0,0,0,0.55); }
+      .note-dot.dot-stale { box-shadow: 0 0 0 2px #d9a23a, 0 0 5px rgba(0,0,0,0.55); }
       /* Hover preview for a timeline dot — fixed so it floats above the viewer, accented in the note's color (--c).
          JS sets left/top from the dot's screen position; transform keeps it centered over the dot. */
       #note-tip { position: fixed; z-index: 100; width: 240px; max-width: 240px; transform: translateX(-50%); background: #17171b; border: 1px solid color-mix(in srgb, var(--c, #5eead4) 40%, #2c2c32); border-radius: 10px; padding: 8px 10px; box-shadow: 0 10px 36px rgba(0,0,0,0.6); pointer-events: none; display: none; }
@@ -146,6 +151,7 @@
       .note-item .ntg { color: #6f8fa6; font-size: 11px; margin-top: 2px; word-break: break-word; }
       .note-item .nkind { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #5eead4; border: 1px solid #2d4f49; border-radius: 999px; padding: 1px 7px; margin-top: 3px; }
       .note-item .nkind.audio { color: #f0a6d8; border-color: #5a3a52; }
+      .note-item .stale { display: inline-block; font-size: 10px; letter-spacing: 0.04em; color: #e7b35c; border: 1px solid #5a4a2c; border-radius: 999px; padding: 1px 7px; margin-top: 3px; }
       .note-item .nx { font-size: 14px; margin-top: 3px; white-space: pre-wrap; }
       .note-item .del { float: right; color: #8b8b93; border: none; background: none; padding: 0 2px; }
       .note-item .del:hover { color: #ff6b6b; }
@@ -175,6 +181,7 @@
             <button id="composer-save" class="primary">Save note<span class="kbd-hint"></span></button>
           </div>
         </div>
+        <div id="vo-subtitle"></div>
         <div id="status"></div>
       </div>
 
@@ -199,6 +206,7 @@
         <div class="sep"></div>
         <span id="scene-tag"></span>
         <button id="copy-scene" title="Copy current scene name">⧉</button>
+        <button id="cc-toggle" title="Toggle live VO captions (C)" style="display:none">CC</button>
         <div class="sep"></div>
         <span class="amix" title="Voiceover level">
           <span class="lbl">VO</span>
@@ -284,6 +292,10 @@
       const scrubWrap = document.getElementById("scrubwrap");
       const sceneTicks = document.getElementById("scene-ticks");
       const viewport = document.getElementById("viewport");
+      const ccToggle = document.getElementById("cc-toggle");
+      const voSubtitle = document.getElementById("vo-subtitle");
+      let subtitlesOn = true;
+      try { subtitlesOn = localStorage.getItem("vellum-cc") !== "0"; } catch (e) {}
 
       // Per-note colors. Notes carry stable incrementing integer ids, so map id → palette
       // by (id-1) so adjacent notes always differ and a note keeps its color for life.
@@ -300,6 +312,7 @@
       let compDoc = null;      // iframe.contentDocument
       let scenes = [];         // [{ id, start, duration }] derived from the composition DOM
       let duration = 0;
+      let fps = null;          // composition frame rate (root data-fps), if declared
       let arming = false;
       let pending = null;
       let notes = [];
@@ -417,6 +430,7 @@
         if (!root) throw new Error("no composition root ([data-composition-id] or #root) in index.html");
         compW = Number(root.getAttribute("data-width")) || root.offsetWidth || 1920;
         compH = Number(root.getAttribute("data-height")) || root.offsetHeight || 1080;
+        fps = Number(root.getAttribute("data-fps")) || null;
         iframe.style.width = `${compW}px`;
         iframe.style.height = `${compH}px`;
 
@@ -466,6 +480,7 @@
         }
         voiceEls = allAudioEls.filter((a) => a !== musicEl);
         await loadCaptions(); // VO transcript for audio-note enrichment (best-effort; absent in many comps)
+        if (vttCues.length) { ccToggle.style.display = ""; updateCcBtn(); } // reveal the captions toggle only when there are captions
         postComposition(compDoc); // persist the scene/timing map for the consuming agent (best-effort)
 
         // Seed mix sliders from the saved mix, falling back to the composition's data-volume.
@@ -525,6 +540,13 @@
           updateMarkerVisibility(t);
           applyMix();
           syncAudio();
+          if (vttCues.length && subtitlesOn) {
+            const cue = cueAt(t);
+            voSubtitle.textContent = cue ? cue.text : "";
+            voSubtitle.style.display = cue ? "block" : "none";
+          } else if (voSubtitle.style.display !== "none") {
+            voSubtitle.style.display = "none";
+          }
         }
         requestAnimationFrame(tick);
       }
@@ -553,6 +575,20 @@
       document.getElementById("prev-scene").onclick = () => jumpScene(-1);
       document.getElementById("next-scene").onclick = () => jumpScene(1);
 
+      // Live VO captions toggle (only meaningful when the composition ships a VTT).
+      function updateCcBtn() { ccToggle.classList.toggle("active", subtitlesOn); }
+      function setSubtitles(on) {
+        subtitlesOn = on;
+        try { localStorage.setItem("vellum-cc", on ? "1" : "0"); } catch (e) {}
+        updateCcBtn();
+        if (!on) voSubtitle.style.display = "none";
+      }
+      ccToggle.onclick = () => setSubtitles(!subtitlesOn);
+
+      // One-frame nudge. Use the composition's fps when declared; else a fine 1/30s step
+      // (finer than the 0.1s arrows). We deliberately don't show a frame index without fps.
+      const frameStep = () => (fps && fps > 0 ? 1 / fps : 1 / 30);
+
       window.addEventListener("keydown", (e) => {
         if (e.code === "Escape") {
           // Escalating escape: open composer → close it; note mode on → exit it; else close the panel.
@@ -567,6 +603,9 @@
         else if (e.code === "KeyN") { e.preventDefault(); armBtn.click(); }
         else if (e.code === "ArrowLeft") { player.pause(); player.seek(Math.max(0, player.getTime() - (e.shiftKey ? 1 : 0.1))); }
         else if (e.code === "ArrowRight") { player.pause(); player.seek(Math.min(duration, player.getTime() + (e.shiftKey ? 1 : 0.1))); }
+        else if (e.code === "Comma") { e.preventDefault(); player.pause(); player.seek(Math.max(0, player.getTime() - frameStep())); }
+        else if (e.code === "Period") { e.preventDefault(); player.pause(); player.seek(Math.min(duration, player.getTime() + frameStep())); }
+        else if (e.code === "KeyC") { if (vttCues.length) setSubtitles(!subtitlesOn); }
         else if (e.code === "ArrowUp") { e.preventDefault(); jumpScene(-1); }
         else if (e.code === "ArrowDown") { e.preventDefault(); jumpScene(1); }
       });
@@ -670,6 +709,17 @@
       // Live DOM element → vellum candidate { el, target }. `info` (the picker's
       // ElementInfo for the same stack position, when available) contributes only the
       // label — selector, box, and attributes all come from the element itself.
+      // A small whitelist of computed styles captured at pin time, so "make this bigger" /
+      // "change the color" carries the current value the agent edits FROM, not a guess.
+      const STYLE_KEYS = ["fontSize", "fontWeight", "fontFamily", "color", "backgroundColor", "lineHeight", "letterSpacing", "textAlign", "opacity"];
+      function computedStyleFor(el) {
+        try {
+          const cs = (compDoc.defaultView || window).getComputedStyle(el);
+          const out = {};
+          for (const k of STYLE_KEYS) { const v = cs[k]; if (v && String(v).trim()) out[k] = String(v).trim().slice(0, 80); }
+          return Object.keys(out).length ? out : null;
+        } catch (e) { return null; }
+      }
       function toCandidate(el, info) {
         const b = el.getBoundingClientRect();
         const data = {};
@@ -686,6 +736,7 @@
               ? { x: pctOf(b.x, compW), y: pctOf(b.y, compH), w: pctOf(b.width, compW), h: pctOf(b.height, compH) }
               : null,
             data: Object.keys(data).length ? data : null,
+            style: computedStyleFor(el),
           },
         };
       }
@@ -935,12 +986,10 @@
       // re-running the GSAP timeline. The browser is the source of truth; best-effort, never blocks.
       function postComposition(doc) {
         try {
-          const root = compRoot(doc);
-          const fps = root ? Number(root.getAttribute("data-fps")) : NaN;
           const clip = (a) => { const x = audioTimings.find((t) => t.a === a) || {}; return { src: audioBasename(a), start: round2(x.start || 0), dur: x.dur || null }; };
           const manifest = {
             width: compW, height: compH, duration: round2(duration),
-            fps: Number.isFinite(fps) && fps > 0 ? fps : null,
+            fps: fps && fps > 0 ? fps : null,
             scenes: scenes.map((s) => ({ id: s.id, start: round2(s.start), duration: s.duration != null ? round2(s.duration) : null })),
             audio: { voice: voiceEls.map(clip), music: musicEl ? [clip(musicEl)] : [] },
             captions: vttCues.length > 0,
@@ -1215,7 +1264,8 @@
           const pct = timelinePct(n.time);
           if (pct < 0 || pct > 100) return;
           const dot = document.createElement("div");
-          dot.className = `note-dot${n.kind === "scene" ? " dot-scene" : n.kind === "audio" ? " dot-audio" : ""}`;
+          const stale = n.target && compDoc && !resolveTargetEl(n.target);
+          dot.className = `note-dot${n.kind === "scene" ? " dot-scene" : n.kind === "audio" ? " dot-audio" : ""}${stale ? " dot-stale" : ""}`;
           dot.style.left = `${pct}%`;
           dot.style.setProperty("--c", colorFor(n.id));
           dot.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
@@ -1298,6 +1348,15 @@
             tg.className = "ntg";
             tg.textContent = `on ${targetLabel(n.target)}`;
             item.append(tg);
+            // The targeted element no longer resolves (the composition changed under the note) —
+            // flag it for re-verification rather than silently pointing at nothing.
+            if (compDoc && !resolveTargetEl(n.target)) {
+              const stale = document.createElement("div");
+              stale.className = "stale";
+              stale.title = "This note's element can't be found in the current composition — re-check it";
+              stale.textContent = "⚠ unresolved — re-verify";
+              item.append(stale);
+            }
           }
           item.append(nx);
           // Hover a note row → flash its element in the composition (in the note's
