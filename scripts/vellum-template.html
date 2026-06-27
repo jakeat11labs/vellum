@@ -40,6 +40,22 @@
       #composer-drag .meta { margin: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       #composer .tgt { font-size: 12px; color: var(--c, #5eead4); margin-bottom: 8px; word-break: break-word; }
       #composer .tgt select { width: 100%; margin-top: 2px; background: #0e0e11; color: var(--c, #5eead4); border: 1px solid #2c2c32; border-radius: 6px; padding: 4px 6px; font: inherit; font-size: 12px; }
+      /* Reviewer severity — segmented chips (blocker/major/nit). Click the active chip to clear back to unset. */
+      #composer-sev { display: flex; gap: 6px; margin-bottom: 8px; }
+      #composer-sev button { flex: 1; padding: 5px 0; font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; background: #1a1a1f; border: 1px solid #2c2c32; color: #8b8b93; }
+      #composer-sev button.active[data-sev=blocker] { background: rgba(255,107,107,0.16); border-color: #ff6b6b; color: #ff8f8f; }
+      #composer-sev button.active[data-sev=major] { background: rgba(231,179,92,0.16); border-color: #e7b35c; color: #e7b35c; }
+      #composer-sev button.active[data-sev=nit] { background: rgba(139,139,147,0.18); border-color: #8b8b93; color: #c9c9d0; }
+      /* Reference-image thumbnails — paste / drag-drop / file-pick onto the composer; each removable via ✕ */
+      #composer-atts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+      #composer-atts:empty { display: none; }
+      #composer-atts .att { position: relative; width: 52px; height: 52px; border-radius: 6px; overflow: hidden; border: 1px solid #2c2c32; background: #0e0e11; }
+      #composer-atts .att img { width: 100%; height: 100%; object-fit: cover; display: block; }
+      #composer-atts .att .rm { position: absolute; top: 0; right: 0; width: 16px; height: 16px; padding: 0; font-size: 11px; line-height: 14px; border: 0; border-radius: 0 0 0 6px; background: rgba(10,10,14,0.78); color: #ff8f8f; }
+      #composer-atts .att .rm:hover { background: rgba(10,10,14,0.92); }
+      #composer-attach { margin-right: auto; font-size: 12px; }
+      /* Drag-over feedback while dropping an image on the composer */
+      #composer.drop-active { border-color: var(--c, #5eead4); box-shadow: 0 0 0 2px color-mix(in srgb, var(--c, #5eead4) 40%, transparent), 0 14px 50px rgba(0,0,0,0.6); }
       #composer button.primary { background: var(--c, #5eead4); border-color: var(--c, #5eead4); }
       /* Keyboard-shortcut hint riding inside the Save button — dark inset so it reads as a key cap on the bright fill */
       #composer-save { display: inline-flex; align-items: center; gap: 7px; }
@@ -54,6 +70,7 @@
       .dock-target .lbl { font-weight: 600; }
       .dock-target:hover { background: #23232a; border-color: #5eead4; color: #5eead4; }
       .dock-target.audio:hover { border-color: #f0a6d8; color: #f0a6d8; }
+      .dock-target.span:hover { border-color: #a78bfa; color: #a78bfa; }
       /* Toggle tab — the always-visible handle to collapse/expand the dock */
       #dock-toggle { align-self: center; width: 18px; height: 46px; padding: 0; background: #15151a; border: 1px solid #2c2c32; border-left: 0; border-radius: 0 8px 8px 0; color: #8b8b93; font-size: 11px; line-height: 1; }
       #dock-toggle:hover { color: #5eead4; border-color: #3a5d57; }
@@ -84,6 +101,9 @@
       /* Faint vertical ghost lines marking scene breaks (where ⏮/⏭ land) */
       .scene-ticks { position: absolute; left: 0; right: 0; top: 50%; height: 16px; transform: translateY(-50%); pointer-events: none; z-index: 0; }
       .scene-tick { position: absolute; top: 0; width: 1px; height: 100%; background: rgba(255,255,255,0.16); }
+      /* Live in/out selection band on the track (behind the native slider, like .scene-ticks) */
+      .span-sel { position: absolute; top: 50%; transform: translateY(-50%); height: 14px; z-index: 0; pointer-events: none; border-radius: 2px; background: color-mix(in srgb, #5eead4 18%, transparent); border-left: 2px solid #5eead4; border-right: 2px solid #5eead4; display: none; }
+      .span-sel.single { border-right: 0; width: 0; }
       /* Colored dots above the bar, one per note, at its point on the timeline */
       .note-dots { position: absolute; left: 0; right: 0; top: 50%; height: 0; pointer-events: none; z-index: 2; }
       .note-dot { position: absolute; top: -11px; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); background: var(--c, #5eead4); border: 1.5px solid #121216; box-shadow: 0 0 4px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; transition: transform .12s ease, filter .12s ease; }
@@ -94,6 +114,8 @@
       .note-dot.dot-scene { border-radius: 2px; }
       .note-dot.dot-audio { background: #121216; border-color: var(--c, #5eead4); box-shadow: 0 0 0 1.5px var(--c, #5eead4), 0 0 4px rgba(0,0,0,0.55); }
       .note-dot.dot-stale { box-shadow: 0 0 0 2px #d9a23a, 0 0 5px rgba(0,0,0,0.55); }
+      /* Per-note interval bar from a note's dot to its timeEnd point */
+      .note-span { position: absolute; top: -6px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--c, #5eead4) 55%, transparent); pointer-events: none; }
       /* Hover preview for a timeline dot — fixed so it floats above the viewer, accented in the note's color (--c).
          JS sets left/top from the dot's screen position; transform keeps it centered over the dot. */
       #note-tip { position: fixed; z-index: 100; width: 240px; max-width: 240px; transform: translateX(-50%); background: #17171b; border: 1px solid color-mix(in srgb, var(--c, #5eead4) 40%, #2c2c32); border-radius: 10px; padding: 8px 10px; box-shadow: 0 10px 36px rgba(0,0,0,0.6); pointer-events: none; display: none; }
@@ -138,12 +160,19 @@
       #note-list { flex: 1; overflow: auto; padding: 8px; }
       .note-item { padding: 10px 12px; border: 1px solid #25252b; border-radius: 10px; margin-bottom: 8px; cursor: pointer; }
       .note-item:hover { border-color: #5eead4; }
+      .note-item.addressed { opacity: 0.9; } /* agent edited, awaiting human verify — less dimmed than resolved */
       .note-item.resolved { opacity: 0.72; }
       .note-item.wontfix { opacity: 0.55; }
       .note-item .actions { float: right; display: flex; gap: 4px; align-items: center; }
       .note-item .status { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid #2c2c32; border-radius: 999px; padding: 2px 7px; color: #8b8b93; background: #17171b; }
+      .note-item .status.addressed { color: #e7b35c; border-color: #5a4a2c; } /* amber — "verify me" */
       .note-item .status.resolved { color: #5eead4; border-color: #2d4f49; }
       .note-item .status.wontfix { color: #b9b9c0; }
+      /* Reviewer severity chip — click to cycle blocker → major → nit → unset. Neutral '+sev' when unset. */
+      .note-item .sev-chip { font-size: 10px; text-transform: uppercase; letter-spacing: 0.06em; border: 1px solid #2c2c32; border-radius: 999px; padding: 2px 7px; color: #6f6f78; background: #17171b; }
+      .note-item .sev-chip.blocker { color: #ff8f8f; border-color: #5a2c2c; }
+      .note-item .sev-chip.major { color: #e7b35c; border-color: #5a4a2c; }
+      .note-item .sev-chip.nit { color: #b9b9c0; border-color: #3a3a42; }
       .note-item .edit { color: #8b8b93; border: none; background: none; padding: 0 2px; }
       .note-item .edit:hover { color: #5eead4; }
       .note-item .nt { font-variant-numeric: tabular-nums; color: #5eead4; font-size: 12px; font-weight: 700; }
@@ -151,12 +180,20 @@
       .note-item .ntg { color: #6f8fa6; font-size: 11px; margin-top: 2px; word-break: break-word; }
       .note-item .nkind { display: inline-block; font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; color: #5eead4; border: 1px solid #2d4f49; border-radius: 999px; padding: 1px 7px; margin-top: 3px; }
       .note-item .nkind.audio { color: #f0a6d8; border-color: #5a3a52; }
+      .note-item .nkind.span { color: #a78bfa; border-color: #4a3a6e; }
+      .note-item .nspan { display: inline-block; font-size: 10px; color: #a78bfa; border: 1px solid #4a3a6e; border-radius: 999px; padding: 1px 7px; margin-top: 3px; } /* interval chip on a non-span note */
       .note-item .stale { display: inline-block; font-size: 10px; letter-spacing: 0.04em; color: #e7b35c; border: 1px solid #5a4a2c; border-radius: 999px; padding: 1px 7px; margin-top: 3px; }
+      .note-item .nres { color: #e7b35c; font-size: 11px; margin-top: 3px; word-break: break-word; } /* agent write-back summary */
+      .note-item .natt { display: inline-flex; align-items: center; gap: 5px; font-size: 10px; color: #8b8b93; border: 1px solid #2c2c32; border-radius: 999px; padding: 1px 7px 1px 4px; margin-top: 3px; } /* reference-image hint */
+      .note-item .natt img { width: 14px; height: 14px; border-radius: 3px; object-fit: cover; display: block; }
       .note-item .nx { font-size: 14px; margin-top: 3px; white-space: pre-wrap; }
       .note-item .del { float: right; color: #8b8b93; border: none; background: none; padding: 0 2px; }
       .note-item .del:hover { color: #ff6b6b; }
       #status { position: absolute; left: 18px; bottom: 70px; z-index: 40; background: #17171b; border: 1px solid #2c2c32; border-radius: 8px; padding: 8px 12px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: 60%; }
       #status.show { opacity: 1; }
+      /* Live-reload affordance: shown only when an edit lands while a composer/unsaved note is open. */
+      #reload-banner { position: absolute; left: 18px; bottom: 110px; z-index: 41; display: none; align-items: center; gap: 8px; background: #17171b; border: 1px solid #5a4a2c; border-radius: 8px; padding: 8px 10px 8px 12px; font-size: 13px; color: #e7b35c; max-width: 70%; }
+      #reload-banner button { padding: 4px 10px; font-size: 12px; }
       .hint { font-size: 13px; color: #9a9aa4; line-height: 1.5; }
     </style>
   </head>
@@ -169,20 +206,34 @@
           <div id="dock-targets">
             <button id="scene-target" class="dock-target scene" title="Leave a note about the whole current scene"><span class="ico">▣</span><span class="lbl">Whole scene</span></button>
             <button id="audio-target" class="dock-target audio" title="Leave a note about the audio playing right now"><span class="ico">🔊</span><span class="lbl">Audio</span></button>
+            <button id="span-target" class="dock-target span" title="Note a time range — mark in/out with I and O"><span class="ico">↔</span><span class="lbl">Time span</span></button>
           </div>
           <button id="dock-toggle" title="Collapse / expand feedback targets">‹</button>
         </div>
         <div id="composer">
           <div id="composer-drag" title="Drag to move"><span class="grip">⠿</span><div class="meta" id="composer-meta"></div></div>
           <div class="tgt" id="composer-tgt"></div>
+          <div class="sev" id="composer-sev" title="Reviewer severity — the agent fixes blockers first (click the active chip to clear)">
+            <button type="button" data-sev="blocker">Blocker</button>
+            <button type="button" data-sev="major">Major</button>
+            <button type="button" data-sev="nit">Nit</button>
+          </div>
+          <div id="composer-atts"></div>
           <textarea id="composer-text" placeholder="What's the note? (e.g. make this bubble bigger, cut 2s here, caption lands late)"></textarea>
+          <input id="composer-file" type="file" accept="image/png,image/jpeg,image/webp,image/gif" multiple hidden />
           <div class="row">
+            <button type="button" id="composer-attach" title="Attach a reference image (or paste / drag-drop onto the composer)">📎 Image</button>
             <button id="composer-cancel">Cancel</button>
             <button id="composer-save" class="primary">Save note<span class="kbd-hint"></span></button>
           </div>
         </div>
         <div id="vo-subtitle"></div>
         <div id="status"></div>
+        <div id="reload-banner">
+          <span id="reload-msg"></span>
+          <button type="button" id="reload-now" class="primary">Reload</button>
+          <button type="button" id="reload-dismiss">Dismiss</button>
+        </div>
       </div>
 
       <div id="bar">
@@ -198,6 +249,7 @@
         </div>
         <div id="scrubwrap">
           <div class="scene-ticks" id="scene-ticks"></div>
+          <div class="span-sel" id="span-sel"></div>
           <input id="scrub" type="range" min="0" max="100" step="0.01" value="0" />
           <div class="note-dots" id="note-dots"></div>
           <div id="note-tip"><div class="tip-meta"></div><div class="tip-text"></div></div>
@@ -243,6 +295,7 @@
 
     <script type="module">
       const API = "/api/notes";
+      const MAX_ATTACHMENTS = 4; // mirrors the server's per-note cap
       // Stable Vellum endpoint — the server resolves the real HyperFrames runtime file
       // (local node_modules → npx cache → CDN), so the dist filename is never hardcoded here.
       const RUNTIME = "/__vellum/runtime.js";
@@ -271,7 +324,11 @@
       const composer = document.getElementById("composer");
       const composerMeta = document.getElementById("composer-meta");
       const composerTgt = document.getElementById("composer-tgt");
+      const composerSev = document.getElementById("composer-sev");
       const composerText = document.getElementById("composer-text");
+      const composerAtts = document.getElementById("composer-atts");
+      const composerFile = document.getElementById("composer-file");
+      const composerAttachBtn = document.getElementById("composer-attach");
       const playBtn = document.getElementById("play");
       const scrub = document.getElementById("scrub");
       const tc = document.getElementById("tc");
@@ -281,6 +338,8 @@
       const notesPanel = document.getElementById("notes");
       const noteList = document.getElementById("note-list");
       const statusEl = document.getElementById("status");
+      const reloadBanner = document.getElementById("reload-banner");
+      const reloadMsg = document.getElementById("reload-msg");
       const voiceSlider = document.getElementById("voice-vol");
       const musicSlider = document.getElementById("music-vol");
       const voiceVal = document.getElementById("voice-val");
@@ -291,6 +350,7 @@
       const noteTipText = noteTip.querySelector(".tip-text");
       const scrubWrap = document.getElementById("scrubwrap");
       const sceneTicks = document.getElementById("scene-ticks");
+      const spanSel = document.getElementById("span-sel");
       const viewport = document.getElementById("viewport");
       const ccToggle = document.getElementById("cc-toggle");
       const voSubtitle = document.getElementById("vo-subtitle");
@@ -315,6 +375,15 @@
       let fps = null;          // composition frame rate (root data-fps), if declared
       let arming = false;
       let pending = null;
+      // Live composition reload — poll /api/watch and re-mount when the agent edits the composition.
+      // mount() is re-entrant, so the persist interval + RAF loop are made singletons (see mount()).
+      let persistTimer = null;      // singleton frame-persist interval (re-created each mount)
+      let tickStarted = false;      // singleton RAF loop guard
+      let watchPollStarted = false; // singleton /api/watch poll guard
+      let lastRev = null;           // last revision seen (null until the first poll seeds it)
+      let reloadPending = false;    // a live edit arrived while composing — drained when safe
+      let reloading = false;        // re-entrancy guard around reloadComposition()
+      let spanIn = null, spanOut = null;  // live in/out marks (composition-time secs) adopted by the next note
       let notes = [];
       let markerEls = [];      // { el, start, end } — markers shown only within their scene window
       let voiceEls = [];
@@ -326,6 +395,7 @@
       let musicVol = 0.2;
       let compW = 1920;
       let compH = 1080;
+      let baselineHash = null;  // composition's index.html sha256 at mount — flags cross-session content drift on notes pinned against older content
 
       const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       const fmt = (t) => {
@@ -499,9 +569,13 @@
         const savedT = Number(localStorage.getItem(timeKey));
         player.seek(savedT > 0 && savedT < duration ? savedT : 0);
         player.pause();
-        setInterval(() => { try { localStorage.setItem(timeKey, String(player.getTime())); } catch (e) {} }, 500);
-        tick();
+        // Singletons across re-mounts (live reload calls mount() again): one persist interval, one
+        // RAF loop. Without these guards each reload would stack another loop and jank the player.
+        if (persistTimer) clearInterval(persistTimer);
+        persistTimer = setInterval(() => { try { localStorage.setItem(timeKey, String(player.getTime())); } catch (e) {} }, 500);
+        if (!tickStarted) { tickStarted = true; tick(); }
         loadNotes();
+        startWatchPoll(); // begin polling /api/watch for live edits (guarded — first mount only)
         flash(savedT > 0 ? `Resumed at ${fmt(savedT)}` : "Ready — scrub, then toggle Note mode (N) and click or drag to pin feedback");
       }
 
@@ -551,6 +625,92 @@
         requestAnimationFrame(tick);
       }
 
+      // ---- live composition reload ----
+      // Poll the server's revision counter; when the agent edits index.html/assets the server bumps
+      // it and we re-mount the iframe at the same frame + play state. Poll-only (no SSE): cheap, no
+      // held connections, and a graceful no-op against a server that predates /api/watch (the support
+      // probe just 404s). Staleness of element notes after an edit is re-flagged for free — mount()
+      // calls loadNotes(), which re-runs resolveTargetEl() against the freshly loaded compDoc.
+      function safeToReload() {
+        // Never yank the composition out from under an open composer, an in-progress region drag, or
+        // unsaved note text — defer until the user finishes (drained on composer close/save/cancel).
+        if (composer.style.display === "block") return false;
+        if (dragStart) return false;
+        if (pending && composerText.value.trim()) return false;
+        return true;
+      }
+
+      async function reloadComposition() {
+        if (reloading) { reloadPending = true; return; } // in-flight — re-run once it settles
+        reloading = true;
+        // Persist the live frame to the same key mount() restores from, and capture play state so
+        // playback resumes where it was. Null `player` so the singleton tick() no-ops during the swap.
+        const playing = !!(player && player.isPlaying());
+        const tPrev = player ? player.getTime() : 0;
+        try { localStorage.setItem(`vellum-time-${location.pathname}`, String(tPrev)); } catch (e) {}
+        player = null;
+        try {
+          await mount();
+          if (playing && player) player.play();
+          reloadPending = false;
+          hideReloadBanner();
+          flash("Composition reloaded");
+        } catch (e) {
+          // A broken intermediate save (half-written index.html) throws — keep the manual Reload so
+          // the agent's next valid save reloads cleanly.
+          reloadPending = true;
+          showReloadBanner("Reload failed — fix the edit, then Reload");
+          flash("Composition reload failed — fix the edit, then Reload");
+        } finally {
+          reloading = false;
+          if (reloadPending && safeToReload()) reloadComposition();
+        }
+      }
+
+      // A new revision arrived: reload now if safe, else mark pending + surface the manual banner.
+      function onCompChanged() {
+        if (safeToReload()) reloadComposition();
+        else { reloadPending = true; showReloadBanner("Composition updated — Reload when ready"); }
+      }
+
+      // Drain a deferred reload once the user finishes composing/dragging. Called from the composer
+      // close/save/cancel paths and the Esc-closes-composer branch; the 1s poll is the backstop.
+      function drainReload() {
+        if (reloadPending && safeToReload()) reloadComposition();
+      }
+
+      function showReloadBanner(msg) { reloadMsg.textContent = msg; reloadBanner.style.display = "flex"; }
+      function hideReloadBanner() { reloadBanner.style.display = "none"; }
+
+      function startWatchPoll() {
+        if (watchPollStarted) return;
+        watchPollStarted = true;
+        // One-shot support probe: only poll if the server actually serves /api/watch (older servers
+        // 404 → graceful no-op, no console spam). Seed lastRev so the initial value never triggers a
+        // reload; a later differing rev does.
+        fetch("/api/watch", { headers: { accept: "application/json" }, cache: "no-cache" })
+          .then((res) => (res.ok ? res.json() : Promise.reject(new Error("no watch"))))
+          .then((seed) => {
+            lastRev = typeof seed.rev === "number" ? seed.rev : 0;
+            setInterval(pollWatch, 1000);
+          })
+          .catch(() => {}); // server lacks /api/watch — reload simply never fires
+      }
+
+      async function pollWatch() {
+        // Only while the tab is visible — a backgrounded review shouldn't churn fetches or reload.
+        if (document.visibilityState !== "visible") return;
+        let rev;
+        try { rev = (await (await fetch("/api/watch", { cache: "no-cache" })).json()).rev; }
+        catch (e) { return; } // transient — try again next tick
+        if (typeof rev !== "number") return;
+        if (lastRev == null) { lastRev = rev; return; }
+        if (rev !== lastRev) { lastRev = rev; onCompChanged(); }
+      }
+
+      document.getElementById("reload-now").onclick = () => reloadComposition();
+      document.getElementById("reload-dismiss").onclick = () => hideReloadBanner();
+
       // ---- transport ----
       playBtn.onclick = () => (player.isPlaying() ? player.pause() : player.play());
       scrub.oninput = () => { player.pause(); player.seek(Number(scrub.value)); };
@@ -592,8 +752,9 @@
       window.addEventListener("keydown", (e) => {
         if (e.code === "Escape") {
           // Escalating escape: open composer → close it; note mode on → exit it; else close the panel.
-          if (composer.style.display === "block") { composer.style.display = "none"; pending = null; return; }
+          if (composer.style.display === "block") { composer.style.display = "none"; revokePendingAttachments(); pending = null; drainReload(); return; }
           if (arming) { armBtn.click(); return; }
+          if (spanIn != null || spanOut != null) { clearSpan(); flash("Cleared in/out marks"); return; }
           notesPanel.classList.remove("open");
           clearHover();
           return;
@@ -601,6 +762,8 @@
         if (e.target.tagName === "TEXTAREA") return;
         if (e.code === "Space") { e.preventDefault(); player.isPlaying() ? player.pause() : player.play(); }
         else if (e.code === "KeyN") { e.preventDefault(); armBtn.click(); }
+        else if (e.code === "KeyI") { e.preventDefault(); setSpanMark("in"); }
+        else if (e.code === "KeyO") { e.preventDefault(); setSpanMark("out"); }
         else if (e.code === "ArrowLeft") { player.pause(); player.seek(Math.max(0, player.getTime() - (e.shiftKey ? 1 : 0.1))); }
         else if (e.code === "ArrowRight") { player.pause(); player.seek(Math.min(duration, player.getTime() + (e.shiftKey ? 1 : 0.1))); }
         else if (e.code === "Comma") { e.preventDefault(); player.pause(); player.seek(Math.max(0, player.getTime() - frameStep())); }
@@ -873,6 +1036,7 @@
         if (pending) {
           if (composerText.value.trim()) { flash("Save or cancel the open note first"); return; }
           composer.style.display = "none";
+          revokePendingAttachments();
           pending = null;
         }
         clearHover();
@@ -928,6 +1092,7 @@
         pending.candidates = candidates;
         pending.candIndex = defaultCandidate(candidates);
         pending.target = candidates[pending.candIndex] ? candidates[pending.candIndex].target : null;
+        applyPendingSpan(pending);
         openComposer(e.clientX, e.clientY);
         dragStart = null;
         // Stay in note mode — the next click pins the next note.
@@ -953,6 +1118,7 @@
         composerTgt.innerHTML = "";
         if (pending.kind === "scene") { composerTgt.textContent = "on the whole scene"; return; }
         if (pending.kind === "audio") { composerTgt.textContent = audioSummary(pending.audio); return; }
+        if (pending.kind === "span") { composerTgt.textContent = "on this time span"; return; }
         const cands = pending.candidates || [];
         if (cands.length > 1) {
           const sel = document.createElement("select");
@@ -974,6 +1140,116 @@
         }
       }
 
+      // Reviewer severity chips. Click a chip to set pending.severity; click the active chip to clear
+      // it back to unset (absent). Highlight reflects pending.severity, seeded from the note on edit.
+      function renderComposerSeverity() {
+        const cur = pending ? pending.severity : null;
+        composerSev.querySelectorAll("button").forEach((b) => b.classList.toggle("active", b.dataset.sev === cur));
+      }
+      composerSev.querySelectorAll("button").forEach((b) => {
+        b.onclick = () => {
+          if (!pending) return;
+          pending.severity = pending.severity === b.dataset.sev ? null : b.dataset.sev;
+          renderComposerSeverity();
+        };
+      });
+
+      // ---- reference-image attachments (paste / drag-drop / file-pick → upload → thumbnails) ----
+      // A reloaded note references its image by a notes-relative path; resolve it to a URL the <img>
+      // can load (fresh uploads use an in-memory object URL instead). Derived from the player path so
+      // it works for both the root composition (/vellum) and a subfolder one (/sub/vellum).
+      const NOTES_BASE = location.pathname.replace(/vellum$/, "") + "notes/";
+      const attUrl = (file) => NOTES_BASE + file;
+
+      // Revoke the object URLs held on the pending note's fresh uploads, so closing/replacing the
+      // composer without saving doesn't leak blobs.
+      function revokePendingAttachments() {
+        if (pending && Array.isArray(pending.attachments)) {
+          pending.attachments.forEach((a) => { if (a._obj) URL.revokeObjectURL(a._obj); });
+        }
+      }
+
+      // Decode intrinsic pixel dimensions client-side (the upload endpoint only sees bytes). Best-
+      // effort: a corrupt-but-valid-magic image resolves with no w/h rather than rejecting.
+      function decodeImageDims(blob) {
+        return new Promise((resolve) => {
+          const url = URL.createObjectURL(blob);
+          const img = new Image();
+          img.onload = () => { resolve({ w: img.naturalWidth || null, h: img.naturalHeight || null }); URL.revokeObjectURL(url); };
+          img.onerror = () => { resolve({ w: null, h: null }); URL.revokeObjectURL(url); };
+          img.src = url;
+        });
+      }
+
+      // Upload one image to /api/attachments (raw bytes — the browser sends the Blob, no base64), then
+      // keep the returned descriptor plus intrinsic w/h and an object URL for the live thumbnail.
+      async function uploadAttachment(file) {
+        if (!pending) return;
+        if (!pending.attachments) pending.attachments = [];
+        if (pending.attachments.length >= MAX_ATTACHMENTS) { flash(`Up to ${MAX_ATTACHMENTS} images per note`); return; }
+        if (!/^image\/(png|jpeg|webp|gif)$/.test(file.type || "")) { flash("Only PNG, JPEG, WebP or GIF images"); return; }
+        try {
+          const res = await fetch("/api/attachments", { method: "POST", headers: { "content-type": file.type }, body: file });
+          if (res.status === 413) { flash("Image too large (max 4 MB)"); return; }
+          if (res.status === 415) { flash("That image type isn't supported"); return; }
+          if (!res.ok) { flash("Image upload failed"); return; }
+          const desc = await res.json();
+          const dims = await decodeImageDims(file);
+          if (!pending) return; // composer closed mid-upload
+          pending.attachments.push({ ...desc, ...(dims.w ? { w: dims.w } : {}), ...(dims.h ? { h: dims.h } : {}), _obj: URL.createObjectURL(file) });
+          renderComposerAttachments();
+        } catch (e) { flash("Image upload failed"); }
+      }
+
+      // Render the pending thumbnails into #composer-atts. img.src is set as an ATTRIBUTE (never
+      // innerHTML) and no filename/type is interpolated into markup, so a hostile name can't inject.
+      function renderComposerAttachments() {
+        composerAtts.innerHTML = "";
+        const atts = (pending && pending.attachments) || [];
+        atts.forEach((a, i) => {
+          const cell = document.createElement("div");
+          cell.className = "att";
+          const img = document.createElement("img");
+          img.src = a._obj || attUrl(a.file);
+          img.alt = "";
+          const rm = document.createElement("button");
+          rm.type = "button"; rm.className = "rm"; rm.textContent = "✕"; rm.title = "Remove image";
+          rm.onclick = () => {
+            const [gone] = pending.attachments.splice(i, 1);
+            if (gone && gone._obj) URL.revokeObjectURL(gone._obj);
+            renderComposerAttachments();
+          };
+          cell.append(img, rm);
+          composerAtts.appendChild(cell);
+        });
+        composerAttachBtn.disabled = atts.length >= MAX_ATTACHMENTS;
+      }
+
+      composerAttachBtn.onclick = () => composerFile.click();
+      composerFile.onchange = () => {
+        Array.from(composerFile.files || []).forEach((f) => uploadAttachment(f));
+        composerFile.value = ""; // allow re-picking the same file
+      };
+      // Paste an image from the clipboard while the note text is focused.
+      composerText.addEventListener("paste", (e) => {
+        const items = (e.clipboardData && e.clipboardData.items) || [];
+        for (const it of items) {
+          if (it.kind === "file" && /^image\//.test(it.type)) {
+            const f = it.getAsFile();
+            if (f) uploadAttachment(f);
+          }
+        }
+      });
+      // Drag-drop image files onto the composer.
+      composer.addEventListener("dragover", (e) => { if (pending) { e.preventDefault(); composer.classList.add("drop-active"); } });
+      composer.addEventListener("dragleave", (e) => { if (e.target === composer) composer.classList.remove("drop-active"); });
+      composer.addEventListener("drop", (e) => {
+        if (!pending) return;
+        e.preventDefault();
+        composer.classList.remove("drop-active");
+        Array.from((e.dataTransfer && e.dataTransfer.files) || []).filter((f) => /^image\//.test(f.type)).forEach((f) => uploadAttachment(f));
+      });
+
       // A new note's id is predictable (max + 1, matching the server), so the composer
       // can wear the note's eventual pin color before it exists.
       const nextNoteId = () => (notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1);
@@ -994,7 +1270,20 @@
             audio: { voice: voiceEls.map(clip), music: musicEl ? [clip(musicEl)] : [] },
             captions: vttCues.length > 0,
           };
-          fetch("/api/composition", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(manifest) });
+          // Capture the server-stamped baseline hash from the round-trip so renderNoteDots/
+          // renderList can flag notes pinned against an older index.html (content drift).
+          fetch("/api/composition", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(manifest) })
+            .then((r) => r.json())
+            .then((d) => {
+              if (d && d.provenance && d.provenance.indexHash) {
+                baselineHash = d.provenance.indexHash;
+                // This POST is fire-and-forget from mount(), so loadNotes()/renderNoteDots()/
+                // renderList() may have already painted with baselineHash still null (no drift shown).
+                // Repaint now that the baseline is known so the drift signal isn't missed on first load.
+                if (notes && notes.length) { renderNoteDots(); renderList(); }
+              }
+            })
+            .catch(() => {});
         } catch (e) {}
       }
       // Best-effort VO script text: HyperFrames doesn't embed it on <audio>, but if a
@@ -1087,14 +1376,65 @@
         if (line) s += ` — “${line.length > 60 ? line.slice(0, 57) + "…" : line}”`;
         return s;
       }
-      // Open the composer for a whole-scene or audio note at the current moment, anchored
+      // ---- in/out time-span selection ----
+      // The I/O keys mark in/out at the playhead; the live selection is adopted by the next note
+      // (any kind), turning it into an [time, timeEnd] interval. spanRange normalizes min/max and
+      // requires ≥0.01s so a backward selection still yields time<timeEnd before it reaches the server.
+      function spanRange() {
+        if (spanIn == null || spanOut == null) return null;
+        const a = Math.min(spanIn, spanOut), b = Math.max(spanIn, spanOut);
+        return b - a >= 0.01 ? { a, b } : null;
+      }
+      function clearSpan() { spanIn = spanOut = null; renderSpanSel(); }
+      function setSpanMark(which) {
+        if (!player) return;
+        const t = round2(player.getTime());
+        if (which === "in") spanIn = t; else spanOut = t;
+        renderSpanSel();
+        const r = spanRange();
+        flash(r ? `In ${fmt(r.a)} → Out ${fmt(r.b)} · ${(r.b - r.a).toFixed(2)}s — now add a note`
+                : `${which === "in" ? "In" : "Out"} ${fmt(t)} — set the other mark`);
+      }
+      // Stamp the current selection onto a pending note: time → selection start, timeEnd → end.
+      function applyPendingSpan(p) { const r = spanRange(); if (r) { p.time = r.a; p.timeEnd = r.b; } return p; }
+      // Draw the selection band in PERCENT (resize-safe like note-dots): both marks → a band,
+      // one mark → a thin single marker, neither / zero-length → hidden.
+      function renderSpanSel() {
+        if (!spanSel) return;
+        const r = spanRange();
+        if (r) {
+          const lo = timelinePct(r.a), hi = timelinePct(r.b);
+          spanSel.className = "span-sel";
+          spanSel.style.left = `${lo}%`;
+          spanSel.style.width = `${Math.max(0, hi - lo)}%`;
+          spanSel.style.display = "block";
+          return;
+        }
+        const mark = spanIn != null ? spanIn : spanOut;
+        if (mark != null && (spanIn == null || spanOut == null)) {
+          const p = timelinePct(mark);
+          if (p >= 0) {
+            spanSel.className = "span-sel single";
+            spanSel.style.left = `${p}%`;
+            spanSel.style.width = "0";
+            spanSel.style.display = "block";
+            return;
+          }
+        }
+        spanSel.style.display = "none";
+      }
+
+      // Open the composer for a whole-scene, audio, or time-span note at the current moment, anchored
       // beside the left dock. Works outside note mode; refuses to clobber an unsaved note.
       function openScopedComposer(kind, anchorEl) {
         if (pending && composerText.value.trim()) { flash("Save or cancel the open note first"); return; }
+        if (kind === "span" && !spanRange()) { flash("Mark in and out first — press I, then O"); return; }
         clearHover();
+        revokePendingAttachments();
         const t = player ? player.getTime() : 0;
         pending = { kind, time: t, scene: sceneAt(t) };
         if (kind === "audio") pending.audio = captureAudioContext(t);
+        applyPendingSpan(pending);
         const r = (anchorEl || dock).getBoundingClientRect();
         openComposer(r.right + 10, r.top);
       }
@@ -1104,11 +1444,18 @@
         const editLabel = pending.editId ? `note-${pending.editId} · edit` : "new note";
         pending.color = colorFor(pending.editId || nextNoteId());
         composer.style.setProperty("--c", pending.color);
+        const span = pending.timeEnd != null && pending.timeEnd > pending.time;
         const where = pending.kind === "scene" ? "whole scene"
           : pending.kind === "audio" ? "audio"
+          : pending.kind === "span" ? `time span ${(pending.timeEnd - pending.time).toFixed(2)}s`
           : region ? `box ${pending.w}×${pending.h}%` : `pin ${pending.x}%, ${pending.y}%`;
-        composerMeta.textContent = `${editLabel} · ${fmt(pending.time)} · ${pending.scene || ""} · ${where}`;
+        composerMeta.textContent = `${editLabel} · ${span ? `${fmt(pending.time)}–${fmt(pending.timeEnd)}` : fmt(pending.time)} · ${pending.scene || ""} · ${where}`;
         renderComposerTarget();
+        renderComposerSeverity();
+        // Clone any saved attachments (edit reopens via {...note}) so removing a thumbnail can't mutate
+        // the cached note array before a reload; fresh placements start empty.
+        pending.attachments = Array.isArray(pending.attachments) ? pending.attachments.map((a) => ({ ...a })) : [];
+        renderComposerAttachments();
         if (!pending.editId && pending.candidates && pending.candidates[pending.candIndex]) {
           flashEl(pending.candidates[pending.candIndex].el, pending.color);
         }
@@ -1151,30 +1498,48 @@
         window.addEventListener("mouseup", endComposerDrag);
       });
 
-      document.getElementById("composer-cancel").onclick = () => { composer.style.display = "none"; pending = null; };
+      document.getElementById("composer-cancel").onclick = () => { composer.style.display = "none"; revokePendingAttachments(); pending = null; drainReload(); };
       composerSaveBtn.onclick = async () => {
         const text = composerText.value.trim();
         if (!text || !pending) { composer.style.display = "none"; return; }
         if (pending.editId) {
+          // severity rides the edit PATCH so the human can both change and clear it; null tells the
+          // server to drop the field (the server treats null/invalid as clear).
+          // severity + attachments ride the edit PATCH so the human can change/clear them; a present
+          // key tells the server to replace (severity null = drop). Transient _obj is stripped.
           const res = await fetch(`${API}/${encodeURIComponent(pending.editId)}`, {
             method: "PATCH",
             headers: { "content-type": "application/json" },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({
+              text,
+              severity: pending.severity ?? null,
+              attachments: (pending.attachments || []).map(({ file, name, bytes, type, w, h }) => ({ file, name, bytes, type, w, h })),
+            }),
           });
           if (!res.ok) { flash("Update failed"); return; }
         } else {
           // Explicit payload — pending also carries candidate DOM elements that must
           // never be serialized.
-          const { time, x, y, w, h, scene, target, kind, audio } = pending;
+          const { time, x, y, w, h, scene, target, kind, audio, timeEnd } = pending;
           const payload = { time, x, y, w, h, scene, target, text };
           if (kind) payload.kind = kind;
           if (audio) payload.audio = audio;
+          if (timeEnd != null) payload.timeEnd = timeEnd; // load-bearing — the interval is lost without this
+          if (pending.severity) payload.severity = pending.severity;
+          if (pending.attachments && pending.attachments.length) // strip the transient _obj before serializing
+            payload.attachments = pending.attachments.map(({ file, name, bytes, type, w, h }) => ({ file, name, bytes, type, w, h }));
           await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
+          // Consume the live in/out marks once a span-bearing note adopts them — otherwise the stale
+          // range bleeds into and overwrites the time of every subsequent note (clearSpan was only
+          // wired to Escape before).
+          if (timeEnd != null) clearSpan();
         }
         composer.style.display = "none";
+        revokePendingAttachments();
         pending = null;
         flash("Note saved");
         loadNotes();
+        drainReload(); // a live edit deferred while this note was open can now fire
       };
 
       // ⌘+Enter (mac) / Ctrl+Enter (win/linux) saves without reaching for the button.
@@ -1199,12 +1564,21 @@
       dockToggle.onclick = () => setDockCollapsed(!dock.classList.contains("collapsed"));
       document.getElementById("scene-target").onclick = (e) => openScopedComposer("scene", e.currentTarget);
       document.getElementById("audio-target").onclick = (e) => openScopedComposer("audio", e.currentTarget);
+      document.getElementById("span-target").onclick = (e) => openScopedComposer("span", e.currentTarget);
 
       const STATUS_CYCLE = ["open", "resolved", "wontfix"];
+      // Humans never set "addressed" — that's the agent's write-back signal. A click on an
+      // addressed note VERIFIES it → resolved; otherwise step the human cycle. (Without this,
+      // indexOf("addressed") === -1 would wrongly send addressed → open.) A status-only PATCH
+      // leaves any resolution record intact, so the audit trail survives the verify click.
+      function nextStatus(cur) {
+        if (cur === "addressed") return "resolved";
+        const idx = STATUS_CYCLE.indexOf(cur || "open");
+        return STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+      }
       async function cycleStatus(note, ev) {
         ev.stopPropagation();
-        const idx = STATUS_CYCLE.indexOf(note.status || "open");
-        const next = STATUS_CYCLE[(idx + 1) % STATUS_CYCLE.length];
+        const next = nextStatus(note.status || "open");
         const res = await fetch(`${API}/${encodeURIComponent(note.id)}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },
@@ -1214,9 +1588,38 @@
         loadNotes();
       }
 
+      // Severity cycle for the drawer chip: unset → blocker → major → nit → unset. PATCH sends null
+      // to clear (the server deletes the field). Mirrors cycleStatus; the drawer list stays
+      // chronological — severity is shown as a chip, not used to reorder the human-facing list.
+      const SEVERITY_CYCLE = [null, "blocker", "major", "nit"];
+      async function cycleSeverity(note, ev) {
+        ev.stopPropagation();
+        const idx = SEVERITY_CYCLE.indexOf(note.severity || null);
+        const next = SEVERITY_CYCLE[(idx + 1) % SEVERITY_CYCLE.length];
+        const res = await fetch(`${API}/${encodeURIComponent(note.id)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ severity: next }),
+        });
+        if (!res.ok) flash("Severity update failed");
+        loadNotes();
+      }
+
       // ---- notes list + markers ----
       async function loadNotes() {
-        try { notes = await (await fetch(API, { cache: "no-cache" })).json(); } catch { notes = []; }
+        // Guard res.ok + shape: a 500 from /api/notes (e.g. a corrupt annotations.json the server
+        // preserved) returns an {error} object, not an array — sorting that would throw and silently
+        // kill the panel. Fall back to empty + a flash instead.
+        let ok = true;
+        try {
+          const res = await fetch(API, { cache: "no-cache" });
+          ok = res.ok; // a 500 (e.g. corrupt annotations.json the server preserved) → fall back + warn
+          notes = res.ok ? await res.json() : [];
+        } catch { ok = false; notes = []; }
+        if (!ok || !Array.isArray(notes)) {
+          notes = [];
+          flash("Couldn't load notes — annotations.json may be invalid");
+        }
         notes.sort((a, b) => a.time - b.time);
         toggleNotesBtn.textContent = `Notes (${notes.length})`;
         renderMarkers();
@@ -1264,24 +1667,42 @@
           const pct = timelinePct(n.time);
           if (pct < 0 || pct > 100) return;
           const dot = document.createElement("div");
-          const stale = n.target && compDoc && !resolveTargetEl(n.target);
-          dot.className = `note-dot${n.kind === "scene" ? " dot-scene" : n.kind === "audio" ? " dot-audio" : ""}${stale ? " dot-stale" : ""}`;
+          // Stale dot = the targeted element no longer resolves OR the composition's index.html
+          // changed since the note was pinned (content drift). Guarded by n.provenance &&.
+          // Suppressed once a note is addressed/resolved: a changed/removed target is the EXPECTED
+          // outcome of a successful agent edit, so the re-verify signal would otherwise misfire.
+          const status = n.status || "open";
+          const verified = status === "addressed" || status === "resolved";
+          const contentStale = n.provenance && baselineHash && n.provenance.indexHash && n.provenance.indexHash !== baselineHash;
+          const stale = !verified && (contentStale || (n.target && compDoc && !resolveTargetEl(n.target)));
+          dot.className = `note-dot${n.kind === "scene" ? " dot-scene" : n.kind === "audio" ? " dot-audio" : n.kind === "span" ? " dot-span" : ""}${stale ? " dot-stale" : ""}`;
           dot.style.left = `${pct}%`;
           dot.style.setProperty("--c", colorFor(n.id));
           dot.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
           dot.addEventListener("mouseenter", () => showNoteTip(n, dot));
           dot.addEventListener("mouseleave", hideNoteTip);
           noteDots.appendChild(dot);
+          // A note carrying a valid interval grows a colored bar from its dot to the end point.
+          if (n.timeEnd != null && n.timeEnd > n.time) {
+            const endPct = Math.min(100, timelinePct(n.timeEnd));
+            const bar = document.createElement("div");
+            bar.className = "note-span";
+            bar.style.left = `${pct}%`;
+            bar.style.width = `${Math.max(0, endPct - pct)}%`;
+            bar.style.setProperty("--c", colorFor(n.id));
+            noteDots.appendChild(bar);
+          }
         });
       }
       // Hover preview floating above a timeline dot: scene + timecode, then the note text.
       // Fixed-positioned from the dot's on-screen rect so it sits above the viewer rather
       // than being clipped by it; centered over the dot and clamped to the window edges.
-      const kindGlyph = (n) => n.kind === "scene" ? "▣ " : n.kind === "audio" ? "🔊 " : "";
+      const kindGlyph = (n) => n.kind === "scene" ? "▣ " : n.kind === "audio" ? "🔊 " : n.kind === "span" ? "↔ " : "";
       function showNoteTip(n, dot) {
         noteTip.style.setProperty("--c", colorFor(n.id));
-        const scope = n.kind === "scene" ? " · whole scene" : n.kind === "audio" ? " · audio" : "";
-        noteTipMeta.textContent = `${kindGlyph(n)}note-${n.id} · ${fmt(n.time)}${n.scene ? ` · ${n.scene}` : ""}${scope}`;
+        const scope = n.kind === "scene" ? " · whole scene" : n.kind === "audio" ? " · audio" : n.kind === "span" ? " · time span" : "";
+        const span = n.timeEnd != null && n.timeEnd > n.time;
+        noteTipMeta.textContent = `${kindGlyph(n)}note-${n.id} · ${span ? `${fmt(n.time)}–${fmt(n.timeEnd)}` : fmt(n.time)}${n.scene ? ` · ${n.scene}` : ""}${n.severity ? ` · ${n.severity}` : ""}${scope}${n.attachments && n.attachments.length ? " · 📎" : ""}`;
         const text = (n.text || "").trim();
         noteTipText.textContent = text || "(no text)";
         noteTipText.classList.toggle("empty", !text);
@@ -1298,12 +1719,22 @@
         notes.forEach((n) => {
           const status = n.status || "open";
           const statusCls = status !== "open" ? ` ${status}` : "";
+          const span = n.timeEnd != null && n.timeEnd > n.time;
+          // A changed/removed target (or content drift) is the EXPECTED outcome of a successful
+          // agent edit, so suppress the re-verify badges once a note is addressed/resolved.
+          const verified = status === "addressed" || status === "resolved";
           const item = document.createElement("div");
           item.className = `note-item${statusCls}`;
           item.style.borderLeftColor = colorFor(n.id);
           item.style.borderLeftWidth = "3px";
           const actions = document.createElement("div");
           actions.className = "actions";
+          // Reviewer severity chip — color-coded, click to cycle; neutral '+sev' affordance when unset.
+          const sevBtn = document.createElement("button");
+          sevBtn.className = `sev-chip${n.severity ? ` ${n.severity}` : ""}`;
+          sevBtn.title = "Cycle severity (blocker → major → nit → none)";
+          sevBtn.textContent = n.severity || "+sev";
+          sevBtn.onclick = (ev) => cycleSeverity(n, ev);
           const statusBtn = document.createElement("button");
           statusBtn.className = `status${statusCls}`;
           statusBtn.title = "Cycle status";
@@ -1324,18 +1755,20 @@
             if (!res.ok) flash("Delete failed");
             loadNotes();
           };
-          actions.append(statusBtn, edit, del);
+          actions.append(sevBtn, statusBtn, edit, del);
           const nt = document.createElement("span");
-          nt.className = "nt"; nt.textContent = `note-${n.id} · ${fmt(n.time)}`;
+          nt.className = "nt"; nt.textContent = `note-${n.id} · ${span ? `${fmt(n.time)}–${fmt(n.timeEnd)}` : fmt(n.time)}`;
           const ns = document.createElement("span");
           ns.className = "ns"; ns.textContent = " " + (n.scene || "");
           const nx = document.createElement("div");
           nx.className = "nx"; nx.textContent = n.text;
           item.append(actions, nt, ns);
-          if (n.kind === "scene" || n.kind === "audio") {
+          if (n.kind === "scene" || n.kind === "audio" || n.kind === "span") {
             const badge = document.createElement("div");
-            badge.className = `nkind${n.kind === "audio" ? " audio" : ""}`;
-            badge.textContent = n.kind === "scene" ? "▣ whole scene" : "🔊 audio";
+            badge.className = `nkind${n.kind === "audio" ? " audio" : n.kind === "span" ? " span" : ""}`;
+            badge.textContent = n.kind === "scene" ? "▣ whole scene"
+              : n.kind === "audio" ? "🔊 audio"
+              : `↔ time span${span ? ` ${(n.timeEnd - n.time).toFixed(2)}s` : ""}`;
             item.append(badge);
             if (n.kind === "audio") {
               const tg = document.createElement("div");
@@ -1349,14 +1782,56 @@
             tg.textContent = `on ${targetLabel(n.target)}`;
             item.append(tg);
             // The targeted element no longer resolves (the composition changed under the note) —
-            // flag it for re-verification rather than silently pointing at nothing.
-            if (compDoc && !resolveTargetEl(n.target)) {
+            // flag it for re-verification rather than silently pointing at nothing. Suppressed for
+            // addressed/resolved notes (a missing target is the expected result of the agent's edit).
+            if (!verified && compDoc && !resolveTargetEl(n.target)) {
               const stale = document.createElement("div");
               stale.className = "stale";
               stale.title = "This note's element can't be found in the current composition — re-check it";
               stale.textContent = "⚠ unresolved — re-verify";
               item.append(stale);
             }
+          }
+          // A point note (element/region/pin) that also carries an in/out interval → a small chip.
+          if (n.kind !== "span" && span) {
+            const chip = document.createElement("div");
+            chip.className = "nspan";
+            chip.textContent = `↔ ${(n.timeEnd - n.time).toFixed(2)}s span`;
+            item.append(chip);
+          }
+          // Content drift: the composition's index.html changed since this note was pinned
+          // (cross-session). Factual regardless of whether the DOM target still resolves;
+          // guarded by n.provenance && so pre-feature notes render exactly as before. Suppressed
+          // for addressed/resolved notes (the drift is the expected result of the agent's edit).
+          if (!verified && n.provenance && baselineHash && n.provenance.indexHash && n.provenance.indexHash !== baselineHash) {
+            const drift = document.createElement("div");
+            drift.className = "stale";
+            drift.title = "The composition's index.html changed since this note was pinned — re-verify before applying";
+            drift.textContent = "⚠ pinned against older composition — re-verify";
+            item.append(drift);
+          }
+          // Agent write-back: surface what the consuming agent changed so a human can verify it.
+          if (n.resolution) {
+            const r = n.resolution;
+            const nres = document.createElement("div");
+            nres.className = "nres";
+            nres.title = "What the agent changed — verify, then mark resolved";
+            nres.textContent = `✓ addressed by ${r.by || "agent"}${r.summary ? `: ${r.summary}` : ""}`;
+            item.append(nres);
+          }
+          // Reference-image hint — a small count chip with the first thumbnail. The agent opens the
+          // actual file via the path in annotations.json/md; img.src is an attribute (never innerHTML).
+          if (n.attachments && n.attachments.length) {
+            const natt = document.createElement("div");
+            natt.className = "natt";
+            natt.title = "Reference image(s) attached — see annotations for the openable path";
+            const thumb = document.createElement("img");
+            thumb.src = attUrl(n.attachments[0].file);
+            thumb.alt = "";
+            const lbl = document.createElement("span");
+            lbl.textContent = `📎 ${n.attachments.length} image${n.attachments.length > 1 ? "s" : ""}`;
+            natt.append(thumb, lbl);
+            item.append(natt);
           }
           item.append(nx);
           // Hover a note row → flash its element in the composition (in the note's

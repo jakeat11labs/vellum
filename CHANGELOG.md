@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - June 26, 2026
+
+The "Next" tier from the roadmap — seven features that close the review loop and make the handoff artifact carry far more of its own context. Notes stay a bare JSON array; every new field is absent-by-default, so old notes are byte-identical.
+
+### Added
+- **Agent resolution write-back.** The consuming agent can record what it changed and flip a note to a new `addressed` status (open → addressed → resolved/wontfix) — via `PATCH /api/notes/<id>` with a `resolution{by,at,summary,edits[]}`, or by editing `annotations.json` offline (reconciled + sanitized on the server's next boot). A human click verifies (`addressed → resolved`). Renders as `- resolution …` / `- edit …` sub-lines.
+- **Git-tracked notes + provenance.** `notes/annotations.{json,md}` are no longer gitignored, so reviews travel through git. Each note + the composition manifest are stamped (best-effort) with the commit and the `index.html` content hash they were made against; a note pinned against changed content is flagged `_(stale: …)_` and gets an amber timeline dot.
+- **Time-span (in/out) notes.** Mark an in/out range with the `I`/`O` keys (or the dock's Time-span target) so "cut 2s", "hold this beat", and retimes are lossless intervals (`0:11.00–0:14.50`), not a single guessed instant.
+- **Severity + same-target clustering.** Tag a note `blocker` / `major` / `nit`; `annotations.md` orders severity-first ("fix blockers first") and groups notes that share an element under one header so the agent addresses a scene once.
+- **Self-measuring metrics.** A local, gitignored `notes/metrics.jsonl` ledger powers a first-pass fix rate, create→resolve latency, and time-to-note — surfaced in a `## Metrics` footer, `GET /api/metrics`, and the shutdown summary. Diagnostics, not feedback to act on.
+- **Reference-image attachments.** Paste / drop / pick an image on a note (raw-binary upload, magic-byte sniffed, SVG excluded, capped) stored under `notes/attachments/` and surfaced as an openable `- ref images:` path for the agent.
+- **Live composition reload.** With the player open, editing `index.html` reloads the iframe at the same frame (poll-only `GET /api/watch`), deferring while a note is open and offering a manual reload.
+
+### Changed
+- The note record now also carries optional `timeEnd`, `severity`, `attachments`, `resolution`, `provenance`, and the `addressed` status; `annotations.md` gained a baseline header, an expanded legend, and clustered/severity-ordered output. The server normalizes notes on read (tolerant of offline hand-edits) and regenerates `annotations.md` on boot.
+
+### Fixed
+- Hardened the daemon against malformed/hand-edited `annotations.json`: non-object/non-array fields are filtered or coerced on read, write handlers return 500 instead of throwing, and an `uncaughtException` backstop keeps a long-running review alive.
+
 ## [0.6.1] - June 25, 2026
 
 The rest of the feature-evaluation "Now" tier — sharper capture for the reviewer, clearer signal for the agent.

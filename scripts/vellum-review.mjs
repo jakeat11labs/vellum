@@ -35,11 +35,19 @@ const py = (pct) => Math.round((pct / 100) * H);
 
 function readNotes() {
   try {
-    return JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
+    const notes = JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
+    // Valid JSON of the wrong shape (a hand-edit that left an object/number) would crash main()'s
+    // .sort(); tolerate it the same way as a parse error — warn and continue with no notes.
+    if (!Array.isArray(notes)) {
+      console.warn(`${path.relative(ROOT, NOTES_JSON)} is not a JSON array — skipping`);
+      return [];
+    }
+    return notes;
   } catch (err) {
+    // A bad offline edit to annotations.json must not crash the review-packet build — agents
+    // hand-edit this file, so warn and continue with no notes rather than process.exit(1).
     if (err && err.code !== "ENOENT") {
-      console.error(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message}`);
-      process.exit(1);
+      console.warn(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message} — skipping`);
     }
     return [];
   }
@@ -157,10 +165,12 @@ function main() {
       process.stdout.write("\r\x1b[K");
       console.log(`  ${drawn ? ui.glyph.ok : ui.glyph.err} ${label}`);
     }
-    const where = n.w != null ? `box ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%,${n.y}%` : "—";
+    const span = n.timeEnd != null && n.timeEnd > n.time;
+    const where = n.kind === "span" ? (span ? `time span ${(n.timeEnd - n.time).toFixed(2)}s` : "time span")
+      : n.w != null ? `box ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%,${n.y}%` : "—";
     const tgt = n.target ? ` · on \`${n.target.tag}${n.target.cls ? "." + n.target.cls : ""}\`` : "";
     const sel = n.target && n.target.selector ? ` · at \`${n.target.selector}\`` : "";
-    index.push(`### note-${n.id} · ${fmtTime(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
+    index.push(`### note-${n.id} · ${span ? `${fmtTime(n.time)}–${fmtTime(n.timeEnd)}` : fmtTime(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
     index.push("");
     index.push(`${n.text}`);
     index.push("");

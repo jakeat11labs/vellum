@@ -83,10 +83,17 @@ async function testServerApi() {
     assert.equal(note.time, 0);
     assert.equal(note.x, 100);
     assert.equal(note.y, 0);
+    // Provenance is server-stamped on POST. The temp project's index.html always hashes, so
+    // indexHash is present; `commit` only appears inside a git repo (temp dirs may nest in a
+    // parent repo, so never assert its ABSENCE).
+    assert.match(note.provenance.indexHash, /^sha256:[0-9a-f]{16}$/);
 
     let md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
     assert.match(md, /line one \\`line two\\`/);
 
+    // Change index.html so computeProvenance() would now hash differently — this makes the
+    // immutability assertion below meaningful (it would catch a PATCH that wrongly re-stamps).
+    fs.writeFileSync(path.join(dir, "index.html"), '<!doctype html><div id="root" data-width="1080" data-height="1920">changed</div>');
     res = await fetch(`${base}/api/notes/${note.id}`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
@@ -96,6 +103,9 @@ async function testServerApi() {
     const patched = await res.json();
     assert.equal(patched.text, "updated note");
     assert.equal(patched.status, "resolved");
+    // PATCH never re-stamps provenance — the note records its creation baseline immutably, even
+    // though index.html now hashes differently.
+    assert.deepEqual(patched.provenance, note.provenance);
 
     md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
     assert.match(md, /\*\*note-\d+\*\*/);
@@ -152,10 +162,15 @@ async function testServerApi() {
       }),
     });
     assert.equal(res.status, 201);
-    assert.equal((await res.json()).scenes, 2);
+    const compPost = await res.json();
+    assert.equal(compPost.scenes, 2);
+    // The mount baseline is returned in the POST round-trip (player captures it for drift) and
+    // persisted in composition.json.
+    assert.match(compPost.provenance.indexHash, /^sha256:[0-9a-f]{16}$/);
     const comp = await (await fetch(`${base}/api/composition`)).json();
     assert.equal(comp.width, 1920);
     assert.equal(comp.scenes.length, 2);
+    assert.match(comp.provenance.indexHash, /^sha256:[0-9a-f]{16}$/);
     assert.equal(comp.audio.voice[0].src, "assets/vo-01.mp3"); // src stored verbatim in manifest (player already basenames per-note)
     assert.equal(comp.captions, true);
     assert.match(comp.tool, /^vellum /);
@@ -214,6 +229,101 @@ async function testServerApi() {
     assert.match(md, /clip order: prev vo-01\.mp3 \(0:02\.00\) — "Here's the idea\."; next vo-03\.mp3 \(0:12\.00\)/);
     await fetch(`${base}/api/notes`, { method: "DELETE" });
 
+    // Agent resolution write-back: PATCH a note to "addressed" with a resolution record. The
+    // server sanitizes it (junk edit dropped, unparseable `at` server-stamped) and renders it as
+    // md sub-lines; "addressed" is the agent's "I edited this — human, please verify" signal.
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 4, scene: "intro", text: "duration too short" }),
+    });
+    const wb = await res.json();
+    res = await fetch(`${base}/api/notes/${wb.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        status: "addressed",
+        resolution: {
+          by: "agent", at: "not-a-date", summary: "bumped data-duration to 6",
+          edits: [{ file: "index.html", selector: "#intro", detail: "+1s" }, { bogus: 1 }],
+        },
+      }),
+    });
+    assert.equal(res.status, 200);
+    const addressed = await res.json();
+    assert.equal(addressed.status, "addressed");
+    assert.equal(addressed.resolution.by, "agent");
+    assert.equal(addressed.resolution.summary, "bumped data-duration to 6");
+    assert.equal(addressed.resolution.edits.length, 1); // junk {bogus:1} entry dropped
+    assert.ok(Number.isFinite(Date.parse(addressed.resolution.at))); // bad `at` server-stamped
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /_\(addressed\)_/);
+    assert.match(md, /- resolution by agent .*bumped data-duration to 6/);
+    assert.match(md, /- edit: `index\.html` · at `#intro` · \+1s/);
+    assert.match(md, /Legend:.*addressed/); // legend documents the new status
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
+    // Time-span notes: an optional timeEnd turns a point note into an [time, timeEnd] interval. The
+    // server sanitizes timeEnd like any number and renders an M:SS.ss–M:SS.ss headline when valid.
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 4, timeEnd: 6.5, text: "cut 2s" }),
+    });
+    assert.equal(res.status, 201);
+    const spanNote = await res.json();
+    assert.equal(spanNote.time, 4);
+    assert.equal(spanNote.timeEnd, 6.5);
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /\*\*0:04\.00–0:06\.50\*\*/); // interval headline timecode
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
+    // Equal (zero-length) and inverted intervals are rejected — timeEnd drops, leaving a point note.
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 5, timeEnd: 5, text: "equal collapses to a point" }),
+    });
+    assert.equal((await res.json()).timeEnd, undefined);
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 5, timeEnd: 3, text: "inverted dropped" }),
+    });
+    assert.equal((await res.json()).timeEnd, undefined);
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /\*\*0:05\.00\*\*/);    // a plain single timecode...
+    assert.doesNotMatch(md, /0:05\.00–/);    // ...with no interval en-dash
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
+    // timeEnd clamps + rounds like every number: below time → dropped; 3.009 → 3.01 (2-decimals).
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 0, timeEnd: -2, text: "negative end dropped" }),
+    });
+    assert.equal((await res.json()).timeEnd, undefined);
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 1, timeEnd: 3.009, text: "rounded end" }),
+    });
+    assert.equal((await res.json()).timeEnd, 3.01);
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
+    // Span scoped kind: a pure timeline-range note — no element/pin (target null, no audio snapshot).
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 8, timeEnd: 10, scene: "intro", kind: "span", text: "hold this beat" }),
+    });
+    assert.equal(res.status, 201);
+    const spanScoped = await res.json();
+    assert.equal(spanScoped.kind, "span");
+    assert.equal(spanScoped.target, null);
+    assert.equal(spanScoped.audio, undefined);
+    assert.equal(spanScoped.timeEnd, 10);
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /\*\*0:08\.00–0:10\.00\*\*/);  // interval headline
+    assert.match(md, /_\(2\.00s span\)_/);           // where-clause = duration span
+    assert.doesNotMatch(md, /- element:/);           // span carries no element/style sub-lines
+    // Legend stays a valid "Legend: " line and now documents the interval notation.
+    assert.match(md, /^Legend: /m);
+    assert.match(md, /M:SS\.ss–M:SS\.ss/);
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
     res = await fetch(`${base}/api/mix`, {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -246,6 +356,10 @@ async function testMalformedNotesArePreserved() {
   fs.writeFileSync(notesPath, "{not json");
 
   await withServer(dir, {}, async (base) => {
+    // The boot reconcile (onListen → writeNotes(readNotes())) must skip the write when readNotes
+    // throws on malformed JSON, leaving the file byte-identical rather than clobbering it with [].
+    assert.equal(fs.readFileSync(notesPath, "utf8"), "{not json");
+
     let res = await fetch(`${base}/api/notes`);
     assert.equal(res.status, 500);
 
@@ -357,10 +471,715 @@ async function testVersionSourcesAgree() {
   );
 }
 
+// Foundation (F1/F2): the pure shared helpers both readers and the smoke test rely on.
+async function testSharedHelpers() {
+  const shared = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
+  const {
+    NOTE_STATUSES, NOTE_SEVERITIES, normalizeNoteSeverity, sanitizeResolution,
+    fmtDuration, computeMetrics, reconcileNote,
+  } = shared;
+
+  // F1: the status enum gained "addressed" (agent-edited, awaiting human verify).
+  assert.ok(NOTE_STATUSES.has("addressed"));
+
+  // Severity: ordered most→least urgent; case-insensitive; unknown/absent → fallback.
+  assert.deepEqual(NOTE_SEVERITIES, ["blocker", "major", "nit"]);
+  assert.equal(normalizeNoteSeverity("MAJOR"), "major");
+  assert.equal(normalizeNoteSeverity("bogus"), null);
+  assert.equal(normalizeNoteSeverity(null), null);
+  assert.equal(normalizeNoteSeverity(undefined, "nit"), "nit");
+
+  // fmtDuration: "42s" / "4m12s" / "1h05m"; negatives clamp to 0.
+  assert.equal(fmtDuration(42000), "42s");
+  assert.equal(fmtDuration(252000), "4m12s");
+  assert.equal(fmtDuration(3900000), "1h05m");
+  assert.equal(fmtDuration(-5), "0s");
+
+  // sanitizeResolution: bounded caps, server-stamped `at`, content-gated, junk dropped.
+  assert.equal(sanitizeResolution(null), null);
+  assert.equal(sanitizeResolution({ at: "2026-01-01T00:00:00.000Z" }), null); // `at` alone is not content
+  const res = sanitizeResolution({
+    by: "x".repeat(200), at: "not-a-date", summary: "y".repeat(1000),
+    edits: [{ file: "f".repeat(300), selector: "#s", detail: "d" }, { bogus: 1 }, "nope"]
+      .concat(Array.from({ length: 30 }, () => ({ detail: "z" }))),
+  });
+  assert.equal(res.by.length, 80);
+  assert.equal(res.summary.length, 800);
+  assert.ok(Number.isFinite(Date.parse(res.at))); // bad timestamp replaced with a real ISO
+  assert.equal(res.edits.length, 20); // bounded; junk/non-object entries dropped
+  assert.equal(res.edits[0].file.length, 250);
+  const keepAt = sanitizeResolution({ summary: "s", at: "2026-02-03T04:05:06.000Z" });
+  assert.equal(keepAt.at, "2026-02-03T04:05:06.000Z"); // valid agent timestamp preserved
+  assert.equal(sanitizeResolution({ summary: "s", edits: "notarray" }).edits, undefined);
+
+  // computeMetrics: note-derived counts/first-pass/latency + ledger time-to-note.
+  const empty = computeMetrics([]);
+  assert.deepEqual(empty.notes, { total: 0, open: 0, addressed: 0, resolved: 0, wontfix: 0 });
+  assert.equal(empty.firstPass.rate, null);
+  assert.equal(empty.resolveLatencyMs, null);
+  assert.equal(empty.timeToNoteMs, null);
+  const m = computeMetrics([
+    { status: "resolved", createdAt: "2026-01-01T00:00:00.000Z", firstResolvedAt: "2026-01-01T00:01:00.000Z" },
+    { status: "open", createdAt: "2026-01-01T00:00:00.000Z", firstResolvedAt: "2026-01-01T00:02:00.000Z", reopenCount: 2 },
+    { status: "wontfix" },
+  ]);
+  assert.deepEqual(m.notes, { total: 3, open: 1, addressed: 0, resolved: 1, wontfix: 1 });
+  assert.deepEqual(m.firstPass, { fixed: 2, reopened: 1, rate: 0.5 });
+  assert.deepEqual(m.resolveLatencyMs, { count: 2, median: 90000, avg: 90000 });
+  // M4 regression: a note fixed-then-rejected without ever resolving (open→addressed→open) carries
+  // firstAddressedAt + reopenCount but NO firstResolvedAt. It must be in the `fixed` denominator so
+  // `reopened` is a subset and the rate stays in [0,1] (it used to read negative / "-100%").
+  const mNeg = computeMetrics([
+    { status: "open", createdAt: "2026-01-01T00:00:00.000Z", firstAddressedAt: "2026-01-01T00:00:30.000Z", reopenCount: 1 },
+  ]);
+  assert.deepEqual(mNeg.firstPass, { fixed: 1, reopened: 1, rate: 0 });
+  assert.equal(mNeg.notes.addressed, 0); // status is "open" (was reopened), so the addressed bucket is 0
+  // A clean open→addressed→resolved (fixed, never reopened) is rate 1.
+  const mClean = computeMetrics([
+    { status: "resolved", createdAt: "2026-01-01T00:00:00.000Z", firstAddressedAt: "2026-01-01T00:00:30.000Z", firstResolvedAt: "2026-01-01T00:01:00.000Z" },
+    { status: "addressed", createdAt: "2026-01-01T00:00:00.000Z", firstAddressedAt: "2026-01-01T00:00:30.000Z" },
+  ]);
+  assert.deepEqual(mClean.firstPass, { fixed: 2, reopened: 0, rate: 1 });
+  assert.equal(mClean.notes.addressed, 1);
+  // sid-aware time-to-note: a create pairs only with the anchor of its own run, never a foreign sid.
+  const mSid = computeMetrics([], [
+    { type: "session", sid: "A", at: "2026-01-01T00:00:00.000Z" },
+    { type: "session", sid: "B", at: "2026-01-01T00:10:00.000Z" },
+    { type: "create", sid: "A", at: "2026-01-01T00:00:20.000Z" },
+  ]);
+  assert.deepEqual(mSid.timeToNoteMs, { count: 1, median: 20000, avg: 20000 }); // paired with A (20s), not B
+  // Negative latency (clock skew) dropped; time-to-note derived only from ledger anchors.
+  const m2 = computeMetrics(
+    [{ status: "resolved", createdAt: "2026-01-01T00:05:00.000Z", firstResolvedAt: "2026-01-01T00:04:00.000Z" }],
+    [
+      { type: "session", at: "2026-01-01T00:00:00.000Z" },
+      { type: "create", at: "2026-01-01T00:00:30.000Z" },
+      { type: "create", at: "2026-01-01T00:01:30.000Z" },
+    ]
+  );
+  assert.equal(m2.resolveLatencyMs, null);
+  assert.deepEqual(m2.timeToNoteMs, { count: 2, median: 60000, avg: 60000 });
+
+  // reconcileNote: coerce status, drop invalid severity, sanitize resolution.
+  const recon = reconcileNote({ id: 1, status: "donezo", severity: "BOGUS", resolution: { summary: "s", edits: "notarray", bogus: 1 } });
+  assert.equal(recon.status, "open");
+  assert.equal(recon.severity, undefined);
+  assert.equal(recon.resolution.summary, "s");
+  assert.equal(recon.resolution.edits, undefined);
+  assert.equal(recon.resolution.bogus, undefined);
+  assert.ok(!("resolution" in reconcileNote({ resolution: { at: "2026-01-01T00:00:00.000Z" } }))); // no content → dropped
+  // Back-compat: a legacy note (valid status, no new fields) serializes byte-identically.
+  const legacy = { id: 9, time: 4, x: 50, y: 50, w: null, h: null, scene: "intro", target: null, text: "ok", status: "resolved", createdAt: "2026-01-01T00:00:00.000Z" };
+  assert.equal(JSON.stringify(reconcileNote(legacy)), JSON.stringify(legacy));
+}
+
+// Foundation (F3): boot regenerates annotations.{json,md} from reconciled notes, so an
+// offline-edited annotations.json (unknown status, junk resolution) is coerced on next boot.
+async function testBootReconcilesOfflineEdits() {
+  const dir = makeTempProject("boot-reconcile");
+  fs.mkdirSync(path.join(dir, "notes"));
+  const notesPath = path.join(dir, "notes", "annotations.json");
+  fs.writeFileSync(notesPath, JSON.stringify([
+    {
+      id: 1, time: 2, x: 50, y: 50, w: null, h: null, scene: "intro", target: null,
+      text: "offline edit", status: "donezo", severity: "BOGUS",
+      resolution: { summary: "bumped duration", edits: "notarray", bogus: 1 },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+  ]));
+
+  await withServer(dir, {}, async (base) => {
+    const notes = await (await fetch(`${base}/api/notes`)).json();
+    assert.equal(notes.length, 1);
+    const n = notes[0];
+    assert.equal(n.status, "open"); // unknown status coerced
+    assert.equal(n.severity, undefined); // invalid severity dropped
+    assert.equal(n.resolution.summary, "bumped duration");
+    assert.equal(n.resolution.edits, undefined); // non-array edits dropped
+    assert.equal(n.resolution.bogus, undefined); // unknown field dropped
+    assert.ok(Number.isFinite(Date.parse(n.resolution.at))); // server-stamped `at`
+
+    // annotations.md regenerated on boot; annotations.json rewritten canonical.
+    const md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /\*\*note-1\*\* .* offline edit/);
+    const onDisk = fs.readFileSync(notesPath, "utf8");
+    assert.doesNotMatch(onDisk, /donezo|BOGUS|notarray|bogus/);
+  });
+}
+
+// Write-back caps + clear semantics, exercised through the live PATCH endpoint (the pure
+// sanitizer is unit-tested in testSharedHelpers; this proves the round-trip, the delete-on-null
+// clear, and that a status-only PATCH leaves an existing resolution untouched).
+async function testAgentResolutionWriteback() {
+  const dir = makeTempProject("writeback");
+  await withServer(dir, {}, async (base) => {
+    let res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 1, text: "fix me" }),
+    });
+    const note = await res.json();
+
+    // Oversized strings clamp; a 30-element edits array is bounded to 20; `at` is stamped.
+    res = await fetch(`${base}/api/notes/${note.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        status: "addressed",
+        resolution: {
+          by: "b".repeat(200), summary: "s".repeat(1000),
+          edits: Array.from({ length: 30 }, (_, i) => ({ file: "f".repeat(300), detail: `edit ${i}` })),
+        },
+      }),
+    });
+    assert.equal(res.status, 200);
+    let patched = await res.json();
+    assert.equal(patched.resolution.by.length, 80);
+    assert.equal(patched.resolution.summary.length, 800);
+    assert.equal(patched.resolution.edits.length, 20);
+    assert.equal(patched.resolution.edits[0].file.length, 250);
+    assert.ok(Number.isFinite(Date.parse(patched.resolution.at))); // stamped (none supplied)
+
+    // resolution:null clears it (field deleted, not stored as null); status untouched.
+    res = await fetch(`${base}/api/notes/${note.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resolution: null }),
+    });
+    assert.equal(res.status, 200);
+    patched = await res.json();
+    assert.equal(patched.resolution, undefined);
+    assert.equal(patched.status, "addressed");
+
+    // A status-only PATCH (resolution absent) must NOT wipe an existing resolution — this is the
+    // human-verify path (addressed→resolved keeps the audit trail).
+    await fetch(`${base}/api/notes/${note.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ resolution: { summary: "again" } }),
+    });
+    res = await fetch(`${base}/api/notes/${note.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "resolved" }),
+    });
+    patched = await res.json();
+    assert.equal(patched.status, "resolved");
+    assert.equal(patched.resolution.summary, "again"); // preserved through a status-only PATCH
+  });
+}
+
+// Write-back, offline path: an agent edits annotations.json directly while the server is stopped,
+// setting status "addressed" + a resolution (and another note with junk status/edits). On boot the
+// server reconciles (preserves a valid status, coerces a junk one, sanitizes resolution, stamps a
+// missing `at`) and regenerates annotations.md with the write-back sub-lines.
+async function testAgentJsonReconciledOnBoot() {
+  const dir = makeTempProject("writeback-boot");
+  fs.mkdirSync(path.join(dir, "notes"));
+  const notesPath = path.join(dir, "notes", "annotations.json");
+  fs.writeFileSync(notesPath, JSON.stringify([
+    {
+      id: 1, time: 4, x: null, y: null, w: null, h: null, scene: "intro", target: null,
+      text: "duration too short", status: "addressed",
+      resolution: {
+        by: "agent", summary: "bumped data-duration to 6",
+        edits: [{ file: "index.html", selector: "#intro", detail: "+1s" }, { bogus: 1 }],
+      },
+      createdAt: "2026-01-01T00:00:00.000Z",
+    },
+    {
+      id: 2, time: 6, x: null, y: null, w: null, h: null, scene: "outro", target: null,
+      text: "second", status: "donezo",
+      resolution: { summary: "x", edits: "notarray", bogus: 1 },
+      createdAt: "2026-01-01T00:00:01.000Z",
+    },
+    {
+      // A hand-edit that set attachments to a non-array with a truthy length would, unguarded,
+      // throw in the md render (.map) and wedge EVERY write. It must be dropped on read, not crash.
+      id: 3, time: 7, x: null, y: null, w: null, h: null, scene: "outro", target: null,
+      text: "bad attachments", status: "open", attachments: "sketch.png",
+      createdAt: "2026-01-01T00:00:02.000Z",
+    },
+  ]));
+
+  await withServer(dir, {}, async (base) => {
+    const notes = await (await fetch(`${base}/api/notes`)).json();
+    const a = notes.find((n) => n.id === 1);
+    const b = notes.find((n) => n.id === 2);
+    const c = notes.find((n) => n.id === 3);
+    assert.equal(c.attachments, undefined); // non-array attachments dropped on read, not crashed-on
+    // Writes are NOT wedged by the bad note: a fresh POST still succeeds and the md regenerates.
+    const fresh = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ time: 1, text: "still writable" }),
+    });
+    assert.equal(fresh.status, 201);
+    assert.equal(a.status, "addressed"); // valid agent status preserved
+    assert.equal(a.resolution.edits.length, 1); // junk {bogus:1} edit dropped
+    assert.ok(Number.isFinite(Date.parse(a.resolution.at))); // server-stamped (none supplied)
+    assert.equal(b.status, "open"); // unknown status coerced
+    assert.equal(b.resolution.summary, "x");
+    assert.equal(b.resolution.edits, undefined); // non-array edits dropped
+    assert.equal(b.resolution.bogus, undefined); // unknown field dropped
+
+    // annotations.md regenerated on boot with the write-back sub-lines; json canonicalized.
+    const md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /_\(addressed\)_/);
+    assert.match(md, /- resolution by agent .*bumped data-duration to 6/);
+    assert.match(md, /- edit: `index\.html` · at `#intro` · \+1s/);
+    const onDisk = fs.readFileSync(notesPath, "utf8");
+    assert.doesNotMatch(onDisk, /donezo|notarray/);
+    assert.doesNotMatch(onDisk, /"bogus"/);
+  });
+}
+
+function gitAvailable() {
+  try {
+    return spawnSync("git", ["--version"], { encoding: "utf8" }).status === 0;
+  } catch {
+    return false;
+  }
+}
+
+// Provenance (keystone): each note + the composition manifest are stamped with the git commit
+// and the sha256 of index.html they were pinned against. A note whose hash differs from the
+// current mount baseline is flagged `_(stale: …)_` in annotations.md, and the header cites the
+// baseline. Git-gated (skipped where git is unavailable) since it needs a real commit SHA.
+async function testProvenanceStaleDetection() {
+  if (!gitAvailable()) {
+    console.log("  (skipped testProvenanceStaleDetection — git unavailable)");
+    return;
+  }
+  const dir = makeTempProject("provenance");
+  const git = (...args) => {
+    const r = spawnSync("git", args, { cwd: dir, encoding: "utf8" });
+    assert.equal(r.status, 0, `git ${args.join(" ")} failed: ${r.stderr}`);
+  };
+  git("init", "-q");
+  git("config", "user.email", "test@example.com");
+  git("config", "user.name", "Vellum Test");
+  git("add", "-A");
+  git("commit", "-q", "-m", "initial");
+
+  await withServer(dir, {}, async (base) => {
+    // note-1 is pinned against the original index.html (baseline A).
+    let res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 1, scene: "intro", text: "first note" }),
+    });
+    assert.equal(res.status, 201);
+    const note1 = await res.json();
+    assert.match(note1.provenance.commit, /^[0-9a-f]{40}$/); // inside a git repo → commit present
+    assert.match(note1.provenance.indexHash, /^sha256:[0-9a-f]{16}$/);
+
+    // Mount baseline A.
+    await fetch(`${base}/api/composition`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ width: 1080, height: 1920, duration: 5, scenes: [{ id: "intro", start: 0, duration: 5 }] }),
+    });
+
+    // The composition's index.html changes under the note.
+    fs.writeFileSync(
+      path.join(dir, "index.html"),
+      `<!doctype html><html><body><div id="root" data-width="1080" data-height="1920">Edited body</div></body></html>`
+    );
+
+    // Mount baseline B (the new content).
+    res = await fetch(`${base}/api/composition`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ width: 1080, height: 1920, duration: 5, scenes: [{ id: "intro", start: 0, duration: 5 }] }),
+    });
+    const baselineB = (await res.json()).provenance.indexHash;
+    assert.notEqual(note1.provenance.indexHash, baselineB); // content genuinely drifted
+
+    // note-2 is pinned against baseline B (the current bytes).
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 2, scene: "intro", text: "second note" }),
+    });
+    const note2 = await res.json();
+    assert.equal(note2.provenance.indexHash, baselineB);
+
+    // annotations.md: note-1 (hash A) is stale vs the manifest (hash B); note-2 (hash B) is not.
+    const md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    const lines = md.split("\n");
+    const n1 = lines.find((l) => l.includes("**note-1**"));
+    const n2 = lines.find((l) => l.includes("**note-2**"));
+    assert.match(n1, /_\(stale: composition changed since pinned\)_/);
+    assert.doesNotMatch(n2, /stale/);
+    // Header cites the current mount baseline (commit + index hash).
+    assert.match(md, /Review baseline: commit `[0-9a-f]{7}` · index `sha256:[0-9a-f]{16}`/);
+  });
+}
+
+// Severity (reviewer-set blocker/major/nit) + same-target clustering. Severity round-trips through
+// POST/PATCH (presence-guarded clear), renders a bold ` · **<sev>**` headline token, and reorders the
+// markdown severity-then-time. Notes sharing a target.selector (≥2) cluster under a header bullet;
+// loose notes and clusters share the one renderNoteBlock path. annotations.json stays a flat array.
+async function testSeverityAndClustering() {
+  const dir = makeTempProject("severity");
+  await withServer(dir, {}, async (base) => {
+    const post = (body) => fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }).then((r) => r.json());
+    const readMd = () => fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+
+    // --- round-trip: set on POST, garbage → omitted, PATCH change + null-clear ---
+    const nA = await post({ time: 1, text: "A", severity: "blocker" });
+    assert.equal(nA.severity, "blocker");
+    const nB = await post({ time: 2, text: "B", severity: "bogus" });
+    assert.equal(nB.severity, undefined); // invalid enum → field omitted (never persisted)
+    const nC = await post({ time: 3, text: "C" });
+    assert.equal(nC.severity, undefined); // absent → omitted
+
+    let md = readMd();
+    // Bold headline token after the scene slot, distinct from the italic status tag.
+    assert.match(md, /\*\*note-1\*\* · \*\*0:01\.00\*\* · \*\*blocker\*\* — A/);
+
+    let res = await fetch(`${base}/api/notes/${nB.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ severity: "major" }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).severity, "major");
+    assert.match(readMd(), /\*\*major\*\*/);
+
+    // null clears it (presence-guard: "severity" in parsed) → key deleted, token gone from md.
+    res = await fetch(`${base}/api/notes/${nB.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ severity: null }),
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await res.json()).severity, undefined);
+    assert.doesNotMatch(readMd(), /\*\*major\*\*/); // nB was the only major note
+
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
+    // --- clustering + severity-then-time ordering ---
+    const target = (selector, tag, cls) => ({ tag, cls, selector });
+    const c1 = await post({ time: 2, text: "cluster member nit", severity: "nit", target: target("#hero .title", "h1", "title") });
+    const c2 = await post({ time: 1, text: "cluster member blocker", severity: "blocker", target: target("#hero .title", "h1", "title") });
+    await post({ time: 0.5, text: "lonely nit", severity: "nit", target: target("#para-nit", "p", "") });
+    await post({ time: 9, text: "lonely blocker", severity: "blocker", target: target("#para-blocker", "p", "") });
+
+    md = readMd();
+    // Cluster header bullet: count, tag.cls, top-severity token, shared selector.
+    assert.match(md, /- \*\*2 notes on `h1\.title`\*\* · \*\*blocker\*\* · at `#hero \.title`/);
+    // Both members render under the header, indented two spaces (clustered).
+    assert.match(md, new RegExp(`\\n  - \\*\\*note-${c1.id}\\*\\*`));
+    assert.match(md, new RegExp(`\\n  - \\*\\*note-${c2.id}\\*\\*`));
+    // Exactly one cluster formed — the two single-selector notes stayed loose (no "1 notes on" header).
+    assert.equal((md.match(/notes on `/g) || []).length, 1);
+    // Within the cluster, the blocker member precedes the nit member (severity-then-time).
+    assert.ok(md.indexOf("cluster member blocker") < md.indexOf("cluster member nit"));
+    // Across units, the blocker note sorts before the nit note despite being LATER in time.
+    assert.ok(md.indexOf("lonely blocker") < md.indexOf("lonely nit"));
+    // Cluster members stay grouped: the cluster's nit member still precedes the loose blocker note.
+    assert.ok(md.indexOf("cluster member nit") < md.indexOf("lonely blocker"));
+
+    // annotations.json stays a bare top-level array (no envelope) carrying the severity field.
+    const onDisk = JSON.parse(fs.readFileSync(path.join(dir, "notes", "annotations.json"), "utf8"));
+    assert.ok(Array.isArray(onDisk));
+    assert.equal(onDisk.find((n) => n.id === c2.id).severity, "blocker");
+  });
+}
+
+async function testAttachments() {
+  const dir = makeTempProject("attachments");
+  // 1×1 transparent PNG — a real, valid image so the magic-byte sniff passes on genuine bytes.
+  const PNG = Buffer.from(
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
+    "base64",
+  );
+
+  await withServer(dir, {}, async (base) => {
+    const postNote = (body) => fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    });
+    const upload = (buf, type) => fetch(`${base}/api/attachments`, { method: "POST", headers: { "content-type": type }, body: buf });
+    const readMd = () => fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+
+    // --- raw-binary upload: a real PNG → 201, server-generated path, file actually written ---
+    let res = await upload(PNG, "image/png");
+    assert.equal(res.status, 201);
+    const desc = await res.json();
+    assert.match(desc.file, /^attachments\/att-.*\.png$/);
+    assert.equal(desc.bytes, PNG.length);
+    assert.equal(desc.type, "image/png");
+    assert.ok(fs.existsSync(path.join(dir, "notes", desc.file)), "uploaded PNG written under notes/attachments/");
+
+    // --- each remaining allowlisted format, positively: minimal valid header → 201 + correct ext,
+    //     pinning the JPEG/GIF/WEBP magic-byte branches (only PNG was covered before) ---
+    const JPG = Buffer.from([0xff, 0xd8, 0xff, 0xe0]);
+    const GIF = Buffer.from("GIF89a", "latin1");
+    const WEBP = Buffer.concat([Buffer.from("RIFF"), Buffer.alloc(4), Buffer.from("WEBP")]);
+    for (const [buf, type, ext] of [[JPG, "image/jpeg", "jpg"], [GIF, "image/gif", "gif"], [WEBP, "image/webp", "webp"]]) {
+      const r = await upload(buf, type);
+      assert.equal(r.status, 201, `${type} should upload`);
+      assert.match((await r.json()).file, new RegExp(`^attachments/att-.*\\.${ext}$`));
+    }
+
+    // --- type allowlist: SVG (stored-XSS) and text rejected; magic-byte mismatch rejected ---
+    assert.equal((await upload(Buffer.from("<svg/>"), "image/svg+xml")).status, 415);
+    assert.equal((await upload(Buffer.from("hello"), "text/plain")).status, 415);
+    assert.equal((await upload(Buffer.from("hello"), "image/png")).status, 415); // claims PNG, bytes aren't
+    assert.equal(fs.readdirSync(path.join(dir, "notes", "attachments")).length, 4); // PNG + JPG + GIF + WEBP landed; rejects wrote nothing
+
+    // --- over the size cap → 413 (mirrors the notes 413 case) ---
+    assert.equal((await upload(Buffer.alloc(4_000_001), "image/png")).status, 413);
+    // --- non-POST → 405 ---
+    assert.equal((await fetch(`${base}/api/attachments`)).status, 405);
+
+    // --- note-link sanitization: only the valid, on-disk, allowed-type entry survives ---
+    res = await postNote({
+      time: 1, text: "see sketch",
+      attachments: [
+        { file: desc.file, name: desc.name, bytes: desc.bytes, type: "image/png", w: 1280, h: 720 },
+        { file: "../../etc/passwd", name: "x", bytes: 1, type: "image/png" },          // traversal → regex fails
+        { file: "attachments/att-missing.png", name: "y", bytes: 1, type: "image/png" }, // not on disk → dropped
+        { file: desc.file, name: "z", bytes: 1, type: "text/plain" },                    // bad type → dropped
+      ],
+    });
+    assert.equal(res.status, 201);
+    const note = await res.json();
+    assert.equal(note.attachments.length, 1);
+    assert.equal(note.attachments[0].file, desc.file);
+    assert.equal(note.attachments[0].w, 1280);
+    assert.equal(note.attachments[0].h, 720);
+
+    // --- annotations.md surfaces the openable path + (PNG, W×H, size) hint; legend documents it ---
+    assert.match(readMd(), /- ref images: `attachments\/att-[\w.-]+\.png` \(PNG, 1280×720,/);
+    assert.match(readMd(), /Legend:.*ref images/);
+
+    // --- PATCH: status-only leaves attachments untouched (key absent); empty array clears them ---
+    res = await fetch(`${base}/api/notes/${note.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "resolved" }),
+    });
+    assert.equal((await res.json()).attachments.length, 1);
+    res = await fetch(`${base}/api/notes/${note.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ attachments: [] }),
+    });
+    assert.equal((await res.json()).attachments, undefined); // empty → field removed
+    // The legend always mentions "- ref images: …"; the per-note sub-line is the backtick-path form.
+    assert.doesNotMatch(readMd(), /- ref images: `attachments\//);
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
+    // --- per-note cap: 6 valid refs (same on-disk file) → clamped to 4 ---
+    const six = Array.from({ length: 6 }, () => ({ file: desc.file, name: desc.name, bytes: desc.bytes, type: "image/png" }));
+    res = await postNote({ time: 2, text: "many", attachments: six });
+    assert.equal((await res.json()).attachments.length, 4);
+
+    // --- back-compat: a note with no attachments renders no ref-images sub-line ---
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+    await postNote({ time: 3, text: "plain note" });
+    assert.doesNotMatch(readMd(), /- ref images: `attachments\//);
+  });
+}
+
+// Self-measuring metrics ledger: two per-note counters (firstResolvedAt/reopenCount maintained by
+// applyNotePatch) plus an append-only notes/metrics.jsonl event log, surfaced via GET /api/metrics, a
+// ## Metrics footer, and a shutdown summary. The pure computeMetrics math is unit-tested in
+// testSharedHelpers; this proves the live lifecycle counters, the endpoint shape, the JSONL contents,
+// and the additive footer.
+async function testMetricsLedger() {
+  const dir = makeTempProject("metrics");
+  await withServer(dir, {}, async (base) => {
+    const post = (body) => fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }).then((r) => r.json());
+    const patch = (id, body) => fetch(`${base}/api/notes/${id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify(body),
+    }).then((r) => r.json());
+
+    // A mount anchor (composition POST) so a later create has a time-to-note baseline in the ledger.
+    await fetch(`${base}/api/composition`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ width: 1080, height: 1920, duration: 5, scenes: [{ id: "intro", start: 0, duration: 5 }] }),
+    });
+
+    // --- lifecycle counters live INSIDE the notes array (applyNotePatch maintains them) ---
+    const n = await post({ time: 1, scene: "intro", text: "fix me" });
+    assert.equal(n.firstResolvedAt, undefined); // born open — no counters yet
+    assert.equal(n.reopenCount, undefined);
+
+    let p = await patch(n.id, { status: "resolved" });
+    assert.ok(Number.isFinite(Date.parse(p.firstResolvedAt))); // stamped on the first →resolved
+    assert.equal(p.reopenCount, undefined);
+    const firstResolved = p.firstResolvedAt;
+
+    p = await patch(n.id, { status: "open" }); // human rejected the fix → failed first pass
+    assert.equal(p.reopenCount, 1);
+    p = await patch(n.id, { status: "addressed" }); // agent re-edits
+    p = await patch(n.id, { status: "open" }); // rejected again — (addressed→open) also counts
+    assert.equal(p.reopenCount, 2);
+
+    p = await patch(n.id, { status: "resolved" }); // re-resolve must NOT move firstResolvedAt
+    assert.equal(p.firstResolvedAt, firstResolved); // set once, never overwritten
+    assert.equal(p.reopenCount, 2);
+
+    // --- GET /api/metrics: note-derived summary shape ---
+    const metrics = await (await fetch(`${base}/api/metrics`)).json();
+    assert.deepEqual(Object.keys(metrics.notes).sort(), ["addressed", "open", "resolved", "total", "wontfix"]);
+    assert.equal(metrics.notes.total, 1);
+    assert.equal(metrics.notes.resolved, 1);
+    assert.equal(metrics.firstPass.fixed, 1);     // one note was fixed (firstAddressedAt/firstResolvedAt)
+    assert.equal(metrics.firstPass.reopened, 1);  // one note carries reopenCount>0
+    assert.equal(metrics.firstPass.rate, 0);      // (1-1)/1
+    assert.ok(metrics.resolveLatencyMs); // a resolved note → a latency sample
+    // Value check (not just key-presence): the mount anchor + this create pair via sid into one sample,
+    // exercising the loadMetricsEvents → /api/metrics → computeMetrics(events) wiring.
+    assert.ok(metrics.timeToNoteMs && metrics.timeToNoteMs.count >= 1);
+
+    // ?events=1 returns the bounded raw ledger alongside the summary.
+    const withEvents = await (await fetch(`${base}/api/metrics?events=1`)).json();
+    assert.ok(Array.isArray(withEvents.events));
+    assert.ok(withEvents.summary && withEvents.summary.notes);
+    assert.ok(withEvents.events.every((e) => e && typeof e === "object"));
+
+    // --- metrics.jsonl is valid JSONL, server-authored, and carries NO note text ---
+    const raw = fs.readFileSync(path.join(dir, "notes", "metrics.jsonl"), "utf8");
+    const events = raw.split("\n").filter(Boolean).map((l) => JSON.parse(l)); // throws on any invalid line
+    assert.ok(events.some((e) => e.type === "session")); // boot anchor
+    assert.ok(events.some((e) => e.type === "mount"));    // composition POST
+    const create = events.find((e) => e.type === "create");
+    assert.ok(create && create.id === n.id && create.scene === "intro" && !("text" in create));
+    assert.ok(events.some((e) => e.type === "status" && e.from === "open" && e.to === "resolved"));
+    assert.ok(!raw.includes("fix me")); // never stores note text (bounded size, no PII)
+
+    // --- annotations.md ## Metrics footer (note-derived; additive; existing md assertions still hold) ---
+    const md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /## Metrics/);
+    assert.match(md, /First-pass fix rate/);
+    assert.match(md, /\*\*note-\d+\*\*/); // the footer didn't displace the note list
+  });
+}
+
+// Best-effort isolation: a corrupt metrics ledger must never wedge the note path. A torn line is
+// skipped, POST still 201s, and /api/metrics 200s (NOT 500). For parity, a corrupt notes ARRAY does
+// 500 /api/metrics (it reuses withNotes(readNotes)) — proving only the ledger failure is isolated.
+async function testMetricsCorruptLedgerIsolation() {
+  const dir = makeTempProject("metrics-corrupt");
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, "notes", "metrics.jsonl"),
+    '{"sid":"seed","at":"2026-01-01T00:00:00.000Z","type":"session"}\n{not json\n'
+  );
+  await withServer(dir, {}, async (base) => {
+    let res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ time: 1, text: "still works" }),
+    });
+    assert.equal(res.status, 201); // metrics path is isolated from the note write
+
+    res = await fetch(`${base}/api/metrics`);
+    assert.equal(res.status, 200); // torn line skipped, not a 500
+    assert.equal((await res.json()).notes.total, 1);
+  });
+
+  // Parity: a malformed annotations.json 500s /api/metrics, exactly like /api/notes.
+  const dir2 = makeTempProject("metrics-badnotes");
+  fs.mkdirSync(path.join(dir2, "notes"), { recursive: true });
+  fs.writeFileSync(path.join(dir2, "notes", "annotations.json"), "{not json");
+  await withServer(dir2, {}, async (base) => {
+    assert.equal((await fetch(`${base}/api/metrics`)).status, 500);
+  });
+}
+
+// Bounded growth: a pre-existing oversized ledger (older-bug recovery) is trimmed to the last
+// METRICS_KEEP lines on boot, then anchored with a single session event — so the file stays
+// ≤ METRICS_MAX_LINES and the most-recent KEEP lines are the survivors.
+async function testMetricsTrimBound() {
+  const { METRICS_MAX_LINES, METRICS_KEEP } = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
+  const dir = makeTempProject("metrics-trim");
+  fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+  const over = METRICS_MAX_LINES + 1;
+  const seeded = Array.from({ length: over }, (_, i) =>
+    JSON.stringify({ sid: "seed", at: "2026-01-01T00:00:00.000Z", type: "edit", id: 1, seq: i })
+  ).join("\n") + "\n";
+  fs.writeFileSync(path.join(dir, "notes", "metrics.jsonl"), seeded);
+
+  await withServer(dir, {}, async (base) => {
+    await fetch(`${base}/api/metrics`); // ensure the server booted (boot already trimmed)
+    const lines = fs.readFileSync(path.join(dir, "notes", "metrics.jsonl"), "utf8").split("\n").filter(Boolean);
+    assert.ok(lines.length <= METRICS_MAX_LINES, `ledger bounded: ${lines.length} ≤ ${METRICS_MAX_LINES}`);
+    const seqs = lines.map((l) => JSON.parse(l)).filter((e) => typeof e.seq === "number").map((e) => e.seq);
+    assert.equal(seqs.length, METRICS_KEEP);                 // exactly the last KEEP seeded lines kept
+    assert.equal(Math.min(...seqs), over - METRICS_KEEP);    // earliest survivor is over-KEEP
+    assert.equal(Math.max(...seqs), over - 1);               // newest seeded line retained
+  });
+}
+
+// Live composition reload (poll-only): GET /api/watch returns an in-memory {rev} that fs.watch bumps
+// (debounced) on a composition-file edit but NOT on a notes/ write — that ignore is what stops the
+// reload from self-triggering on every annotations.json rewrite. OPTIONS→204, non-GET→405, no CORS
+// headers (local-only). Nothing is persisted, so the note record + smoke JSON/MD stay unchanged.
+async function testWatchEndpoint() {
+  const dir = makeTempProject("watch");
+  const watchRev = async (base) =>
+    (await (await fetch(`${base}/api/watch`, { headers: { accept: "application/json" } })).json()).rev;
+  // Poll until rev moves off `fromRev` (returns the new rev) or the budget elapses (returns fromRev).
+  const settleRev = async (base, fromRev, ms) => {
+    const started = Date.now();
+    while (Date.now() - started < ms) {
+      const r = await watchRev(base);
+      if (r !== fromRev) return r;
+      await new Promise((res) => setTimeout(res, 40));
+    }
+    return fromRev;
+  };
+
+  await withServer(dir, {}, async (base) => {
+    // Poll mode: 200 + numeric rev, and no CORS header (same-origin only).
+    let res = await fetch(`${base}/api/watch`, { headers: { accept: "application/json" } });
+    assert.equal(res.status, 200);
+    assert.equal(res.headers.get("access-control-allow-origin"), null);
+    const rev0 = (await res.json()).rev;
+    assert.equal(typeof rev0, "number");
+
+    // Method handling: OPTIONS preflight → 204, anything but GET → 405.
+    assert.equal((await fetch(`${base}/api/watch`, { method: "OPTIONS" })).status, 204);
+    assert.equal((await fetch(`${base}/api/watch`, { method: "POST" })).status, 405);
+
+    // A composition-file edit bumps the counter (after the ~250ms debounce).
+    fs.writeFileSync(
+      path.join(dir, "index.html"),
+      `<!doctype html><html><body><div id="root" data-width="1080" data-height="1920">edited</div></body></html>`
+    );
+    const rev1 = await settleRev(base, rev0, 3000);
+    assert.ok(rev1 > rev0, `comp edit bumped rev (${rev0} → ${rev1})`);
+
+    // A write under notes/ must NOT bump — assert the rev stays put across a window wider than the
+    // debounce, proving notes/ is skipped and the reload can't self-trigger on annotations rewrites.
+    fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "notes", "scratch.txt"), "ignored");
+    const rev2 = await settleRev(base, rev1, 600);
+    assert.equal(rev2, rev1, "notes/ write did not bump rev");
+  });
+}
+
+// vellum-review.mjs resilience (F4 + the Array.isArray guard): a hand-edited annotations.json that
+// is malformed JSON or valid-but-not-an-array must not crash the review-packet build — readNotes()
+// warns and returns [], so main() reaches its "no notes" exit(0) instead of process.exit(1)/a raw
+// stack. Agents hand-edit this file, so a daemon-free review pass has to tolerate a bad one.
+function testReviewResilience() {
+  const REVIEW = path.join(REPO, "scripts", "vellum-review.mjs");
+  for (const bad of ["{ not json", '{"not":"array"}']) {
+    const dir = makeTempProject("review");
+    fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "notes", "annotations.json"), bad);
+    const r = spawnSync(process.execPath, [REVIEW], { cwd: dir, env: { ...process.env }, encoding: "utf8" });
+    assert.equal(r.status, 0, `vellum-review survived ${JSON.stringify(bad)} (exit ${r.status}): ${r.stderr}`);
+    assert.match(`${r.stderr || ""}${r.stdout || ""}`, /skipping|no notes/i);
+  }
+}
+
 await testVersionSourcesAgree();
+await testSharedHelpers();
 await testServerApi();
+await testWatchEndpoint();
+await testSeverityAndClustering();
+await testAttachments();
 await testMalformedNotesArePreserved();
+await testBootReconcilesOfflineEdits();
+await testAgentResolutionWriteback();
+await testAgentJsonReconciledOnBoot();
+await testProvenanceStaleDetection();
+await testMetricsLedger();
+await testMetricsCorruptLedgerIsolation();
+await testMetricsTrimBound();
 testVellumDirGuard();
+testReviewResilience();
 testInstallerSkillSymlink();
 testInstallerSubdirScripts();
 testVellumShimFindsProject();

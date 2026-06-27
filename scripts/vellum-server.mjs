@@ -7,6 +7,8 @@
  *  - Collects time-coded review notes posted by the player and persists them to
  *    <comp>/notes/annotations.json (+ a readable annotations.md) for a coding agent to read.
  *  - Stores a saved voice/music mix to <comp>/notes/mix.json.
+ *  - Watches the composition directory and bumps an in-memory revision counter (GET /api/watch)
+ *    so the open player can poll for edits and live-reload the iframe at the same frame.
  *
  * Zero dependencies — Node built-ins only. Run from your HyperFrames project root:
  *   npx vellum                 # composition is ./index.html
@@ -20,9 +22,11 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
+import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
-import { fmtTime, normalizeNoteStatus, resolveComposition, resolveInside, VERSION } from "./vellum-shared.mjs";
+// sanitizeResolution is PATCH/offline-only — a note is NEVER born with a resolution at POST.
+import { computeMetrics, fmtDuration, fmtTime, METRICS_KEEP, METRICS_MAX_LINES, normalizeNoteSeverity, normalizeNoteStatus, reconcileNote, resolveComposition, resolveInside, sanitizeResolution, VERSION } from "./vellum-shared.mjs";
 import * as ui from "./vellum-ui.mjs";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
@@ -97,6 +101,30 @@ function sanitizeAudio(raw) {
 }
 
 const { compDir: COMP_DIR, compAbs: COMP_ABS } = resolveComposition(ROOT);
+
+// Server-authoritative review baseline: the git commit the review was made against plus a
+// sha256 of the composition's index.html at pin time. Stamped on each note (POST) and on the
+// composition manifest, so the consuming agent can detect drift ("pinned against older
+// content") and cite the exact commit during write-back. Best-effort and never throws: a
+// non-git project drops `commit`, a missing index.html drops `indexHash`, and the whole field
+// is omitted when neither resolves (mirrors the ...(kind ? {kind} : {}) optional-spread
+// precedent). Never read from the browser payload — a client cannot spoof provenance. PATCH
+// leaves it immutable; each note records the baseline it was created against.
+function computeProvenance() {
+  const prov = {};
+  try {
+    const out = spawnSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8", timeout: 2000 });
+    if (out.status === 0) {
+      const sha = String(out.stdout || "").trim();
+      if (/^[0-9a-f]{40}$/.test(sha)) prov.commit = sha;
+    }
+  } catch {}
+  try {
+    const bytes = fs.readFileSync(path.join(COMP_ABS, "index.html"));
+    prov.indexHash = "sha256:" + crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16);
+  } catch {}
+  return prov.commit || prov.indexHash ? prov : null;
+}
 
 // HyperFrames runtime resolution. The runtime the player injects is NOT referenced by
 // the composition's HTML, and its filename is not declared in the hyperframes package
@@ -200,6 +228,64 @@ const NOTES_MD = path.join(NOTES_DIR, "annotations.md");
 const MIX_JSON = path.join(NOTES_DIR, "mix.json");
 const COMP_JSON = path.join(NOTES_DIR, "composition.json"); // scene/timing manifest the player POSTs at mount
 
+// Self-measurement: an append-only lifecycle ledger (gitignored), the event half of the metrics
+// feature. `sid` stamps every line so time-to-note can pair a create with the session/mount anchor
+// that preceded it within a run. `metricsLines` tracks the physical line count so trim hysteresis is
+// correct without a stat() per append.
+const METRICS_JSONL = path.join(NOTES_DIR, "metrics.jsonl");
+const BOOT_AT = new Date().toISOString();
+const SID = `${BOOT_AT}#${process.pid}`;
+let metricsLines = 0;
+
+// Reference-image attachments — raw image files uploaded via POST /api/attachments and stored under
+// notes/attachments/. Bounded "not a gallery": a small per-note cap + size cap, an allowlist of
+// raster types (SVG deliberately excluded — script-bearing → stored-XSS), magic-byte sniffing, and a
+// 100% server-generated filename so the stored path can never be client-controlled.
+const ATTACH_DIR = path.join(NOTES_DIR, "attachments");
+const IMG_LIMIT = 4e6; // 4 MB raw-bytes cap per upload (413 over)
+const MAX_ATTACHMENTS = 4; // per note
+const ATTACH_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp", "image/gif": "gif" };
+const ATTACH_FILE_RE = /^attachments\/att-[\w.-]+\.(png|jpe?g|webp|gif)$/;
+
+// Live composition reload — the player polls GET /api/watch ~1×/s and re-mounts the iframe whenever
+// `compRev` changes. An fs.watch on COMP_ABS bumps the counter (debounced) on any non-ignored edit.
+// In-memory only: nothing is persisted, so the note record, composition.json, and the bare-array
+// reader contract are all untouched. The notes/ ignore is load-bearing — writeNotes/handleMix/
+// handleComposition rewrite under NOTES_DIR on every save, so an un-ignored watch would self-trigger
+// an endless reload loop.
+let compRev = 0;
+let watchDebounce = null;
+let watchStarted = false;
+
+// Validate the note's attachment descriptors: keep only entries whose type is allowlisted, whose
+// server-generated relative path matches ATTACH_FILE_RE AND resolves inside notes/ AND still exists
+// on disk (triple-guard — `file` is the one client-supplied path, so traversal and dangling refs are
+// dropped). Bounded like sanitizeAudio; capped at MAX_ATTACHMENTS. Returns [] for a non-array, so the
+// optional spread omits the field entirely when nothing valid survives.
+function sanitizeAttachments(raw) {
+  if (!Array.isArray(raw)) return [];
+  const out = [];
+  for (const entry of raw.slice(0, MAX_ATTACHMENTS)) {
+    if (!entry || typeof entry !== "object") continue;
+    const type = entry.type;
+    if (!ATTACH_TYPES[type]) continue;
+    const file = typeof entry.file === "string" ? entry.file : "";
+    if (!ATTACH_FILE_RE.test(file)) continue;
+    const full = resolveInside(NOTES_DIR, file);
+    if (!full || !fs.existsSync(full)) continue;
+    const att = {
+      file,
+      name: String(entry.name ?? "").slice(0, 120),
+      bytes: boundedNumber(entry.bytes, 0, { min: 0 }),
+      type,
+    };
+    if (entry.w != null) att.w = boundedNumber(entry.w, null, { min: 0, max: 100000 });
+    if (entry.h != null) att.h = boundedNumber(entry.h, null, { min: 0, max: 100000 });
+    out.push(att);
+  }
+  return out;
+}
+
 // Write via a temp file + rename so a crash mid-write can't leave a half-written
 // annotations.json that wedges every subsequent /api/notes read. Rename is atomic
 // within the same directory.
@@ -244,7 +330,12 @@ function readNotes() {
   try {
     const notes = JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
     if (!Array.isArray(notes)) throw new Error("annotations.json must contain an array");
-    return notes;
+    // Normalize on read so offline agent edits (status/severity/resolution) are coerced and
+    // sanitized everywhere notes are consumed (GET/PATCH/POST/boot), without an envelope.
+    // Drop non-object array elements (a stray null/number/string from a hand-edit) BEFORE they
+    // reach any element-accessing path — otherwise the next POST id-calc / PATCH find / md
+    // render throws inside a request handler and takes the daemon down.
+    return notes.filter((n) => n && typeof n === "object").map(reconcileNote);
   } catch (err) {
     if (err && err.code === "ENOENT") return [];
     throw new Error(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message}`);
@@ -258,7 +349,13 @@ function withNotes(res, fn) {
   } catch (err) {
     return sendJson(res, 500, { error: err.message });
   }
-  return fn(notes);
+  // Guard the handler body too: a throw here runs inside readBody's req 'end' listener, which
+  // would otherwise be an uncaught exception that exits the daemon mid-review.
+  try {
+    return fn(notes);
+  } catch (err) {
+    return sendJson(res, 500, { error: `note handler failed: ${err.message}` });
+  }
 }
 
 function recoverableWriteNotes(res, notes) {
@@ -277,6 +374,52 @@ function emptyNotesOnMissing() {
   } catch {
     return [];
   }
+}
+
+// Append one lifecycle event to the metrics ledger. Server-authored ONLY (no POST endpoint writes it),
+// so the metric stays un-tamperable and the client carries no metrics code. The entire body is
+// best-effort: a metrics failure must never throw into a note-write path (mirrors the client's
+// best-effort postComposition). Lines are whole-JSON (appendFileSync writes one line atomically) and
+// never carry note text — only ids/times/statuses/scene/kind (bounded size, no PII).
+function recordMetric(ev) {
+  try {
+    fs.mkdirSync(NOTES_DIR, { recursive: true });
+    fs.appendFileSync(METRICS_JSONL, `${JSON.stringify({ sid: SID, at: new Date().toISOString(), ...ev })}\n`);
+    metricsLines += 1;
+    if (metricsLines > METRICS_MAX_LINES) trimMetrics();
+  } catch {}
+}
+
+// Tolerant JSONL reader: one event per line, bad/torn lines skipped (a crash mid-append can leave a
+// partial last line — appendFileSync writes whole lines, so at most one is affected). Absent ledger →
+// []. Never throws, so a corrupt ledger can't wedge /api/metrics or the shutdown summary.
+function loadMetricsEvents() {
+  try {
+    const events = [];
+    for (const line of fs.readFileSync(METRICS_JSONL, "utf8").split("\n")) {
+      if (!line) continue;
+      try { events.push(JSON.parse(line)); } catch {}
+    }
+    return events;
+  } catch {
+    return [];
+  }
+}
+
+// Bound the ledger: re-count physical lines from disk (two servers sharing notes/ can desync the
+// in-memory counter), keep the last METRICS_KEEP, and rewrite atomically. metricsLines is reset to the
+// post-trim count so we don't rewrite on every subsequent append (hysteresis).
+function trimMetrics() {
+  try {
+    const lines = fs.readFileSync(METRICS_JSONL, "utf8").split("\n").filter(Boolean);
+    if (lines.length <= METRICS_MAX_LINES) {
+      metricsLines = lines.length;
+      return;
+    }
+    const kept = lines.slice(-METRICS_KEEP);
+    writeFileAtomic(METRICS_JSONL, `${kept.join("\n")}\n`);
+    metricsLines = kept.length;
+  } catch {}
 }
 
 function escapeMd(value) {
@@ -337,43 +480,217 @@ function styleDetailLine(t) {
   return bits.length ? `  - style: ${bits.join(" · ")}` : null;
 }
 
+// The coding agent's write-back: what it changed to address the note. Renders a headline
+// resolution line (who/when + one-line summary) plus one `- edit:` line per file/selector
+// touched. PATCH/offline-authored and bounded by sanitizeResolution; guarded by n.resolution
+// at the call site so notes without a write-back render byte-identically to before.
+function resolutionDetailLines(r) {
+  if (!r) return [];
+  const at = r.at ? ` · ${escapeMd(r.at)}` : "";
+  const summary = r.summary ? ` — ${escapeMd(r.summary)}` : "";
+  const lines = [`  - resolution by ${escapeMd(r.by || "agent")}${at}${summary}`];
+  if (Array.isArray(r.edits)) {
+    for (const e of r.edits) {
+      const bits = [];
+      if (e.file != null) bits.push(`\`${escapeMd(e.file)}\``);
+      if (e.selector != null) bits.push(`at \`${escapeMd(e.selector)}\``);
+      if (e.detail != null) bits.push(escapeMd(e.detail));
+      if (bits.length) lines.push(`  - edit: ${bits.join(" · ")}`);
+    }
+  }
+  return lines;
+}
+
+// Human-readable byte size for the attachment markdown hint: "84 KB" / "3.1 MB" / "512 B".
+function humanBytes(n) {
+  const b = Number(n) || 0;
+  if (b >= 1e6) return `${(b / 1e6).toFixed(1)} MB`;
+  if (b >= 1e3) return `${Math.round(b / 1e3)} KB`;
+  return `${b} B`;
+}
+// Reference-image sub-line: the openable notes-relative path(s) the agent should view before acting,
+// each with a (TYPE, W×H, size) hint. Guarded by n.attachments?.length at the call site so notes
+// without attachments render byte-identically. Scope-independent — element, scene, audio, and span
+// notes can all carry sketches.
+function attachmentDetailLine(n) {
+  // Array.isArray (not just truthy .length): a hand-edited note with attachments set to a string
+  // ("sketch.png") or {length:N} would otherwise pass and throw on .map, wedging every write.
+  if (!Array.isArray(n.attachments) || !n.attachments.length) return null;
+  const parts = n.attachments.map((a) => {
+    const label = (ATTACH_TYPES[a.type] || "img").toUpperCase();
+    const dims = a.w != null && a.h != null ? `, ${a.w}×${a.h}` : "";
+    const size = a.bytes != null ? `, ${humanBytes(a.bytes)}` : "";
+    return `\`${escapeMd(a.file)}\` (${label}${dims}${size})`;
+  });
+  return `  - ref images: ${parts.join("; ")}`;
+}
+
+// Reviewer-assigned severity as a bold headline token (` · **blocker**`) — distinct from the
+// italic status tag and orthogonal to it. Empty when unset, so severity-less notes render
+// byte-identically to before. Normalized defensively in case an offline edit slipped a raw value.
+function severityTag(n) {
+  const s = normalizeNoteSeverity(n && n.severity);
+  return s ? ` · **${s}**` : "";
+}
+
+// Render one note as its markdown block: a headline line plus any indented detail sub-lines
+// (audio context / element + style). `indent` shifts the whole block right (e.g. when notes
+// are clustered under a shared-element header). `manifest` is the composition map, available
+// for richer headlines. Returns the joined block — the single seam every md-touching feature
+// funnels through, so loose and clustered notes share one render path.
+function renderNoteBlock(n, manifest, indent = 0) {
+  const pad = " ".repeat(indent);
+  // Scoped notes (whole scene / audio / time span) describe their subject instead of a pin/box + element.
+  const scoped = n.kind === "scene" || n.kind === "audio" || n.kind === "span";
+  // An optional timeEnd > time makes the note an [time, timeEnd] interval; absent = today's point note.
+  const span = n.timeEnd != null && n.timeEnd > n.time;
+  const dur = span ? (n.timeEnd - n.time).toFixed(2) : null;
+  let where = n.kind === "scene" ? "whole scene"
+    : n.kind === "audio" ? audioWhere(n.audio)
+    : n.kind === "span" ? (span ? `${dur}s span` : "time span")
+    : n.w != null ? `box ${n.x},${n.y} ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%, ${n.y}%` : "";
+  // A non-span note that still carries an interval appends the duration so the parenthetical conveys it.
+  if (span && n.kind !== "span" && where) where += ` · ${dur}s span`;
+  const noteText = escapeMd(n.text);
+  const targetText = !scoped && n.target && n.target.text ? ` "${escapeMd(n.target.text)}"` : "";
+  const tgt = !scoped && n.target
+    ? ` · on \`${escapeMd(n.target.tag)}${n.target.cls ? "." + escapeMd(n.target.cls) : ""}\`${targetText}`
+    : "";
+  const sel = !scoped && n.target && n.target.selector ? ` · at \`${escapeMd(n.target.selector)}\`` : "";
+  const status = normalizeNoteStatus(n.status);
+  const statusTag = status !== "open" ? ` · _(${status})_` : "";
+  // Content drift: the note was pinned against an index.html whose sha256 differs from the
+  // composition's current mount baseline. Pure string compare of on-disk data (zero cost);
+  // guarded by n.provenance && so pre-feature notes render identically.
+  const baseHash = manifest && manifest.provenance && manifest.provenance.indexHash;
+  const staleTag = baseHash && n.provenance && n.provenance.indexHash && n.provenance.indexHash !== baseHash
+    ? " · _(stale: composition changed since pinned)_"
+    : "";
+  const head = `- **note-${n.id}** · **${span ? `${fmtTime(n.time)}–${fmtTime(n.timeEnd)}` : fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""}${severityTag(n)} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}${staleTag}`;
+  const baseExtra = n.kind === "audio" ? audioDetailLines(n.audio)
+    : scoped ? []
+    : [elementDetailLine(n.target), styleDetailLine(n.target)].filter(Boolean);
+  // Agent write-back sub-lines (resolution + per-edit) append after the element/audio context, and
+  // any reference-image paths follow last — each present only when the note carries that field.
+  const extra = [
+    ...baseExtra,
+    ...(n.resolution ? resolutionDetailLines(n.resolution) : []),
+    ...(Array.isArray(n.attachments) && n.attachments.length ? [attachmentDetailLine(n)] : []),
+  ];
+  return [head, ...extra].map((line) => `${pad}${line}`).join("\n");
+}
+
+// Severity ranks for ordering the markdown: blocker floats to the top, nits sink, and an unset
+// note ranks between major and nit so untagged feedback stays roughly chronological. (Deliberately
+// NOT NOTE_SEVERITIES.indexOf — unset must sit at 2, between major=1 and nit=3.)
+const SEVERITY_RANK = { blocker: 0, major: 1, nit: 3 };
+function severityRank(n) {
+  const s = normalizeNoteSeverity(n && n.severity);
+  return s ? SEVERITY_RANK[s] : 2;
+}
+
+// Group notes that pin the same DOM element (shared target.selector, ≥2 of them) into a cluster so
+// the consuming agent fixes all feedback on one element together, then order every unit (loose note
+// or cluster) by [severity, time, id] so blockers come first. Pure render-time grouping over the same
+// flat array — annotations.json stays a bare top-level array, so no reader/envelope changes. Scoped
+// (scene/audio) notes and untargeted pins never cluster: each is a loose single rendered as before.
+function clusterNoteUnits(notes) {
+  const bySelector = new Map();
+  const units = [];
+  for (const n of notes) {
+    const scoped = n.kind === "scene" || n.kind === "audio" || n.kind === "span";
+    const selector = !scoped && n.target && n.target.selector ? n.target.selector : null;
+    if (selector) {
+      if (!bySelector.has(selector)) bySelector.set(selector, []);
+      bySelector.get(selector).push(n);
+    } else {
+      units.push({ members: [n] });
+    }
+  }
+  for (const [selector, members] of bySelector) {
+    if (members.length >= 2) {
+      members.sort((a, b) => severityRank(a) - severityRank(b) || a.time - b.time || a.id - b.id);
+      units.push({ selector, members });
+    } else {
+      units.push({ members });
+    }
+  }
+  const unitKey = (u) => u.members.reduce(
+    (k, m) => ({ sev: Math.min(k.sev, severityRank(m)), time: Math.min(k.time, m.time), id: Math.min(k.id, m.id) }),
+    { sev: Infinity, time: Infinity, id: Infinity }
+  );
+  return units
+    .map((u) => ({ unit: u, key: unitKey(u) }))
+    .sort((a, b) => a.key.sev - b.key.sev || a.key.time - b.key.time || a.key.id - b.key.id)
+    .map((x) => x.unit);
+}
+
+// Render a unit as markdown: a loose note is one block; a cluster is a header bullet
+// (`- **N notes on `tag.cls`** · **<topSev>** · at `selector``) followed by each member block
+// indented two spaces so they read as belonging to the element.
+function renderNoteUnit(unit, manifest) {
+  if (!unit.selector) return renderNoteBlock(unit.members[0], manifest);
+  const top = unit.members[0]; // members are pre-sorted, so the first is the top-severity one
+  const tagCls = top.target ? `${escapeMd(top.target.tag)}${top.target.cls ? "." + escapeMd(top.target.cls) : ""}` : "";
+  const header = `- **${unit.members.length} notes on \`${tagCls}\`**${severityTag(top)} · at \`${escapeMd(unit.selector)}\``;
+  return [header, ...unit.members.map((m) => renderNoteBlock(m, manifest, 2))].join("\n");
+}
+
 function writeNotes(notes) {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
   writeJsonAtomic(NOTES_JSON, notes);
-  const sorted = [...notes].sort((a, b) => a.time - b.time);
+  // Severity-then-time ordering with same-element clustering (pure render-time; the JSON above
+  // stays a bare chronological array). Loose notes and clusters share the one renderNoteBlock path.
+  const units = clusterNoteUnits(notes);
   let manifest = null;
   try { manifest = JSON.parse(fs.readFileSync(COMP_JSON, "utf8")); } catch {}
   const dims = manifest && manifest.width && manifest.height ? ` on a ${manifest.width}×${manifest.height} composition` : "";
   const hasMap = manifest && Array.isArray(manifest.scenes) && manifest.scenes.length;
+  // Review baseline citation — the commit + index.html hash this review was pinned against,
+  // so the consuming agent can `git show`/`git diff` the exact source and spot drift. Only
+  // emitted when the manifest carries provenance (git-less / manifest-less comps stay byte-
+  // identical to before).
+  const prov = manifest && manifest.provenance;
+  let baselineLine = null;
+  if (prov && (prov.commit || prov.indexHash)) {
+    const bits = [];
+    if (prov.commit) bits.push(`commit \`${prov.commit.slice(0, 7)}\``);
+    if (prov.indexHash) bits.push(`index \`${prov.indexHash}\``);
+    baselineLine = `Review baseline: ${bits.join(" · ")}`;
+  }
   const md = [
     `# Review notes${COMP_DIR ? ` — ${COMP_DIR}` : ""}`,
     "",
     `${notes.length} note(s)${dims}. Times are composition-time (M:SS.ss).${hasMap ? " Scene & clip timings: `composition.json` (same folder)." : ""}`,
-    "Legend: `_(where)_` = pin/box/whole-scene/audio · `on tag.cls` = targeted element · `at selector` = exact DOM path · `box` = element bounds x,y w×h (% of frame) · `data-*` = the element's own timing attrs · status ∈ open / resolved / wontfix.",
+    ...(baselineLine ? [baselineLine] : []),
+    "Legend: `_(where)_` = pin/box/whole-scene/audio/time-span · `on tag.cls` = targeted element · `at selector` = exact DOM path · `box` = element bounds x,y w×h (% of frame) · `data-*` = the element's own timing attrs · `M:SS.ss` = a point in time, `M:SS.ss–M:SS.ss` = an in/out time span · `· **<sev>**` = reviewer severity (blocker > major > nit) · `_(stale: …)_` = composition's index.html changed since the note was pinned · `- resolution …` = the coding agent's write-back of what it changed · `- ref images: …` = reference sketch paths under notes/ the agent can open · status ∈ open / addressed / resolved / wontfix. Notes sharing an element are grouped under a header; blockers first.",
     "",
-    ...sorted.map((n) => {
-      // Scoped notes (whole scene / audio) describe their subject instead of a pin/box + element.
-      const scoped = n.kind === "scene" || n.kind === "audio";
-      const where = n.kind === "scene" ? "whole scene"
-        : n.kind === "audio" ? audioWhere(n.audio)
-        : n.w != null ? `box ${n.x},${n.y} ${n.w}×${n.h}%` : n.x != null ? `pin ${n.x}%, ${n.y}%` : "";
-      const noteText = escapeMd(n.text);
-      const targetText = !scoped && n.target && n.target.text ? ` "${escapeMd(n.target.text)}"` : "";
-      const tgt = !scoped && n.target
-        ? ` · on \`${escapeMd(n.target.tag)}${n.target.cls ? "." + escapeMd(n.target.cls) : ""}\`${targetText}`
-        : "";
-      const sel = !scoped && n.target && n.target.selector ? ` · at \`${escapeMd(n.target.selector)}\`` : "";
-      const status = normalizeNoteStatus(n.status);
-      const statusTag = status !== "open" ? ` · _(${status})_` : "";
-      const head = `- **note-${n.id}** · **${fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}`;
-      const extra = n.kind === "audio" ? audioDetailLines(n.audio)
-        : scoped ? []
-        : [elementDetailLine(n.target), styleDetailLine(n.target)].filter(Boolean);
-      return [head, ...extra].join("\n");
-    }),
+    ...units.map((u) => renderNoteUnit(u, manifest)),
     "",
   ].join("\n");
-  writeFileAtomic(NOTES_MD, md);
+  // Self-measured review diagnostics footer — note-derived ONLY (computeMetrics(notes, []) reads no
+  // ledger on the write hot path; applyNotePatch already mutated the counters before this write).
+  // Own try/catch so a metrics failure never costs the notes md; rendered only when notes exist.
+  let footer = "";
+  if (notes.length) {
+    try {
+      const m = computeMetrics(notes, []);
+      const rate = m.firstPass.rate == null ? "n/a" : `${Math.round(m.firstPass.rate * 100)}%`;
+      const lat = m.resolveLatencyMs;
+      footer = [
+        "---",
+        "## Metrics",
+        "",
+        "_Self-measured review diagnostics, not feedback to action (see SKILL.md)._",
+        "",
+        `- Notes: ${m.notes.total} (${m.notes.open} open · ${m.notes.addressed} addressed · ${m.notes.resolved} resolved · ${m.notes.wontfix} wontfix)`,
+        `- First-pass fix rate: ${rate} (${m.firstPass.fixed} fixed · ${m.firstPass.reopened} reopened)`,
+        ...(lat ? [`- Create→resolve latency: median ${fmtDuration(lat.median)} · avg ${fmtDuration(lat.avg)} (n=${lat.count})`] : []),
+        "",
+      ].join("\n");
+    } catch { footer = ""; }
+  }
+  writeFileAtomic(NOTES_MD, md + footer);
 }
 
 function sendJson(res, code, body) {
@@ -410,6 +727,44 @@ function readBody(req, res, limit, done) {
   });
 }
 
+// Binary sibling of readBody for the raw-bytes upload endpoint: collect Buffer chunks up to `limit`
+// (413 + drain on overflow) and hand the assembled Buffer to `done`. Does NOT JSON.parse — readBody
+// is unusable for image bytes, so this is a parallel reader, not a reuse.
+function readRawBody(req, res, limit, done) {
+  const chunks = [];
+  let size = 0;
+  let tooLarge = false;
+  req.on("data", (c) => {
+    if (tooLarge) return;
+    size += c.length;
+    if (size > limit) {
+      tooLarge = true;
+      sendJson(res, 413, { error: "request body too large" });
+      req.resume();
+      return;
+    }
+    chunks.push(c);
+  });
+  req.on("end", () => {
+    if (tooLarge) return;
+    done(Buffer.concat(chunks));
+  });
+  req.on("error", () => {
+    if (!res.headersSent) sendJson(res, 400, { error: "request failed" });
+  });
+}
+
+// Cheap magic-byte check: the declared content-type must match the actual leading bytes, so a
+// renamed non-image (or an empty/zero-byte body) can't land a bogus file in the user's project tree.
+function sniffImage(buf, ext) {
+  if (!buf || buf.length < 4) return false;
+  if (ext === "png") return buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4e && buf[3] === 0x47;
+  if (ext === "jpg") return buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff;
+  if (ext === "gif") return buf.length >= 6 && buf.toString("latin1", 0, 4) === "GIF8";
+  if (ext === "webp") return buf.length >= 12 && buf.toString("latin1", 0, 4) === "RIFF" && buf.toString("latin1", 8, 12) === "WEBP";
+  return false;
+}
+
 function boundedNumber(value, fallback, { min = -Infinity, max = Infinity, decimals = 10 } = {}) {
   if (value == null || value === "") return fallback;
   const n = Number(value);
@@ -424,13 +779,54 @@ function noteId(value) {
 }
 
 function applyNotePatch(note, parsed) {
+  const now = new Date().toISOString();
   if (parsed.text != null) {
     const text = String(parsed.text).slice(0, 2000).trim();
     if (!text) return { error: "empty note" };
     note.text = text;
   }
-  if (parsed.status != null) note.status = normalizeNoteStatus(parsed.status, note.status || "open");
-  note.updatedAt = new Date().toISOString();
+  if (parsed.status != null) {
+    // Capture the prev status BEFORE mutating, so the self-measurement counters reason over the real
+    // transition. The two counters live inside the note record (so the live summary needs zero ledger
+    // I/O) and are mutated before the write below, so they persist in the same atomic write and the
+    // md footer reflects them immediately. firstResolvedAt stamps once on the first →resolved (never
+    // overwritten — distinct from updatedAt, which every edit clobbers). reopenCount counts a failed
+    // first pass: an agent-edited note kicked back to open. wontfix→open is uncounted (never fixed).
+    // firstAddressedAt marks the first time the agent *fixed* it (addressed OR resolved) — it is the
+    // first-pass denominator population, so reopenCount stays a subset of it and the rate can't go
+    // negative on the normal open→addressed→open flow. firstResolvedAt is kept solely for latency.
+    const prev = normalizeNoteStatus(note.status);
+    const next = normalizeNoteStatus(parsed.status, note.status || "open");
+    note.status = next;
+    if ((next === "addressed" || next === "resolved") && !note.firstAddressedAt) note.firstAddressedAt = now;
+    if (next === "resolved" && !note.firstResolvedAt) note.firstResolvedAt = now;
+    if ((prev === "resolved" || prev === "addressed") && next === "open") note.reopenCount = (note.reopenCount || 0) + 1;
+  }
+  // Severity uses key-presence (not != null) so the client can CLEAR it by sending null/"" — a
+  // valid enum value sets it, anything else deletes the field. Absent key leaves it untouched.
+  if ("severity" in parsed) {
+    const severity = normalizeNoteSeverity(parsed.severity, null);
+    if (severity) note.severity = severity;
+    else delete note.severity;
+  }
+  // Reference images: a present `attachments` key fully replaces the set (the player sends the
+  // surviving list on edit); absent leaves it untouched so status-only/text-only PATCHes (and the
+  // status cycle) never clear sketches. Invalid/empty → field removed.
+  if (parsed.attachments != null) {
+    const a = sanitizeAttachments(parsed.attachments);
+    if (a.length) note.attachments = a;
+    else delete note.attachments;
+  }
+  // Agent write-back (PATCH/offline-only): an object records what the agent changed (bounded,
+  // `at` server-stamped if missing/bad); null clears it. `undefined` (key absent) leaves an
+  // existing resolution untouched, so a status-only PATCH — e.g. a human verifying
+  // addressed→resolved — keeps the audit trail.
+  if (parsed.resolution !== undefined) {
+    const resolution = parsed.resolution === null ? null : sanitizeResolution(parsed.resolution);
+    if (resolution) note.resolution = resolution;
+    else delete note.resolution;
+  }
+  note.updatedAt = now;
   return { note };
 }
 
@@ -445,6 +841,7 @@ function handleNoteById(req, res, idValue) {
       if (next.length === notes.length) return sendJson(res, 404, { error: "note not found" });
       if (!recoverableWriteNotes(res, next)) return;
       logEvent(ui.glyph.del, `${noteLabel(removed)} deleted`);
+      recordMetric({ type: "delete", id });
       return sendJson(res, 200, { ok: true, notes: next });
     });
   }
@@ -462,8 +859,10 @@ function handleNoteById(req, res, idValue) {
         if (newStatus !== prevStatus) {
           const glyph = newStatus === "open" ? ui.glyph.add : newStatus === "resolved" ? ui.glyph.ok : ui.glyph.edit;
           logEvent(glyph, `${noteLabel(note)} ${newStatus === "open" ? "reopened" : newStatus}`);
+          recordMetric({ type: "status", id, from: prevStatus, to: newStatus });
         } else if (parsed.text != null) {
           logEvent(ui.glyph.edit, `${noteLabel(note)} edited ${ui.dim(`— "${ui.truncate(note.text, 48)}"`)}`);
+          recordMetric({ type: "edit", id });
         }
         return sendJson(res, 200, result.note);
       })
@@ -477,8 +876,10 @@ function handleNotes(req, res) {
   if (req.method === "OPTIONS") return sendJson(res, 204, {});
   if (req.method === "GET") return withNotes(res, (notes) => sendJson(res, 200, notes));
   if (req.method === "DELETE") {
+    const count = emptyNotesOnMissing().length; // capture BEFORE writing [] so the ledger keeps the size
     if (!recoverableWriteNotes(res, [])) return;
     logEvent(ui.glyph.del, "all notes cleared");
+    recordMetric({ type: "clear", count });
     return sendJson(res, 200, { ok: true, notes: [] });
   }
   if (req.method === "POST") {
@@ -529,34 +930,94 @@ function handleNotes(req, res) {
           style,
         };
       }
-      // Scope: "scene" (the whole current slide) or "audio" (what's playing now). Anything
-      // else is a normal element/region/pin note, so kind stays null and isn't stored.
-      const kind = parsed.kind === "scene" || parsed.kind === "audio" ? parsed.kind : null;
+      // Time: a point (just `time`) or an [time, timeEnd] interval. timeEnd is bounded like every
+      // number and dropped unless strictly greater than time, so an inverted/zero-length range can
+      // never persist — absent timeEnd serializes byte-identically to today's point note.
+      const time = boundedNumber(parsed.time, 0, { min: 0, decimals: 100 });
+      let timeEnd = boundedNumber(parsed.timeEnd, null, { min: 0, decimals: 100 });
+      if (timeEnd == null || timeEnd <= time) timeEnd = null;
+      // Scope: "scene" (the whole current slide), "audio" (what's playing now), or "span" (a pure
+      // timeline range, no element/pin). Anything else is a normal element/region/pin note, so kind
+      // stays null and isn't stored.
+      const kind = parsed.kind === "scene" || parsed.kind === "audio" || parsed.kind === "span" ? parsed.kind : null;
+      // A scoped note (scene/audio/span) describes a moment/range, not an element or pin — force
+      // target + coords to null so a hand-authored/buggy client can never persist stale element
+      // data that would render as dead, never-shown fields. (The player already omits them.)
+      const scopedKind = kind === "scene" || kind === "audio" || kind === "span";
       const audio = kind === "audio" ? sanitizeAudio(parsed.audio) : null;
+      // Reference images attached to the note (paste/drag/file-pick → uploaded via /api/attachments,
+      // then referenced here). Re-validated against the on-disk files and bounded at MAX_ATTACHMENTS;
+      // optional spread keeps attachment-less notes byte-identical.
+      const attachments = sanitizeAttachments(parsed.attachments);
+      // Reviewer-assigned triage severity (blocker/major/nit) — orthogonal to kind/status, enum-
+      // bounded by normalizeNoteSeverity (garbage → null → field omitted). Optional spread keeps
+      // severity-less notes byte-identical.
+      const severity = normalizeNoteSeverity(parsed.severity);
+      // Server-authored baseline this note is pinned against (commit + index.html hash).
+      // Stamped here, never read from parsed (a client cannot spoof it); immutable on PATCH.
+      const prov = computeProvenance();
       return withNotes(res, (notes) => {
         const note = {
           id: notes.length ? Math.max(...notes.map((n) => n.id || 0)) + 1 : 1,
-          time: boundedNumber(parsed.time, 0, { min: 0, decimals: 100 }),
-          x: pct(parsed.x),
-          y: pct(parsed.y),
-          w: pct(parsed.w),
-          h: pct(parsed.h),
+          time,
+          ...(timeEnd != null ? { timeEnd } : {}),
+          x: scopedKind ? null : pct(parsed.x),
+          y: scopedKind ? null : pct(parsed.y),
+          w: scopedKind ? null : pct(parsed.w),
+          h: scopedKind ? null : pct(parsed.h),
           scene: parsed.scene ? String(parsed.scene).slice(0, 60) : null,
-          target,
+          target: scopedKind ? null : target,
           ...(kind ? { kind } : {}),
           ...(audio ? { audio } : {}),
+          ...(attachments.length ? { attachments } : {}),
+          ...(severity ? { severity } : {}),
           text,
           status: "open",
+          ...(prov ? { provenance: prov } : {}),
           createdAt: new Date().toISOString(),
         };
         notes.push(note);
         if (!recoverableWriteNotes(res, notes)) return;
         logEvent(ui.glyph.add, `${noteLabel(note)} ${ui.dim(`— "${ui.truncate(note.text, 48)}"`)}`);
+        // Ledger AFTER the confirmed write — a 500 (e.g. malformed existing JSON) leaves no phantom
+        // create event. No note text is stored, only id/time/scene/kind.
+        recordMetric({ type: "create", id: note.id, t: note.time, scene: note.scene, kind: note.kind || null });
         return sendJson(res, 201, note);
       });
     });
   }
   return sendJson(res, 405, { error: "method not allowed" });
+}
+
+// POST /api/attachments — raw-binary image upload (NOT JSON/base64; base64 would inflate ~33% and
+// blow the readBody cap). The content-type header picks the extension from the allowlist (415 on a
+// type we don't store — SVG is deliberately absent), the magic bytes must match it (415 on mismatch),
+// the body is capped at IMG_LIMIT (413 over), and the filename is 100% server-generated so the stored
+// path can never be client-controlled (resolveInside is belt-and-suspenders on that name). Returns
+// {file,name,bytes,type}; the browser merges intrinsic w/h before referencing it on a note.
+function handleAttachments(req, res) {
+  if (req.method === "OPTIONS") return sendJson(res, 204, {});
+  if (req.method !== "POST") return sendJson(res, 405, { error: "method not allowed" });
+  const mime = (req.headers["content-type"] || "").split(";")[0].trim().toLowerCase();
+  const ext = ATTACH_TYPES[mime];
+  if (!ext) {
+    req.resume(); // drain the upload we're rejecting so the socket frees
+    return sendJson(res, 415, { error: "unsupported image type" });
+  }
+  return readRawBody(req, res, IMG_LIMIT, (buf) => {
+    if (!buf.length || !sniffImage(buf, ext)) return sendJson(res, 415, { error: "unsupported image type" });
+    const name = `att-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`;
+    const full = resolveInside(ATTACH_DIR, name);
+    if (!full) return sendJson(res, 500, { error: "could not store attachment" });
+    try {
+      fs.mkdirSync(ATTACH_DIR, { recursive: true });
+      writeFileAtomic(full, buf);
+    } catch (err) {
+      return sendJson(res, 500, { error: `could not store attachment: ${err.message}` });
+    }
+    logEvent(ui.glyph.add, `attachment saved ${ui.dim(`— ${name} (${humanBytes(buf.length)})`)}`);
+    return sendJson(res, 201, { file: `attachments/${name}`, name, bytes: buf.length, type: mime });
+  });
 }
 
 function handleMix(req, res) {
@@ -575,8 +1036,12 @@ function handleMix(req, res) {
         music: boundedNumber(parsed.music, 0.2, { min: 0, max: 1, decimals: 100 }),
         savedAt: new Date().toISOString(),
       };
-      fs.mkdirSync(NOTES_DIR, { recursive: true });
-      writeJsonAtomic(MIX_JSON, mix);
+      try {
+        fs.mkdirSync(NOTES_DIR, { recursive: true });
+        writeJsonAtomic(MIX_JSON, mix);
+      } catch (err) {
+        return sendJson(res, 500, { error: `could not save mix: ${err.message}` });
+      }
       logEvent(ui.glyph.music, `mix saved ${ui.dim(`— voice ${Math.round(mix.voice * 100)}% · music ${Math.round(mix.music * 100)}%`)}`);
       return sendJson(res, 201, mix);
     });
@@ -615,13 +1080,41 @@ function handleComposition(req, res) {
         captions: Boolean(parsed.captions),
         tool: `vellum ${VERSION}`,
         savedAt: new Date().toISOString(),
+        // Per-file mount baseline (same helper as the per-note stamp) — the reference hash the
+        // annotations.md header cites and the player diffs each note against to flag drift.
+        provenance: computeProvenance(),
       };
-      fs.mkdirSync(NOTES_DIR, { recursive: true });
-      writeJsonAtomic(COMP_JSON, manifest);
-      return sendJson(res, 201, { ok: true, scenes: manifest.scenes.length });
+      try {
+        fs.mkdirSync(NOTES_DIR, { recursive: true });
+        writeJsonAtomic(COMP_JSON, manifest);
+      } catch (err) {
+        return sendJson(res, 500, { error: `could not save composition: ${err.message}` });
+      }
+      // The real "review player opened" signal — the primary time-to-note anchor in the ledger.
+      recordMetric({ type: "mount" });
+      // Return the baseline in the round-trip the player already makes so it can capture the
+      // current content hash without a second GET.
+      return sendJson(res, 201, { ok: true, scenes: manifest.scenes.length, provenance: manifest.provenance });
     });
   }
   return sendJson(res, 405, { error: "method not allowed" });
+}
+
+// GET /api/metrics — the self-measured review summary. Note-derived stats (counts, first-pass rate,
+// resolve latency) come from the live notes array via withNotes(readNotes) — so it inherits the
+// 500-on-corrupt-array behavior for parity with /api/notes; time-to-note comes from the tolerant
+// ledger (a corrupt ledger is skipped, never 500s). No POST: the ledger is server-authored only, so
+// the metric can't be spoofed and the client stays metrics-free. ?events=1 also returns the bounded
+// raw events for offline recompute.
+function handleMetrics(req, res) {
+  if (req.method === "OPTIONS") return sendJson(res, 204, {});
+  if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
+  return withNotes(res, (notes) => {
+    const events = loadMetricsEvents();
+    const summary = computeMetrics(notes, events);
+    const wantEvents = new URL(req.url, "http://localhost").searchParams.get("events") === "1";
+    return sendJson(res, 200, wantEvents ? { summary, events } : summary);
+  });
 }
 
 function serveTemplate(res) {
@@ -710,14 +1203,64 @@ function serveStatic(req, res) {
   });
 }
 
+// Skip the dirs Vellum itself writes to (notes/ is load-bearing — see compRev) plus heavy/irrelevant
+// trees and editor/atomic-write noise. `filename` is the path relative to COMP_ABS (recursive watch)
+// or a bare basename (non-recursive fallback); split path.sep-aware and test the first segment.
+function shouldIgnoreWatchPath(filename) {
+  const parts = String(filename).split(/[\\/]/);
+  const first = parts[0];
+  const base = parts[parts.length - 1];
+  if (first === "notes" || first === "snapshots" || first === "node_modules") return true;
+  if (first.startsWith(".")) return true; // .git, dotfiles/dotdirs at the root
+  if (base.startsWith(".")) return true; // nested dotfiles (e.g. .DS_Store)
+  if (base.includes(".tmp-") || base.endsWith("~") || base.endsWith(".swp")) return true;
+  return false;
+}
+
+// Best-effort recursive watch of the composition dir; a trailing debounce coalesces a burst of saves
+// (the agent rewriting several files per edit) into a single rev bump. Recursive is cheap on macOS
+// (FSEvents); older Linux that lacks it falls back to a flat watch (top-level edits still reload),
+// and a total failure leaves the player's manual Reload as the only path. Never crashes the server.
+function startWatching() {
+  if (watchStarted) return;
+  watchStarted = true;
+  const onChange = (type, filename) => {
+    if (!filename || shouldIgnoreWatchPath(filename)) return;
+    clearTimeout(watchDebounce);
+    watchDebounce = setTimeout(() => { compRev += 1; }, 250);
+  };
+  const attach = (opts) => {
+    const w = opts ? fs.watch(COMP_ABS, opts, onChange) : fs.watch(COMP_ABS, onChange);
+    w.on("error", () => {}); // an async watch error (e.g. inotify ENOSPC) must never crash the server
+    return w;
+  };
+  try {
+    attach({ recursive: true });
+  } catch {
+    try { attach(null); } catch { /* no watch available — the player's manual Reload remains */ }
+  }
+}
+
+// GET /api/watch — poll-only live-reload channel. Returns the current in-memory revision; the player
+// re-mounts when it changes. No SSE, no held connections, no CORS (same-origin, 127.0.0.1-only). A
+// 404 here (older server) just makes the player's support probe a graceful no-op.
+function handleWatch(req, res) {
+  if (req.method === "OPTIONS") return sendJson(res, 204, {});
+  if (req.method !== "GET") return sendJson(res, 405, { error: "method not allowed" });
+  return sendJson(res, 200, { rev: compRev });
+}
+
 const server = http.createServer((req, res) => {
   const { pathname } = new URL(req.url, "http://localhost");
   if (pathname === RUNTIME_ENDPOINT) return serveRuntime(res);
   const noteMatch = /^\/api\/notes\/(\d+)$/.exec(pathname);
   if (noteMatch) return handleNoteById(req, res, noteMatch[1]);
   if (pathname === "/api/notes") return handleNotes(req, res);
+  if (pathname === "/api/attachments") return handleAttachments(req, res);
   if (pathname === "/api/mix") return handleMix(req, res);
   if (pathname === "/api/composition") return handleComposition(req, res);
+  if (pathname === "/api/metrics") return handleMetrics(req, res);
+  if (pathname === "/api/watch") return handleWatch(req, res);
   return serveStatic(req, res);
 });
 
@@ -728,8 +1271,29 @@ let activePort = PORT;
 
 function onListen() {
   fs.mkdirSync(NOTES_DIR, { recursive: true });
-  const existing = emptyNotesOnMissing();
-  if (!fs.existsSync(NOTES_JSON)) writeNotes(existing);
+  // Regenerate annotations.{json,md} from the reconciled notes so offline agent edits surface
+  // on boot. readNotes() returns [] on ENOENT (so the file is created on first run) and THROWS
+  // on malformed JSON. Read ONCE: on success, canonicalize + regenerate and reuse the array for
+  // the banner; on malformed, leave the bad file untouched (never clobber with []) and WARN, so
+  // corruption isn't silently misreported as an empty review.
+  let existing = [];
+  let notesReadable = true;
+  try {
+    existing = readNotes();
+    writeNotes(existing);
+  } catch (err) {
+    notesReadable = false;
+    console.warn(`  ${ui.glyph.warn} ${path.relative(ROOT, NOTES_JSON)} is unreadable — fix the JSON. ${ui.dim(`(${err.message})`)}`);
+  }
+  // Metrics ledger: seed the in-memory line count (physical non-empty lines, matching trimMetrics'
+  // own definition) so trim hysteresis is correct from the first append; trim a pre-existing
+  // oversized ledger (older-bug recovery), then anchor this session. Best-effort — never block boot.
+  try {
+    metricsLines = fs.readFileSync(METRICS_JSONL, "utf8").split("\n").filter(Boolean).length;
+    if (metricsLines > METRICS_MAX_LINES) trimMetrics();
+  } catch { metricsLines = 0; }
+  recordMetric({ type: "session", vellum: VERSION });
+  startWatching(); // watch the composition dir so the open player can live-reload on edits (best-effort)
   const compRel = path.relative(ROOT, path.join(COMP_ABS, "index.html")) || "index.html";
   const url = `http://127.0.0.1:${activePort}${PLAYER_PATH}`;
   const hfSource = HF_LOCAL_RUNTIME
@@ -749,9 +1313,11 @@ function onListen() {
     console.log(`  ${ui.glyph.warn} Port ${PORT} was busy — using ${ui.bold(activePort)} instead.`);
     console.log("");
   }
-  const noteCount = existing.length
-    ? `${path.relative(ROOT, NOTES_JSON)}  ${ui.dim(`(${existing.length} saved)`)}`
-    : `${path.relative(ROOT, NOTES_JSON)}  ${ui.dim("(+ annotations.md)")}`;
+  const noteCount = !notesReadable
+    ? `${path.relative(ROOT, NOTES_JSON)}  ${ui.dim("(unreadable — fix the JSON)")}`
+    : existing.length
+      ? `${path.relative(ROOT, NOTES_JSON)}  ${ui.dim(`(${existing.length} saved)`)}`
+      : `${path.relative(ROOT, NOTES_JSON)}  ${ui.dim("(+ annotations.md)")}`;
   console.log(
     ui.box([
       `${ui.glyph.play} ${ui.bold(ui.teal(ui.link(url)))}`,
@@ -777,6 +1343,14 @@ function onListen() {
   console.log("");
 }
 
+// Defense-in-depth: a throw inside a request 'end' listener would otherwise be uncaught and
+// exit the daemon mid-review (taking down the open player). The handlers already guard their
+// own writes + note bodies; this is the last backstop so no future codepath can kill a
+// long-running local server. Log loudly and keep serving.
+process.on("uncaughtException", (err) => {
+  try { console.error(`  ${ui.glyph.warn} uncaught: ${err && err.stack ? err.stack : err}`); } catch {}
+});
+
 // Graceful shutdown: leave a session summary instead of a bare ^C.
 let shuttingDown = false;
 process.on("SIGINT", () => {
@@ -789,6 +1363,15 @@ process.on("SIGINT", () => {
     const breakdown = open === notes.length ? "" : ui.dim(` (${open} open · ${notes.length - open} done)`);
     console.log(`  ${ui.glyph.ok} ${ui.bold(notes.length)} note(s) saved → ${path.relative(ROOT, NOTES_JSON)}${breakdown}`);
     if (open) console.log(`  ${ui.dim('Tell your agent: "address my Vellum review notes"')}`);
+    // One-line self-measurement summary (best-effort — never throw during shutdown).
+    try {
+      const m = computeMetrics(notes, loadMetricsEvents());
+      const bits = [];
+      if (m.firstPass.rate != null) bits.push(`first-pass ${Math.round(m.firstPass.rate * 100)}%`);
+      if (m.resolveLatencyMs) bits.push(`median fix ${fmtDuration(m.resolveLatencyMs.median)}`);
+      if (m.timeToNoteMs) bits.push(`median time-to-note ${fmtDuration(m.timeToNoteMs.median)}`);
+      if (bits.length) console.log(`  ${ui.dim(bits.join(" · "))}`);
+    } catch {}
   } else {
     console.log(`  ${ui.dim("Vellum stopped — no notes this session.")}`);
   }

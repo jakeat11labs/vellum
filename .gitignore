@@ -1,7 +1,15 @@
 node_modules/
 .DS_Store
 *.log
-notes/
+# Vellum reviews travel through git: notes/annotations.{json,md} are TRACKED so the baseline
+# + write-back ship with the repo. Only regenerable caches, binaries, and diagnostics stay local.
+notes/composition.json
+notes/mix.json
+notes/review/
+notes/attachments/
+notes/metrics.jsonl
+notes/*.tmp-*
 snapshots/
 tmp/
 promo/
+sandbox/

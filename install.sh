@@ -529,34 +529,45 @@ ensure_gitignore_notes() {
   if [ ! -f .gitignore ]; then
     return
   fi
-  if grep -q '^notes/' .gitignore 2>/dev/null; then
-    has_notes=1
-  else
-    has_notes=0
+  # Vellum reviews now travel through git: notes/annotations.{json,md} stay TRACKED so the
+  # review baseline + agent write-back ship with the repo. Only regenerable caches, binaries,
+  # and diagnostics are ignored.
+  ignore_lines="notes/composition.json notes/mix.json notes/review/ notes/attachments/ notes/metrics.jsonl notes/*.tmp-* snapshots/"
+
+  # Migrate an older install that ignored the whole notes/ tree to the narrowed policy. Only
+  # the exact bare `notes/` line is removed (conservative — never rewrites custom patterns).
+  migrated=0
+  if grep -q '^notes/$' .gitignore 2>/dev/null; then
+    if can_prompt; then
+      answer="$(ask "Narrow the existing notes/ ignore so reviews travel through git? (recommended)" "Y")"
+      case "$answer" in
+        n|N|no|NO|No) return ;;
+      esac
+    fi
+    grep -v '^notes/$' .gitignore > .gitignore.vellum-tmp 2>/dev/null && mv .gitignore.vellum-tmp .gitignore
+    migrated=1
   fi
-  if grep -q '^snapshots/' .gitignore 2>/dev/null; then
-    has_snapshots=1
-  else
-    has_snapshots=0
-  fi
-  if [ "$has_notes" -eq 1 ] && [ "$has_snapshots" -eq 1 ]; then
+
+  # Append only the targeted lines that aren't already present.
+  missing=""
+  for line in $ignore_lines; do
+    if ! grep -qxF "$line" .gitignore 2>/dev/null; then
+      missing="$missing $line"
+    fi
+  done
+  if [ -z "$missing" ]; then
     return
   fi
-  if can_prompt; then
-    answer="$(ask "Add notes/ + snapshots/ to .gitignore? (recommended)" "Y")"
+  if [ "$migrated" -eq 0 ] && can_prompt; then
+    answer="$(ask "Add Vellum's narrowed .gitignore entries (track annotations, ignore caches/binaries)? (recommended)" "Y")"
     case "$answer" in
       n|N|no|NO|No) return ;;
     esac
   fi
-  if [ "$has_notes" -eq 0 ] || [ "$has_snapshots" -eq 0 ]; then
-    printf '\n# Vellum / HyperFrames local artifacts\n' >> .gitignore
-  fi
-  if [ "$has_notes" -eq 0 ]; then
-    printf 'notes/\n' >> .gitignore
-  fi
-  if [ "$has_snapshots" -eq 0 ]; then
-    printf 'snapshots/\n' >> .gitignore
-  fi
+  printf '\n# Vellum / HyperFrames local artifacts (notes/annotations.{json,md} are tracked)\n' >> .gitignore
+  for line in $missing; do
+    printf '%s\n' "$line" >> .gitignore
+  done
   ok "updated .gitignore for Vellum artifacts"
 }
 
