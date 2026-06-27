@@ -1,9 +1,10 @@
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 
 // Installed tool version. Keep in sync with package.json on release; `vellum update`
 // compares this against the published package.json version.
-export const VERSION = "0.7.0";
+export const VERSION = "0.8.0";
 
 export const NOTE_STATUSES = new Set(["open", "addressed", "resolved", "wontfix"]);
 
@@ -56,6 +57,20 @@ export function compSize(compAbs) {
     return { W: w, H: h };
   } catch {
     return { W: DEFAULT_W, H: DEFAULT_H };
+  }
+}
+
+// "sha256:<first 16 hex>" content fingerprint of the composition's index.html — the immutable
+// baseline the server stamps into each note's provenance (computeProvenance) and the review
+// packet keys its before/after frame cache by. Best-effort like compSize: returns null when
+// index.html can't be read. The `sha256:`+16-hex shape is pinned by the smoke test, so the
+// server's computeProvenance delegates here to stay byte-identical.
+export function indexHashOf(compAbs) {
+  try {
+    const bytes = fs.readFileSync(path.join(compAbs, "index.html"));
+    return "sha256:" + crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16);
+  } catch {
+    return null;
   }
 }
 
@@ -196,6 +211,17 @@ export function computeMetrics(notes, events = []) {
   };
 }
 
+// True when `box` is an object carrying every key in `keys` as a finite number — the shape a
+// coordinate field must have before a render path reads its members. Mirrors the attachments
+// Array.isArray guard: a bad offline hand-edit is dropped on read so no `.x` access throws.
+function hasFiniteKeys(box, keys) {
+  return !!box && typeof box === "object" && keys.every((k) => Number.isFinite(box[k]));
+}
+// w/h must be positive — mirrors POST's sanitizeDesiredBox so the read path and write path agree
+// (an offline-edited zero/negative box is dropped, not rendered as a nonsensical "→ 0×0%" delta).
+const validBox = (b) => hasFiniteKeys(b, ["x", "y", "w", "h"]) && b.w > 0 && b.h > 0;
+const validArrow = (a) => hasFiniteKeys(a, ["x1", "y1", "x2", "y2"]);
+
 // Normalize a note on READ: coerce its status to the enum, drop an invalid severity, and
 // sanitize an agent-written resolution. The single seam any future envelope migration would
 // rewrite — keeps offline-edited annotations.json safe and back-compatible (every new field
@@ -215,5 +241,71 @@ export function reconcileNote(note) {
   // Drop a non-array attachments (a hand-edit like "attachments":"sketch.png") on read so the
   // render path's .map can never throw — mirrors the severity/resolution coercion above.
   if ("attachments" in note && !Array.isArray(note.attachments)) delete out.attachments;
+  // Drop a malformed desired-state field (e.g. "desiredBox":"oops" or a 3-number box) on read
+  // so renderMarkers/drawMarker/describeDesiredDelta's `.x` access can never throw.
+  if ("desiredBox" in note && !validBox(note.desiredBox)) delete out.desiredBox;
+  if ("arrow" in note && !validArrow(note.arrow)) delete out.arrow;
+  // Scoped notes (scene/audio/span) have no element/pin → never carry desired-state markup. POST
+  // forces this; enforce on read too so an offline edit can't make annotations.md (which omits it
+  // for scoped notes) and the review packet (which would draw it) disagree.
+  if (note.kind === "scene" || note.kind === "audio" || note.kind === "span") {
+    delete out.desiredBox;
+    delete out.arrow;
+  }
   return out;
+}
+
+// Compact percent string: at most one decimal, trailing ".0" trimmed ("24.13"→"24.1", "30"→"30").
+// Keeps the delta phrasing terse and stable across the float noise of click-capture coords.
+function pctStr(v) {
+  return String(Number(Number(v).toFixed(1)));
+}
+
+// Axes nearer than this (% of comp) read as unchanged — mirrors the arrow zero-length and
+// span-range epsilons, so a no-op ghost drag produces no noise line.
+const DELTA_EPS = 0.1;
+
+// Pure, render-free description of a note's desired-state markup, phrased as the delta a coding
+// agent applies. Consumed by BOTH the server's annotations.md (renderNoteBlock) and the review
+// packet's INDEX.md, so the move/resize/direction wording lives in ONE place.
+//
+// The "current" a desiredBox is measured against is, in order: a region note's own x/y/w/h
+// (n.w != null), else the captured element rect (target.box), else nothing — a pin-only note
+// states the box absolutely ("desired box 48,30 30×12%"). Unchanged axes are omitted; a
+// desiredBox equal to its current box contributes nothing. A sanitized arrow is always a
+// meaningful direction. Returns null when the note carries neither field or every axis is
+// unchanged, so legacy notes render byte-identically.
+// Returns structured `{ box, arrow }` (each a phrase string or null), or null when the note
+// carries neither field / every axis is unchanged. Returning the pieces (not a joined string)
+// lets the server label them directly (`- desired:` / `- direction:`) and the review packet join
+// them — no consumer has to re-parse a delimiter.
+export function describeDesiredDelta(note) {
+  if (!note || typeof note !== "object") return null;
+  let box = null;
+
+  if (validBox(note.desiredBox)) {
+    const d = note.desiredBox;
+    let current = null;
+    if (note.w != null && validBox(note)) current = note;            // region note → its own rect
+    else if (validBox(note.target && note.target.box)) current = note.target.box; // else the element rect
+    if (current) {
+      const move = [];
+      if (Math.abs(current.x - d.x) >= DELTA_EPS) move.push(`x ${pctStr(current.x)}→${pctStr(d.x)}%`);
+      if (Math.abs(current.y - d.y) >= DELTA_EPS) move.push(`y ${pctStr(current.y)}→${pctStr(d.y)}%`);
+      const seg = [];
+      if (move.length) seg.push(`move ${move.join(", ")}`);
+      if (Math.abs(current.w - d.w) >= DELTA_EPS || Math.abs(current.h - d.h) >= DELTA_EPS) {
+        seg.push(`resize ${pctStr(current.w)}×${pctStr(current.h)}% → ${pctStr(d.w)}×${pctStr(d.h)}%`);
+      }
+      if (seg.length) box = seg.join(", ");
+    } else {
+      // Pin-only (no current box) → state it absolutely. No "desired" word — the consumer labels it.
+      box = `box ${pctStr(d.x)},${pctStr(d.y)} ${pctStr(d.w)}×${pctStr(d.h)}%`;
+    }
+  }
+
+  const a = note.arrow;
+  const arrow = validArrow(a) ? `arrow ${pctStr(a.x1)},${pctStr(a.y1)}% → ${pctStr(a.x2)},${pctStr(a.y2)}%` : null;
+
+  return box || arrow ? { box, arrow } : null;
 }

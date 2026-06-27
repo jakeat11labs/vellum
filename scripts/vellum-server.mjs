@@ -26,7 +26,7 @@ import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 // sanitizeResolution is PATCH/offline-only — a note is NEVER born with a resolution at POST.
-import { computeMetrics, fmtDuration, fmtTime, METRICS_KEEP, METRICS_MAX_LINES, normalizeNoteSeverity, normalizeNoteStatus, reconcileNote, resolveComposition, resolveInside, sanitizeResolution, VERSION } from "./vellum-shared.mjs";
+import { computeMetrics, describeDesiredDelta, fmtDuration, fmtTime, indexHashOf, METRICS_KEEP, METRICS_MAX_LINES, normalizeNoteSeverity, normalizeNoteStatus, reconcileNote, resolveComposition, resolveInside, sanitizeResolution, VERSION } from "./vellum-shared.mjs";
 import * as ui from "./vellum-ui.mjs";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
@@ -119,10 +119,10 @@ function computeProvenance() {
       if (/^[0-9a-f]{40}$/.test(sha)) prov.commit = sha;
     }
   } catch {}
-  try {
-    const bytes = fs.readFileSync(path.join(COMP_ABS, "index.html"));
-    prov.indexHash = "sha256:" + crypto.createHash("sha256").update(bytes).digest("hex").slice(0, 16);
-  } catch {}
+  // sha256 of index.html via the shared helper, so the player/server and the review packet's
+  // before/after cache all key off the IDENTICAL fingerprint (null when index.html is missing).
+  const indexHash = indexHashOf(COMP_ABS);
+  if (indexHash) prov.indexHash = indexHash;
   return prov.commit || prov.indexHash ? prov : null;
 }
 
@@ -479,6 +479,18 @@ function styleDetailLine(t) {
   const bits = Object.keys(STYLE_LABELS).filter((k) => t.style[k]).map((k) => `${STYLE_LABELS[k]} ${escapeMd(String(t.style[k]))}`);
   return bits.length ? `  - style: ${bits.join(" · ")}` : null;
 }
+// Desired-state markup as agent-facing sub-lines: the box delta on a `- desired:` line and the
+// from→to arrow on a `- direction:` line. Phrasing comes from the shared describeDesiredDelta,
+// which returns the box/arrow pieces structured so we label each directly. Returns [] when the
+// note carries neither field, so legacy notes render byte-identically.
+function desiredDetailLine(n) {
+  const d = describeDesiredDelta(n);
+  if (!d) return [];
+  const lines = [];
+  if (d.box) lines.push(`  - desired: ${d.box}`);
+  if (d.arrow) lines.push(`  - direction: ${d.arrow}`);
+  return lines;
+}
 
 // The coding agent's write-back: what it changed to address the note. Renders a headline
 // resolution line (who/when + one-line summary) plus one `- edit:` line per file/selector
@@ -569,7 +581,7 @@ function renderNoteBlock(n, manifest, indent = 0) {
   const head = `- **note-${n.id}** · **${span ? `${fmtTime(n.time)}–${fmtTime(n.timeEnd)}` : fmtTime(n.time)}**${n.scene ? ` \`${escapeMd(n.scene)}\`` : ""}${severityTag(n)} — ${noteText}${where ? `  _(${where})_` : ""}${tgt}${sel}${statusTag}${staleTag}`;
   const baseExtra = n.kind === "audio" ? audioDetailLines(n.audio)
     : scoped ? []
-    : [elementDetailLine(n.target), styleDetailLine(n.target)].filter(Boolean);
+    : [elementDetailLine(n.target), styleDetailLine(n.target), ...desiredDetailLine(n)].filter(Boolean);
   // Agent write-back sub-lines (resolution + per-edit) append after the element/audio context, and
   // any reference-image paths follow last — each present only when the note carries that field.
   const extra = [
@@ -663,7 +675,7 @@ function writeNotes(notes) {
     "",
     `${notes.length} note(s)${dims}. Times are composition-time (M:SS.ss).${hasMap ? " Scene & clip timings: `composition.json` (same folder)." : ""}`,
     ...(baselineLine ? [baselineLine] : []),
-    "Legend: `_(where)_` = pin/box/whole-scene/audio/time-span · `on tag.cls` = targeted element · `at selector` = exact DOM path · `box` = element bounds x,y w×h (% of frame) · `data-*` = the element's own timing attrs · `M:SS.ss` = a point in time, `M:SS.ss–M:SS.ss` = an in/out time span · `· **<sev>**` = reviewer severity (blocker > major > nit) · `_(stale: …)_` = composition's index.html changed since the note was pinned · `- resolution …` = the coding agent's write-back of what it changed · `- ref images: …` = reference sketch paths under notes/ the agent can open · status ∈ open / addressed / resolved / wontfix. Notes sharing an element are grouped under a header; blockers first.",
+    "Legend: `_(where)_` = pin/box/whole-scene/audio/time-span · `on tag.cls` = targeted element · `at selector` = exact DOM path · `box` = element bounds x,y w×h (% of frame) · `data-*` = the element's own timing attrs · `M:SS.ss` = a point in time, `M:SS.ss–M:SS.ss` = an in/out time span · `· **<sev>**` = reviewer severity (blocker > major > nit) · `_(stale: …)_` = composition's index.html changed since the note was pinned · `- desired: …` = the target position/size the reviewer wants (a delta from the current box) · `- direction: …` = a from→to arrow the reviewer drew · `- resolution …` = the coding agent's write-back of what it changed · `- ref images: …` = reference sketch paths under notes/ the agent can open · status ∈ open / addressed / resolved / wontfix. Notes sharing an element are grouped under a header; blockers first.",
     "",
     ...units.map((u) => renderNoteUnit(u, manifest)),
     "",
@@ -773,6 +785,33 @@ function boundedNumber(value, fallback, { min = -Infinity, max = Infinity, decim
   return Math.round(bounded * decimals) / decimals;
 }
 
+// A single percent-of-comp coordinate clamped to 0–100 (null on absent/garbage) — the same
+// bound target.box uses. Module-scope so both the POST sanitizer and applyNotePatch share one
+// clamp; the local `pct` in handleNotes delegates here so the logic isn't duplicated.
+const clampPct = (v) => boundedNumber(v, null, { min: 0, max: 100 });
+
+// Desired-state ghost box (where/how big the element SHOULD be), % of comp. All-or-nothing — any
+// non-finite axis drops the whole field — and requires positive size (w>0 && h>0), mirroring the
+// POST target.box block. Returns null on bad/absent input so it slots into an optional-spread.
+function sanitizeDesiredBox(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const box = { x: clampPct(raw.x), y: clampPct(raw.y), w: clampPct(raw.w), h: clampPct(raw.h) };
+  if (Object.values(box).some((v) => v == null)) return null;
+  if (!(box.w > 0 && box.h > 0)) return null;
+  return box;
+}
+
+// Desired-state arrow (a from→to direction), % of comp. All four points required; a zero-length
+// arrow (|dx|<0.1 && |dy|<0.1) is rejected, mirroring the timeEnd<=time and span-range epsilon
+// rejections. Returns null on bad/absent/degenerate input.
+function sanitizeArrow(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const a = { x1: clampPct(raw.x1), y1: clampPct(raw.y1), x2: clampPct(raw.x2), y2: clampPct(raw.y2) };
+  if (Object.values(a).some((v) => v == null)) return null;
+  if (Math.abs(a.x2 - a.x1) < 0.1 && Math.abs(a.y2 - a.y1) < 0.1) return null;
+  return a;
+}
+
 function noteId(value) {
   const id = Number(value);
   return Number.isInteger(id) && id > 0 ? id : null;
@@ -825,6 +864,20 @@ function applyNotePatch(note, parsed) {
     const resolution = parsed.resolution === null ? null : sanitizeResolution(parsed.resolution);
     if (resolution) note.resolution = resolution;
     else delete note.resolution;
+  }
+  // Desired-state markup uses key-presence (mirroring severity): a present `desiredBox`/`arrow`
+  // key replaces the field, or clears it when null/invalid; an absent key leaves it untouched, so a
+  // status-only/text-only PATCH (or the status cycle) never wipes the ghost/arrow. PATCH never
+  // flips scope, so these aren't re-forced-null against kind here.
+  if ("desiredBox" in parsed) {
+    const d = sanitizeDesiredBox(parsed.desiredBox);
+    if (d) note.desiredBox = d;
+    else delete note.desiredBox;
+  }
+  if ("arrow" in parsed) {
+    const a = sanitizeArrow(parsed.arrow);
+    if (a) note.arrow = a;
+    else delete note.arrow;
   }
   note.updatedAt = now;
   return { note };
@@ -886,7 +939,7 @@ function handleNotes(req, res) {
     return readBody(req, res, 1e6, (parsed) => {
       const text = String(parsed.text ?? "").slice(0, 2000).trim();
       if (!text) return sendJson(res, 400, { error: "empty note" });
-      const pct = (v) => boundedNumber(v, null, { min: 0, max: 100 });
+      const pct = clampPct; // bounded percent-of-comp coordinate; shared with the sanitizers above
       let target = null;
       if (parsed.target && typeof parsed.target === "object") {
         // Element bounding box at pin time (percent of comp size) — lets vellum-review
@@ -953,6 +1006,12 @@ function handleNotes(req, res) {
       // bounded by normalizeNoteSeverity (garbage → null → field omitted). Optional spread keeps
       // severity-less notes byte-identical.
       const severity = normalizeNoteSeverity(parsed.severity);
+      // Desired-state markup: where the element SHOULD be (ghost box) and/or a from→to direction
+      // (arrow), both % of comp. Forced null on scoped notes (no element/pin to move) like x/y/w/h,
+      // and bounded all-or-nothing by the module-scope sanitizers; optional spread keeps notes
+      // without them byte-identical.
+      const desiredBox = scopedKind ? null : sanitizeDesiredBox(parsed.desiredBox);
+      const arrow = scopedKind ? null : sanitizeArrow(parsed.arrow);
       // Server-authored baseline this note is pinned against (commit + index.html hash).
       // Stamped here, never read from parsed (a client cannot spoof it); immutable on PATCH.
       const prov = computeProvenance();
@@ -967,6 +1026,8 @@ function handleNotes(req, res) {
           h: scopedKind ? null : pct(parsed.h),
           scene: parsed.scene ? String(parsed.scene).slice(0, 60) : null,
           target: scopedKind ? null : target,
+          ...(desiredBox ? { desiredBox } : {}),
+          ...(arrow ? { arrow } : {}),
           ...(kind ? { kind } : {}),
           ...(audio ? { audio } : {}),
           ...(attachments.length ? { attachments } : {}),

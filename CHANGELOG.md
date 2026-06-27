@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - June 27, 2026
+
+The roadmap's "Later" tier — turning feedback from a description into an instruction, and letting the agent check its own work. Notes stay a bare JSON array; every new field is absent-by-default, so older notes are byte-identical.
+
+### Added
+- **Desired-state markup (ghost box / arrow).** A reviewer can now show *where/how big* an element should be, not just point at it. After pinning a note, drag a dashed **ghost target box** (▭) or an **arrow** (↗) from the composer. The note carries optional `desiredBox`/`arrow` (% of comp) and `annotations.md` emits a ready-to-apply delta — e.g. `- desired: move x 24→48%, resize 10×12% → 30×12%` and `- direction: arrow 10,10% → 60,40%` — so "move this here / make it bigger" is an exact instruction. Drawn in amber in the player and the review packet, distinct from the current-state marker.
+- **Before/after frames in the review packet.** `vellum-review` caches the frame each note was pinned against (keyed by the note's content hash). Run it once **before** editing to bank the baselines; after you edit and re-run, any `addressed`/`resolved` note whose composition drifted shows a **Before · After** pair in `INDEX.md` so you (and the agent) can self-check the edit. Degrades to a single current frame when there's no pre-edit baseline.
+
+### Notes
+- **Re-anchoring notes to scene offsets was evaluated and deliberately deferred.** Provenance + the shipped `_(stale: …)_` flag already surface the real drift, the recompute is unsound without a manifest-freshness gate, and the before/after pair subsumes its one genuine benefit (a relocated single frame). An implementation-ready spec is parked behind a real-drift metric.
+
 ## [0.7.0] - June 26, 2026
 
 The "Next" tier from the roadmap — seven features that close the review loop and make the handoff artifact carry far more of its own context. Notes stay a bare JSON array; every new field is absent-by-default, so old notes are byte-identical.

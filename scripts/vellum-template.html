@@ -25,6 +25,20 @@
       .region:hover { background: color-mix(in srgb, var(--c, #5eead4) 24%, transparent); box-shadow: 0 0 10px color-mix(in srgb, var(--c, #5eead4) 60%, transparent); }
       .region .rbadge { position: absolute; top: -13px; left: -2px; background: var(--c, #5eead4); color: #06231f; font-size: 12px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; }
       #dragbox { position: absolute; border: 2px dashed #5eead4; background: rgba(94,234,212,0.12); display: none; pointer-events: none; }
+      /* Desired-state markup. #ghostbox = the live dashed rect while dragging a target (amber, so it
+         reads distinctly from the teal placement #dragbox); .ghost-box = a saved desired target on a
+         note (dashed, faint amber fill — "desired" reads as one amber semantic across the live drag,
+         the saved marker, and the review packet). #ghost-layer hosts the from→to arrows
+         in comp coordinates (viewBox = compW×compH, set at fitStage). */
+      #ghostbox { position: absolute; border: 2px dashed #fbbf24; background: rgba(251,191,36,0.12); display: none; pointer-events: none; }
+      .ghost-box { position: absolute; pointer-events: auto; border: 2px dashed #fbbf24; border-radius: 4px; background: color-mix(in srgb, #fbbf24 9%, transparent); cursor: pointer; transition: background .12s ease, box-shadow .12s ease; }
+      .ghost-box:hover { background: color-mix(in srgb, #fbbf24 18%, transparent); box-shadow: 0 0 10px color-mix(in srgb, #fbbf24 50%, transparent); }
+      .ghost-box .gbadge { position: absolute; top: -13px; left: -2px; background: #fbbf24; color: #3a2c00; font-size: 11px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; opacity: 0.95; }
+      #ghost-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+      /* While capturing a ghost target the overlay must take the mouse, but the saved markers under it
+         must not swallow the drag (or fire their seek-on-click). */
+      #pins.capturing { pointer-events: auto; cursor: crosshair; }
+      #pins.capturing .pin, #pins.capturing .region, #pins.capturing .ghost-box { pointer-events: none; }
       /* Floating label naming the element under the crosshair while arming */
       #hover-tag { position: absolute; z-index: 5; display: none; pointer-events: none; background: #0e0e11; border: 1px solid #2d4f49; color: #5eead4; font-size: 11px; padding: 2px 7px; border-radius: 6px; white-space: nowrap; max-width: 320px; overflow: hidden; text-overflow: ellipsis; box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
       /* Live VO caption while scrubbing — surfaces the parsed VTT cue so VO/visual desync is visible */
@@ -46,6 +60,15 @@
       #composer-sev button.active[data-sev=blocker] { background: rgba(255,107,107,0.16); border-color: #ff6b6b; color: #ff8f8f; }
       #composer-sev button.active[data-sev=major] { background: rgba(231,179,92,0.16); border-color: #e7b35c; color: #e7b35c; }
       #composer-sev button.active[data-sev=nit] { background: rgba(139,139,147,0.18); border-color: #8b8b93; color: #c9c9d0; }
+      /* Desired-state sub-row — buttons arm the ghost-box / arrow capture; the chip shows the captured
+         delta with a ✕ to clear. Hidden for scoped (scene/audio/span) notes — nothing to move. */
+      #composer-desired-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-bottom: 8px; }
+      #composer-desired-row button { font-size: 11px; padding: 4px 8px; background: #1a1a1f; border: 1px solid #2c2c32; color: #c9c9d0; }
+      #composer-desired-row button:hover { border-color: var(--c, #5eead4); color: var(--c, #5eead4); }
+      #composer-desired { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; color: var(--c, #5eead4); background: color-mix(in srgb, var(--c, #5eead4) 12%, transparent); border: 1px solid color-mix(in srgb, var(--c, #5eead4) 40%, #2c2c32); border-radius: 6px; padding: 2px 4px 2px 8px; }
+      #composer-desired[hidden] { display: none; }
+      #composer-desired .chip-x { padding: 0 4px; font-size: 11px; line-height: 1; background: transparent; border: 0; color: inherit; cursor: pointer; }
+      #composer-desired .chip-x:hover { color: #ff8f8f; }
       /* Reference-image thumbnails — paste / drag-drop / file-pick onto the composer; each removable via ✕ */
       #composer-atts { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
       #composer-atts:empty { display: none; }
@@ -201,7 +224,7 @@
     <div id="wrap">
       <div id="viewport">
         <div id="stage"><div class="hint" style="padding:40px">Loading composition…</div></div>
-        <div id="pins"><div id="dragbox"></div><div id="hover-tag"></div></div>
+        <div id="pins"><div id="dragbox"></div><div id="ghostbox"></div><svg id="ghost-layer"><defs><marker id="vellum-arrowhead" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse" markerUnits="strokeWidth"><path d="M0,0 L10,5 L0,10 z" fill="context-stroke"></path></marker></defs></svg><div id="hover-tag"></div></div>
         <div id="feedback-dock">
           <div id="dock-targets">
             <button id="scene-target" class="dock-target scene" title="Leave a note about the whole current scene"><span class="ico">▣</span><span class="lbl">Whole scene</span></button>
@@ -213,6 +236,11 @@
         <div id="composer">
           <div id="composer-drag" title="Drag to move"><span class="grip">⠿</span><div class="meta" id="composer-meta"></div></div>
           <div class="tgt" id="composer-tgt"></div>
+          <div id="composer-desired-row" title="Mark where this should go — drag a target box or a from→to arrow on the frame">
+            <button type="button" id="composer-ghost" title="Drag the box where (and how big) the element should be">▭ Ghost target</button>
+            <button type="button" id="composer-arrow" title="Drag an arrow from the element toward where it should point/move">↗ Arrow</button>
+            <span id="composer-desired" hidden></span>
+          </div>
           <div class="sev" id="composer-sev" title="Reviewer severity — the agent fixes blockers first (click the active chip to clear)">
             <button type="button" data-sev="blocker">Blocker</button>
             <button type="button" data-sev="major">Major</button>
@@ -321,6 +349,9 @@
       const stage = document.getElementById("stage");
       const pins = document.getElementById("pins");
       const dragbox = document.getElementById("dragbox");
+      const ghostbox = document.getElementById("ghostbox");
+      const ghostLayer = document.getElementById("ghost-layer");
+      const SVG_NS = "http://www.w3.org/2000/svg";
       const composer = document.getElementById("composer");
       const composerMeta = document.getElementById("composer-meta");
       const composerTgt = document.getElementById("composer-tgt");
@@ -479,6 +510,11 @@
         pins.style.height = h;
         pins.style.left = `${(vp.width - compW * s) / 2}px`;
         pins.style.top = `${(vp.height - compH * s) / 2}px`;
+        // Single-uniform-scale invariant: fitStage scales the iframe (and #pins) by ONE factor, so
+        // #pins aspect always equals compW:compH. A compW×compH viewBox therefore maps 1:1 onto the
+        // overlay with no skew and no per-resize recompute — arrows stay resize-safe. (A future
+        // non-uniform fitStage would break this and skew the arrows.)
+        ghostLayer.setAttribute("viewBox", `0 0 ${compW} ${compH}`);
       }
       window.addEventListener("resize", fitStage);
 
@@ -751,7 +787,9 @@
 
       window.addEventListener("keydown", (e) => {
         if (e.code === "Escape") {
-          // Escalating escape: open composer → close it; note mode on → exit it; else close the panel.
+          // Escalating escape: capturing a ghost target → back to the composer; open composer → close
+          // it; note mode on → exit it; else close the panel.
+          if (ghostCapture) { cancelGhostCapture(); return; }
           if (composer.style.display === "block") { composer.style.display = "none"; revokePendingAttachments(); pending = null; drainReload(); return; }
           if (arming) { armBtn.click(); return; }
           if (spanIn != null || spanOut != null) { clearSpan(); flash("Cleared in/out marks"); return; }
@@ -1028,6 +1066,10 @@
 
       let dragStart = null;
       pins.addEventListener("mousedown", (e) => {
+        // Ghost-target sub-gesture owns the pointer while capturing — short-circuit BEFORE the
+        // arming check, the pending bail and the dpx/dpy split so a ghost drag never makes a second
+        // note or clobbers the in-flight pending.
+        if (ghostCapture) { onGhostMouseDown(e); return; }
         if (!arming) return;
         // Clicking an existing pin/region in note mode seeks to it — don't also start a new note.
         if (e.target.closest && e.target.closest(".pin, .region")) return;
@@ -1049,6 +1091,7 @@
         dragbox.style.display = "block";
       });
       pins.addEventListener("mousemove", (e) => {
+        if (ghostCapture) { onGhostMouseMove(e); return; }
         if (!dragStart) {
           // Armed but not dragging: live-highlight the element under the crosshair so
           // the user sees what the pin will attach to before clicking. Paused while a
@@ -1067,6 +1110,7 @@
       });
       pins.addEventListener("mouseleave", clearHover);
       pins.addEventListener("mouseup", (e) => {
+        if (ghostCapture) { onGhostMouseUp(e); return; }
         if (!arming || !dragStart) return;
         const r = pins.getBoundingClientRect();
         const ex = e.clientX - r.left, ey = e.clientY - r.top;
@@ -1097,6 +1141,136 @@
         dragStart = null;
         // Stay in note mode — the next click pins the next note.
       });
+
+      // ---- desired-state markup: ghost-box / arrow sub-gesture ----
+      // A composer SUB-gesture (not a second primary drag): after pinning, the reviewer clicks
+      // "▭ Ghost target" or "↗ Arrow", drags once on #pins, and the DESIRED position/size (% of comp)
+      // or a from→to arrow (% of comp) lands on the pending note. The composer is hidden during the
+      // drag (pending kept) and reopened at the same spot on release / cancel.
+      let ghostCapture = null;   // 'box' | 'arrow' | null
+      let ghostDrag = null;      // live drag state (pins-relative px)
+      let ghostReopen = null;    // client coords to reopen the composer at when capture ends
+      let liveArrowEl = null;    // the SVG <line> drawn while dragging an arrow
+      let ghostArrowFrom = null; // arrow origin (% of comp) for this capture — module state, not on the note
+
+      const isScopedPending = () => pending && (pending.kind === "scene" || pending.kind === "audio" || pending.kind === "span");
+
+      // Arrow from-point: a region's center, else the pin point, else the captured element's box
+      // center (% of comp). Pre-seeded so "shift this way" needs only one drag to the destination.
+      function ghostArrowOrigin() {
+        if (pending.w != null) return { x: pending.x + pending.w / 2, y: pending.y + pending.h / 2 };
+        if (pending.x != null) return { x: pending.x, y: pending.y };
+        const b = pending.target && pending.target.box;
+        if (b) return { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+        return { x: 50, y: 50 };
+      }
+
+      function startGhostCapture(mode) {
+        if (!pending || isScopedPending()) return;
+        pending.text = composerText.value;           // preserve the in-progress note text across the hide
+        if (mode === "arrow") ghostArrowFrom = ghostArrowOrigin();
+        const cr = composer.getBoundingClientRect();
+        ghostReopen = { x: cr.left, y: cr.top };
+        composer.style.display = "none";
+        clearHover();
+        ghostCapture = mode;
+        ghostDrag = null;
+        pins.classList.add("capturing");
+        flash(mode === "box" ? "Drag the target box where it should go · Esc to cancel"
+                             : "Drag to where it should point · Esc to cancel");
+      }
+
+      function endGhostCapture() {
+        ghostCapture = null;
+        ghostDrag = null;
+        pins.classList.remove("capturing");
+        ghostbox.style.display = "none";
+        removeLiveArrow();
+      }
+
+      // End the capture and reopen the composer at the spot it was hidden from.
+      function finishGhostCapture() {
+        endGhostCapture();
+        const a = ghostReopen || { x: 0, y: 0 };
+        if (pending) openComposer(a.x, a.y - 14);   // openComposer adds +14 to top; subtract to restore
+      }
+
+      function cancelGhostCapture() {
+        flash("Ghost capture cancelled");
+        finishGhostCapture();
+      }
+
+      // Live arrow drawn in comp coordinates (the #ghost-layer viewBox is compW×compH).
+      function setLiveArrow(x1c, y1c, x2c, y2c) {
+        if (!liveArrowEl) {
+          liveArrowEl = document.createElementNS(SVG_NS, "line");
+          liveArrowEl.setAttribute("class", "ghost-live");
+          liveArrowEl.setAttribute("stroke-width", "2.5");
+          liveArrowEl.setAttribute("vector-effect", "non-scaling-stroke");
+          liveArrowEl.setAttribute("marker-end", "url(#vellum-arrowhead)");
+          ghostLayer.appendChild(liveArrowEl);
+        }
+        liveArrowEl.setAttribute("x1", x1c);
+        liveArrowEl.setAttribute("y1", y1c);
+        liveArrowEl.setAttribute("x2", x2c);
+        liveArrowEl.setAttribute("y2", y2c);
+        liveArrowEl.setAttribute("stroke", "#fbbf24"); // amber = "desired", matches #ghostbox + saved ghost/arrow
+      }
+      function removeLiveArrow() { if (liveArrowEl) { liveArrowEl.remove(); liveArrowEl = null; } }
+      // pins-relative px → comp user-units for the SVG overlay (1:1 with the compW×compH viewBox).
+      const compX = (px, r) => (px / r.width) * compW;
+      const compY = (py, r) => (py / r.height) * compH;
+
+      function onGhostMouseDown(e) {
+        if (!pending) { endGhostCapture(); return; } // belt-and-suspenders: never act on a torn-down note
+        const r = pins.getBoundingClientRect();
+        ghostDrag = { x: e.clientX - r.left, y: e.clientY - r.top };
+        if (ghostCapture === "box") {
+          ghostbox.style.left = `${ghostDrag.x}px`;
+          ghostbox.style.top = `${ghostDrag.y}px`;
+          ghostbox.style.width = "0px";
+          ghostbox.style.height = "0px";
+          ghostbox.style.display = "block";
+        } else {
+          const f = ghostArrowFrom || { x: 0, y: 0 };
+          setLiveArrow((f.x / 100) * compW, (f.y / 100) * compH, compX(ghostDrag.x, r), compY(ghostDrag.y, r));
+        }
+      }
+      function onGhostMouseMove(e) {
+        if (!pending) { endGhostCapture(); return; }
+        if (!ghostDrag) return;
+        const r = pins.getBoundingClientRect();
+        const cx = e.clientX - r.left, cy = e.clientY - r.top;
+        if (ghostCapture === "box") {
+          ghostbox.style.left = `${Math.min(ghostDrag.x, cx)}px`;
+          ghostbox.style.top = `${Math.min(ghostDrag.y, cy)}px`;
+          ghostbox.style.width = `${Math.abs(cx - ghostDrag.x)}px`;
+          ghostbox.style.height = `${Math.abs(cy - ghostDrag.y)}px`;
+        } else {
+          const f = ghostArrowFrom || { x: 0, y: 0 };
+          setLiveArrow((f.x / 100) * compW, (f.y / 100) * compH, compX(cx, r), compY(cy, r));
+        }
+      }
+      function onGhostMouseUp(e) {
+        if (!pending) { endGhostCapture(); return; }
+        if (!ghostDrag) return;
+        const r = pins.getBoundingClientRect();
+        const ex = e.clientX - r.left, ey = e.clientY - r.top;
+        if (ghostCapture === "box") {
+          const w = Math.abs(ex - ghostDrag.x), h = Math.abs(ey - ghostDrag.y);
+          if (w < 6 || h < 6) { flash("Box too small — cancelled"); finishGhostCapture(); return; }
+          const left = Math.min(ghostDrag.x, ex), top = Math.min(ghostDrag.y, ey);
+          pending.desiredBox = { x: pctOf(left, r.width), y: pctOf(top, r.height), w: pctOf(w, r.width), h: pctOf(h, r.height) };
+          flash("Ghost target set");
+        } else {
+          const f = ghostArrowFrom || { x: 0, y: 0 };
+          const x2 = pctOf(ex, r.width), y2 = pctOf(ey, r.height);
+          if (Math.abs(x2 - f.x) < 0.1 && Math.abs(y2 - f.y) < 0.1) { flash("Arrow too short — cancelled"); finishGhostCapture(); return; }
+          pending.arrow = { x1: f.x, y1: f.y, x2, y2 };
+          flash("Arrow set");
+        }
+        finishGhostCapture();
+      }
 
       const composerSaveBtn = document.getElementById("composer-save");
       // Mirror the ⌘/Ctrl+Enter save shortcut on the button so it's discoverable.
@@ -1153,6 +1327,62 @@
           renderComposerSeverity();
         };
       });
+
+      // ---- desired-state sub-row (ghost-box / arrow) ----
+      const composerDesiredRow = document.getElementById("composer-desired-row");
+      const composerDesiredChip = document.getElementById("composer-desired");
+      document.getElementById("composer-ghost").onclick = () => startGhostCapture("box");
+      document.getElementById("composer-arrow").onclick = () => startGhostCapture("arrow");
+
+      // Render-only mirror of the shared describeDesiredDelta (vellum-shared.mjs isn't importable into
+      // this inline player). Human-readable here; the canonical delta the agent reads is re-derived
+      // server-side. The "current" a box deltas against is a region's own rect, else the element box.
+      function describePendingDesired(p) {
+        if (!p) return "";
+        const r1 = (v) => String(Number(Number(v).toFixed(1)));
+        const out = [];
+        if (p.desiredBox) {
+          const d = p.desiredBox;
+          let cur = null;
+          if (p.w != null) cur = { x: p.x, y: p.y, w: p.w, h: p.h };
+          else if (p.target && p.target.box) cur = p.target.box;
+          if (cur) {
+            const seg = [], mv = [];
+            if (Math.abs(cur.x - d.x) >= 0.1) mv.push(`x ${r1(cur.x)}→${r1(d.x)}%`);
+            if (Math.abs(cur.y - d.y) >= 0.1) mv.push(`y ${r1(cur.y)}→${r1(d.y)}%`);
+            if (mv.length) seg.push(`move ${mv.join(", ")}`);
+            if (Math.abs(cur.w - d.w) >= 0.1 || Math.abs(cur.h - d.h) >= 0.1) seg.push(`resize ${r1(cur.w)}×${r1(cur.h)}% → ${r1(d.w)}×${r1(d.h)}%`);
+            out.push(seg.length ? `▭ ${seg.join(", ")}` : "▭ target set");
+          } else {
+            out.push(`▭ box ${r1(d.x)},${r1(d.y)} ${r1(d.w)}×${r1(d.h)}%`);
+          }
+        }
+        if (p.arrow) out.push(`↗ ${r1(p.arrow.x1)},${r1(p.arrow.y1)}% → ${r1(p.arrow.x2)},${r1(p.arrow.y2)}%`);
+        return out.join(" · ");
+      }
+
+      // Hide the row for scoped notes (nothing to move); else show the buttons + a chip describing the
+      // captured delta, with a ✕ that clears both fields from pending.
+      function renderComposerDesired() {
+        const scoped = isScopedPending();
+        composerDesiredRow.style.display = scoped ? "none" : "";
+        if (scoped) return;
+        const txt = describePendingDesired(pending);
+        composerDesiredChip.textContent = "";
+        if (txt) {
+          composerDesiredChip.append(txt + " ");
+          const x = document.createElement("button");
+          x.type = "button";
+          x.className = "chip-x";
+          x.textContent = "✕";
+          x.title = "Clear desired-state markup";
+          x.onclick = () => { delete pending.desiredBox; delete pending.arrow; renderComposerDesired(); };
+          composerDesiredChip.appendChild(x);
+          composerDesiredChip.hidden = false;
+        } else {
+          composerDesiredChip.hidden = true;
+        }
+      }
 
       // ---- reference-image attachments (paste / drag-drop / file-pick → upload → thumbnails) ----
       // A reloaded note references its image by a notes-relative path; resolve it to a URL the <img>
@@ -1440,6 +1670,12 @@
       }
 
       function openComposer(clientX, clientY) {
+        // Tear down any armed ghost capture before (re)opening the composer. openComposer is the common
+        // funnel for the dock/scoped, drawer-edit, placement, and finishGhostCapture paths — so a
+        // capture armed against the old pending can't survive into a new/competing note (which would
+        // crash a later frame drag on a null/wrong pending and freeze the .capturing overlay). No-op on
+        // the finishGhostCapture path, which already cleared it.
+        if (ghostCapture) endGhostCapture();
         const region = pending.w != null;
         const editLabel = pending.editId ? `note-${pending.editId} · edit` : "new note";
         pending.color = colorFor(pending.editId || nextNoteId());
@@ -1452,6 +1688,7 @@
         composerMeta.textContent = `${editLabel} · ${span ? `${fmt(pending.time)}–${fmt(pending.timeEnd)}` : fmt(pending.time)} · ${pending.scene || ""} · ${where}`;
         renderComposerTarget();
         renderComposerSeverity();
+        renderComposerDesired();
         // Clone any saved attachments (edit reopens via {...note}) so removing a thumbnail can't mutate
         // the cached note array before a reload; fresh placements start empty.
         pending.attachments = Array.isArray(pending.attachments) ? pending.attachments.map((a) => ({ ...a })) : [];
@@ -1514,6 +1751,10 @@
               text,
               severity: pending.severity ?? null,
               attachments: (pending.attachments || []).map(({ file, name, bytes, type, w, h }) => ({ file, name, bytes, type, w, h })),
+              // Desired-state markup rides the PATCH as present keys so the human can re-drag or clear:
+              // null tells the server to drop the field (it treats null/invalid as clear).
+              desiredBox: pending.desiredBox ?? null,
+              arrow: pending.arrow ?? null,
             }),
           });
           if (!res.ok) { flash("Update failed"); return; }
@@ -1526,6 +1767,8 @@
           if (audio) payload.audio = audio;
           if (timeEnd != null) payload.timeEnd = timeEnd; // load-bearing — the interval is lost without this
           if (pending.severity) payload.severity = pending.severity;
+          if (pending.desiredBox) payload.desiredBox = pending.desiredBox; // the target position/size the reviewer wants
+          if (pending.arrow) payload.arrow = pending.arrow;                // a from→to direction
           if (pending.attachments && pending.attachments.length) // strip the transient _obj before serializing
             payload.attachments = pending.attachments.map(({ file, name, bytes, type, w, h }) => ({ file, name, bytes, type, w, h }));
           await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) });
@@ -1626,33 +1869,71 @@
         renderList();
       }
       function renderMarkers() {
-        pins.querySelectorAll(".pin, .region").forEach((p) => p.remove());
+        pins.querySelectorAll(".pin, .region, .ghost-box").forEach((p) => p.remove());
+        ghostLayer.querySelectorAll(".note-arrow").forEach((p) => p.remove());
         markerEls = [];
         notes.forEach((n) => {
-          if (n.x == null) return;
           const color = colorFor(n.id);
-          const marker = document.createElement("div");
-          marker.style.left = `${n.x}%`;
-          marker.style.top = `${n.y}%`;
-          marker.style.setProperty("--c", color);
-          if (n.w != null) {
-            marker.className = "region";
-            marker.style.width = `${n.w}%`;
-            marker.style.height = `${n.h}%`;
-            const badge = document.createElement("div");
-            badge.className = "rbadge";
-            badge.textContent = n.id;
-            marker.appendChild(badge);
-          } else {
-            marker.className = "pin";
-            marker.textContent = n.id;
+          const [start, end] = sceneWindow(n); // each marker shows only within the note's scene window
+          // Per-branch guards (not a single `n.x == null` early-out) so an arrow or a desiredBox renders
+          // even on a note without pin coords, and pins/regions keep rendering exactly as before.
+          if (n.x != null) {
+            const marker = document.createElement("div");
+            marker.style.left = `${n.x}%`;
+            marker.style.top = `${n.y}%`;
+            marker.style.setProperty("--c", color);
+            if (n.w != null) {
+              marker.className = "region";
+              marker.style.width = `${n.w}%`;
+              marker.style.height = `${n.h}%`;
+              const badge = document.createElement("div");
+              badge.className = "rbadge";
+              badge.textContent = n.id;
+              marker.appendChild(badge);
+            } else {
+              marker.className = "pin";
+              marker.textContent = n.id;
+            }
+            marker.title = `${fmt(n.time)} — ${n.text}`;
+            marker.onmouseenter = () => flashTarget(n.target, color);
+            marker.onclick = (ev) => { ev.stopPropagation(); seekToNote(n, color); };
+            pins.appendChild(marker);
+            markerEls.push({ el: marker, start, end });
           }
-          marker.title = `${fmt(n.time)} — ${n.text}`;
-          marker.onmouseenter = () => flashTarget(n.target, color);
-          marker.onclick = (ev) => { ev.stopPropagation(); seekToNote(n, color); };
-          pins.appendChild(marker);
-          const [start, end] = sceneWindow(n);
-          markerEls.push({ el: marker, start, end });
+          // Desired-state ghost box — where/how big the element should be (dashed, in the note's color).
+          if (n.desiredBox) {
+            const g = document.createElement("div");
+            g.className = "ghost-box";
+            g.style.left = `${n.desiredBox.x}%`;
+            g.style.top = `${n.desiredBox.y}%`;
+            g.style.width = `${n.desiredBox.w}%`;
+            g.style.height = `${n.desiredBox.h}%`;
+            g.style.setProperty("--c", color);
+            const badge = document.createElement("div");
+            badge.className = "gbadge";
+            badge.textContent = "→ here";
+            g.appendChild(badge);
+            g.title = `note ${n.id} — desired target`;
+            g.onmouseenter = () => flashTarget(n.target, color);
+            g.onclick = (ev) => { ev.stopPropagation(); seekToNote(n, color); };
+            pins.appendChild(g);
+            markerEls.push({ el: g, start, end });
+          }
+          // Desired-state arrow — a from→to direction in comp coords on the SVG overlay.
+          if (n.arrow) {
+            const line = document.createElementNS(SVG_NS, "line");
+            line.setAttribute("class", "note-arrow");
+            line.setAttribute("x1", (n.arrow.x1 / 100) * compW);
+            line.setAttribute("y1", (n.arrow.y1 / 100) * compH);
+            line.setAttribute("x2", (n.arrow.x2 / 100) * compW);
+            line.setAttribute("y2", (n.arrow.y2 / 100) * compH);
+            line.setAttribute("stroke", "#fbbf24"); // amber = "desired", one semantic across live/saved/packet
+            line.setAttribute("stroke-width", "2.5");
+            line.setAttribute("vector-effect", "non-scaling-stroke");
+            line.setAttribute("marker-end", "url(#vellum-arrowhead)");
+            ghostLayer.appendChild(line);
+            markerEls.push({ el: line, start, end });
+          }
         });
         updateMarkerVisibility(player ? player.getTime() : 0);
         renderNoteDots();

@@ -149,6 +149,95 @@ async function testServerApi() {
     res = await fetch(`${base}/api/notes/${rich.id}`, { method: "DELETE" });
     assert.equal(res.status, 200);
 
+    // ── Desired-state markup (desiredBox + arrow) ──────────────────────────────────────────────
+    // Both are % of comp, bounded all-or-nothing like target.box. A valid pair persists and, with
+    // a current box (target.box here), renders the shared delta as a `- desired:` (box) + a
+    // `- direction:` (arrow) md sub-line.
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        time: 3, x: 20, y: 20, text: "move + point this",
+        target: { tag: "div", cls: "card", box: { x: 24, y: 30, w: 10, h: 12 } },
+        desiredBox: { x: 48, y: 30, w: 30, h: 12 },
+        arrow: { x1: 10, y1: 10, x2: 60, y2: 40 },
+      }),
+    });
+    assert.equal(res.status, 201);
+    const want = await res.json();
+    assert.deepEqual(want.desiredBox, { x: 48, y: 30, w: 30, h: 12 });
+    assert.deepEqual(want.arrow, { x1: 10, y1: 10, x2: 60, y2: 40 });
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.match(md, /^ *- desired: move x 24→48%, resize 10×12% → 30×12%/m); // box delta vs target.box
+    assert.match(md, /^ *- direction: arrow 10,10% → 60,40%/m);               // arrow on its own labeled line
+    assert.match(md, /Legend:.*- desired:/);                                  // legend documents the new sub-lines
+
+    // Junk sanitization, all-or-nothing: a zero-size box (w=0) and a zero-length arrow each drop the
+    // WHOLE field, so the agent never sees a half-specified destination.
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        time: 4, x: 10, y: 10, text: "junk markup",
+        desiredBox: { x: 5, y: 5, w: 0, h: 10 },     // w=0 → field dropped
+        arrow: { x1: 50, y1: 50, x2: 50, y2: 50 },   // zero-length → dropped
+      }),
+    });
+    const junk = await res.json();
+    assert.equal(junk.desiredBox, undefined);
+    assert.equal(junk.arrow, undefined);
+    // Out-of-range coords clamp to 0–100 (whole field still kept since w/h are positive).
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 4, x: 10, y: 10, text: "clamped markup", desiredBox: { x: -5, y: 200, w: 30, h: 12 } }),
+    });
+    assert.deepEqual((await res.json()).desiredBox, { x: 0, y: 100, w: 30, h: 12 });
+
+    // PATCH key-presence: a present box replaces, a status-only PATCH leaves both fields untouched,
+    // and present-null clears (mirrors how severity/resolution ride a PATCH).
+    res = await fetch(`${base}/api/notes/${want.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ desiredBox: { x: 10, y: 10, w: 20, h: 20 } }),
+    });
+    assert.deepEqual((await res.json()).desiredBox, { x: 10, y: 10, w: 20, h: 20 }); // replaced
+    res = await fetch(`${base}/api/notes/${want.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ status: "resolved" }),
+    });
+    const kept = await res.json();
+    assert.deepEqual(kept.desiredBox, { x: 10, y: 10, w: 20, h: 20 }); // status-only PATCH keeps the box
+    assert.deepEqual(kept.arrow, { x1: 10, y1: 10, x2: 60, y2: 40 });  // ...and the arrow
+    res = await fetch(`${base}/api/notes/${want.id}`, {
+      method: "PATCH", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ desiredBox: null }),
+    });
+    assert.equal((await res.json()).desiredBox, undefined); // present-null clears
+
+    // Scoped notes (whole-scene/audio/span) carry no element to move → desired-state forced null.
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        time: 5, scene: "intro", kind: "scene", text: "whole scene",
+        desiredBox: { x: 10, y: 10, w: 20, h: 20 }, arrow: { x1: 1, y1: 1, x2: 9, y2: 9 },
+      }),
+    });
+    const scopedMarkup = await res.json();
+    assert.equal(scopedMarkup.desiredBox, undefined);
+    assert.equal(scopedMarkup.arrow, undefined);
+
+    // Back-compat: a plain pin note has NO desiredBox/arrow keys and produces no `- desired:` line.
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+    res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 6, x: 30, y: 30, text: "plain pin" }),
+    });
+    const plain = await res.json();
+    assert.equal(plain.desiredBox, undefined);
+    assert.equal(plain.arrow, undefined);
+    md = fs.readFileSync(path.join(dir, "notes", "annotations.md"), "utf8");
+    assert.doesNotMatch(md, /^ *- desired:/m);
+    assert.doesNotMatch(md, /^ *- direction:/m);
+    await fetch(`${base}/api/notes`, { method: "DELETE" });
+
     // Composition manifest: the player POSTs a scene/timing map; the server sanitizes
     // (clamps numbers, caps strings, fixed shape) and persists notes/composition.json.
     res = await fetch(`${base}/api/composition`, {
@@ -476,7 +565,7 @@ async function testSharedHelpers() {
   const shared = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
   const {
     NOTE_STATUSES, NOTE_SEVERITIES, normalizeNoteSeverity, sanitizeResolution,
-    fmtDuration, computeMetrics, reconcileNote,
+    fmtDuration, computeMetrics, reconcileNote, describeDesiredDelta,
   } = shared;
 
   // F1: the status enum gained "addressed" (agent-edited, awaiting human verify).
@@ -571,6 +660,41 @@ async function testSharedHelpers() {
   // Back-compat: a legacy note (valid status, no new fields) serializes byte-identically.
   const legacy = { id: 9, time: 4, x: 50, y: 50, w: null, h: null, scene: "intro", target: null, text: "ok", status: "resolved", createdAt: "2026-01-01T00:00:00.000Z" };
   assert.equal(JSON.stringify(reconcileNote(legacy)), JSON.stringify(legacy));
+
+  // reconcileNote drops a malformed desired-state field (offline hand-edit) so a render path's
+  // `.x` access can't throw, but preserves a well-formed one and never invents an absent field.
+  assert.ok(!("desiredBox" in reconcileNote({ desiredBox: "oops" })));
+  assert.ok(!("desiredBox" in reconcileNote({ desiredBox: { x: 1, y: 2, w: 3 } }))); // 3 numbers → dropped
+  assert.ok(!("arrow" in reconcileNote({ arrow: { x1: 1, y1: 2, x2: 3 } }))); // missing y2 → dropped
+  const goodMarkup = { id: 1, desiredBox: { x: 1, y: 2, w: 3, h: 4 }, arrow: { x1: 1, y1: 2, x2: 3, y2: 4 } };
+  assert.deepEqual(reconcileNote(goodMarkup).desiredBox, { x: 1, y: 2, w: 3, h: 4 }); // valid box preserved
+  assert.deepEqual(reconcileNote(goodMarkup).arrow, { x1: 1, y1: 2, x2: 3, y2: 4 }); // valid arrow preserved
+
+  // describeDesiredDelta: the single shared delta phrasing, returned STRUCTURED as {box, arrow}
+  // (the server labels each piece, the review packet joins them).
+  assert.equal(describeDesiredDelta({ id: 1 }), null); // neither field → null
+  // Region note: "current" is its OWN x/y/w/h. x + w/h change; the unchanged y axis is omitted.
+  const region = describeDesiredDelta({ x: 24, y: 30, w: 10, h: 12, desiredBox: { x: 48, y: 30, w: 30, h: 12 } });
+  assert.match(region.box, /move x 24→48%/);
+  assert.match(region.box, /resize 10×12% → 30×12%/);
+  assert.doesNotMatch(region.box, /y /); // y unchanged → omitted
+  assert.equal(region.arrow, null);
+  // desiredBox equal to the current box → no delta.
+  assert.equal(describeDesiredDelta({ x: 24, y: 30, w: 10, h: 12, desiredBox: { x: 24, y: 30, w: 10, h: 12 } }), null);
+  // Element pin: "current" comes from target.box when there is no region rect.
+  assert.equal(
+    describeDesiredDelta({ x: 50, y: 50, w: null, h: null, target: { box: { x: 24, y: 30, w: 10, h: 12 } }, desiredBox: { x: 48, y: 30, w: 30, h: 12 } }).box,
+    "move x 24→48%, resize 10×12% → 30×12%"
+  );
+  // Pin-only, no current box → absolute phrasing (no doubled "desired" word — the consumer labels it).
+  assert.equal(
+    describeDesiredDelta({ x: 50, y: 50, w: null, h: null, target: null, desiredBox: { x: 48, y: 30, w: 30, h: 12 } }).box,
+    "box 48,30 30×12%"
+  );
+  // Arrow phrasing, independent of pin coords; a malformed box on the same note is ignored.
+  const arrowOnly = describeDesiredDelta({ arrow: { x1: 10, y1: 10, x2: 60, y2: 40 } });
+  assert.equal(arrowOnly.arrow, "arrow 10,10% → 60,40%");
+  assert.equal(arrowOnly.box, null);
 }
 
 // Foundation (F3): boot regenerates annotations.{json,md} from reconciled notes, so an
@@ -735,6 +859,21 @@ function gitAvailable() {
   }
 }
 
+function ffmpegAvailable() {
+  try {
+    return spawnSync("ffmpeg", ["-version"], { encoding: "utf8" }).status === 0;
+  } catch {
+    return false;
+  }
+}
+
+// A 1×1 PNG — stand-in for a rendered composition frame in the before/after cache tests. drawMarker
+// just copyFileSync's it for a coord-less note, so its exact bytes don't matter, only that it exists.
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+  "base64"
+);
+
 // Provenance (keystone): each note + the composition manifest are stamped with the git commit
 // and the sha256 of index.html they were pinned against. A note whose hash differs from the
 // current mount baseline is flagged `_(stale: …)_` in annotations.md, and the header cites the
@@ -803,6 +942,28 @@ async function testProvenanceStaleDetection() {
     assert.doesNotMatch(n2, /stale/);
     // Header cites the current mount baseline (commit + index hash).
     assert.match(md, /Review baseline: commit `[0-9a-f]{7}` · index `sha256:[0-9a-f]{16}`/);
+  });
+}
+
+// indexHashOf (shared) is the single content fingerprint the server's computeProvenance stamps
+// onto every note and the review packet's before/after cache keys off. Guards the step-4 refactor:
+// the helper must keep the pinned `sha256:`+16-hex shape AND produce the EXACT value the server
+// stamps for the same index.html (no git needed — indexHash is present regardless of a repo).
+async function testIndexHashOf() {
+  const { indexHashOf } = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
+  const dir = makeTempProject("indexhash");
+  const local = indexHashOf(dir);
+  assert.match(local, /^sha256:[0-9a-f]{16}$/);
+  assert.equal(indexHashOf(path.join(dir, "does-not-exist")), null); // missing index.html → null
+  await withServer(dir, {}, async (base) => {
+    const res = await fetch(`${base}/api/notes`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ time: 1, scene: "intro", text: "n" }),
+    });
+    assert.equal(res.status, 201);
+    const note = await res.json();
+    // The shared helper must equal what computeProvenance() stamped server-side.
+    assert.equal(note.provenance.indexHash, local);
   });
 }
 
@@ -1164,8 +1325,192 @@ function testReviewResilience() {
   }
 }
 
+// Desired-state in the review packet (vellum-review.mjs drawMarker / INDEX.md). The marker-filter
+// construction is pure and render-free, so the helpers are unit-tested directly: %→px conversion,
+// the finite/zero-size guards (coords must stay numeric — no shell interpolation), the amber
+// destination box drawn at t=3 (distinct from the teal current-state marker), and the dotted-drawbox
+// arrow approximation (stock ffmpeg has no line filter). The actual PNG draw needs ffmpeg + npx
+// hyperframes; that render path is covered by the before/after slice, which SKIPS-with-warning when
+// those tools are unavailable. Importing the module is safe because main() is guarded (invokedDirectly).
+async function testReviewDesiredState() {
+  const review = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-review.mjs")));
+  const { desiredBoxPx, arrowPx, lineBoxes, ghostFilters } = review;
+
+  // Destination box %→px; bad or zero-size data → null so the filter never gets a non-numeric coord.
+  assert.equal(desiredBoxPx({}), null);                                            // no field
+  assert.equal(desiredBoxPx({ desiredBox: { x: 5, y: 5, w: 0, h: 10 } }), null);   // zero width
+  assert.equal(desiredBoxPx({ desiredBox: { x: 5, y: 5, w: 30, h: "x" } }), null); // non-finite
+  const box = desiredBoxPx({ desiredBox: { x: 48, y: 30, w: 30, h: 12 } });
+  assert.ok(box && [box.x, box.y, box.w, box.h].every(Number.isFinite));
+  assert.ok(box.w >= 4 && box.h >= 4); // floored to a visible minimum like targetBox
+
+  // Arrow points; missing/garbage → null.
+  assert.equal(arrowPx({}), null);
+  assert.equal(arrowPx({ arrow: { x1: 1, y1: 2, x2: 3 } }), null); // missing y2 → null
+  const arr = arrowPx({ arrow: { x1: 10, y1: 10, x2: 60, y2: 40 } });
+  assert.ok(arr && [arr.x1, arr.y1, arr.x2, arr.y2].every(Number.isFinite));
+
+  // The dotted arrow is a chain of filled drawboxes in the requested color (sampled line + from-dot + head).
+  const segs = lineBoxes(0, 0, 100, 100, "0xFFB000", 14, 3);
+  assert.ok(Array.isArray(segs) && segs.length >= 14);
+  assert.ok(segs.every((s) => s.startsWith("drawbox=") && s.includes("0xFFB000") && s.includes("t=fill")));
+
+  // ghostFilters is the factored fn drawMarker (and the before/after pass) layer on: amber box at t=3
+  // plus the arrow chain; empty for a note carrying neither field; each field contributes independently.
+  assert.deepEqual(ghostFilters({ id: 1 }), []);
+  const ghost = ghostFilters({ desiredBox: { x: 48, y: 30, w: 30, h: 12 }, arrow: { x1: 10, y1: 10, x2: 60, y2: 40 } });
+  assert.ok(ghost.some((s) => s.includes("0xFFB000") && s.includes("t=3")), "amber destination box at t=3");
+  assert.ok(ghost.filter((s) => s.includes("t=fill")).length >= 14, "dotted arrow chain present");
+  assert.equal(ghostFilters({ desiredBox: { x: 48, y: 30, w: 30, h: 12 } }).length, 1); // box-only → just the box
+  assert.ok(ghostFilters({ arrow: { x1: 10, y1: 10, x2: 60, y2: 40 } }).every((s) => s.includes("t=fill"))); // arrow-only
+}
+
+// Before/after pairing GATE (vellum-review.mjs shouldPairBeforeAfter) — pure, render-free, so it runs
+// everywhere regardless of ffmpeg/hyperframes. A note pairs only when the agent handled it
+// (addressed/resolved) AND the bytes it was pinned against (provenance.indexHash) have since drifted.
+async function testReviewBeforeAfterGate() {
+  const { shouldPairBeforeAfter } = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-review.mjs")));
+  const H1 = "sha256:1111111111111111";
+  const H2 = "sha256:2222222222222222";
+  // addressed/resolved + drift → pair.
+  assert.equal(shouldPairBeforeAfter({ status: "addressed", provenance: { indexHash: H1 } }, H2), true);
+  assert.equal(shouldPairBeforeAfter({ status: "resolved", provenance: { indexHash: H1 } }, H2), true);
+  assert.equal(shouldPairBeforeAfter({ status: "ADDRESSED", provenance: { indexHash: H1 } }, H2), true); // status normalized
+  // open / wontfix → no pair even with drift (open is already surfaced as stale, not paired).
+  assert.equal(shouldPairBeforeAfter({ status: "open", provenance: { indexHash: H1 } }, H2), false);
+  assert.equal(shouldPairBeforeAfter({ status: "wontfix", provenance: { indexHash: H1 } }, H2), false);
+  // no drift (pinned == current) → nothing to compare.
+  assert.equal(shouldPairBeforeAfter({ status: "resolved", provenance: { indexHash: H2 } }, H2), false);
+  // missing provenance / hash → no pair (back-compat: legacy notes stay single-frame).
+  assert.equal(shouldPairBeforeAfter({ status: "resolved" }, H2), false);
+  assert.equal(shouldPairBeforeAfter({ status: "resolved", provenance: {} }, H2), false);
+  // missing curHash (unreadable index.html) → no pair.
+  assert.equal(shouldPairBeforeAfter({ status: "resolved", provenance: { indexHash: H1 } }, null), false);
+}
+
+// Before/after pairing END-TO-END (vellum-review.mjs main loop). The expensive hyperframes render is
+// avoided by pre-seeding the on-disk frame cache (rawFrame returns a cache hit), and the notes carry no
+// pin/region coords so drawMarker just copies the frame — but the CLI still gates on ffmpeg up front
+// (ensureCommand), so SKIP-with-warning when ffmpeg is unavailable rather than red-failing CI.
+async function testReviewBeforeAfterPairing() {
+  if (!ffmpegAvailable()) {
+    console.log("  (skipped testReviewBeforeAfterPairing — ffmpeg unavailable)");
+    return;
+  }
+  const { indexHashOf } = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
+  const REVIEW = path.join(REPO, "scripts", "vellum-review.mjs");
+  const REVIEW_DIR = (dir) => path.join(dir, "notes", "review");
+  const sanitizeHash = (h) => h.replace(/[^a-z0-9]/gi, "_");
+  // Seed a cached raw frame for (hash, time) — i.e. simulate a review run having rendered it.
+  const seed = (dir, hash, time) => {
+    const bucket = path.join(REVIEW_DIR(dir), "baseline", sanitizeHash(hash));
+    fs.mkdirSync(bucket, { recursive: true });
+    fs.writeFileSync(path.join(bucket, `t${Number(time).toFixed(3)}.png`), TINY_PNG);
+  };
+  const writeNotes = (dir, notes) => {
+    fs.mkdirSync(path.join(dir, "notes"), { recursive: true });
+    fs.writeFileSync(path.join(dir, "notes", "annotations.json"), JSON.stringify(notes));
+  };
+  const drift = (dir) =>
+    fs.writeFileSync(path.join(dir, "index.html"), `<!doctype html><div data-width="1080" data-height="1920">edited</div>`);
+  const run = (dir) => spawnSync(process.execPath, [REVIEW], { cwd: dir, env: { ...process.env }, encoding: "utf8" });
+  const exists = (dir, name) => fs.existsSync(path.join(REVIEW_DIR(dir), name));
+
+  // (a) PAIRED happy path: addressed note pinned at H1, composition drifts to H2, before-frame cached.
+  {
+    const dir = makeTempProject("ba-pair");
+    const H1 = indexHashOf(dir);
+    writeNotes(dir, [{ id: 1, time: 1, scene: "intro", text: "drifted", status: "addressed", provenance: { indexHash: H1 } }]);
+    seed(dir, H1, 1);                 // a PRE-EDIT run cached the before-frame
+    drift(dir);
+    const H2 = indexHashOf(dir);
+    assert.notEqual(H1, H2);
+    seed(dir, H2, 1);                 // after-frame is a cache hit → no hyperframes render needed
+    const r = run(dir);
+    assert.equal(r.status, 0, `paired review exited ${r.status}: ${r.stderr}`);
+    assert.ok(exists(dir, "note-1.png"), "after frame written");
+    assert.ok(exists(dir, "note-1-before.png"), "before frame written");
+    // The referenced before-bucket survives the opportunistic prune (still pinned by the note).
+    assert.ok(fs.existsSync(path.join(REVIEW_DIR(dir), "baseline", sanitizeHash(H1))), "pinned cache bucket kept");
+    const md = fs.readFileSync(path.join(REVIEW_DIR(dir), "INDEX.md"), "utf8");
+    assert.match(md, /\| Before .* \| After .* \|/, "2-column before/after table");
+    assert.ok(md.includes("note-1-before.png") && md.includes("note-1.png"), "INDEX references both frames");
+  }
+
+  // (b) GRACEFUL FALLBACK: addressed + drift but NO pre-edit run cached H1 → single frame, exit 0.
+  {
+    const dir = makeTempProject("ba-nopre");
+    const H1 = indexHashOf(dir);
+    writeNotes(dir, [{ id: 1, time: 1, scene: "intro", text: "no pre-edit run", status: "addressed", provenance: { indexHash: H1 } }]);
+    drift(dir);
+    seed(dir, indexHashOf(dir), 1);  // only the after-frame is cached (the before never was)
+    const r = run(dir);
+    assert.equal(r.status, 0, `fallback review exited ${r.status}: ${r.stderr}`);
+    assert.ok(exists(dir, "note-1.png"), "after frame written");
+    assert.ok(!exists(dir, "note-1-before.png"), "no before frame on a cache miss");
+    assert.match(`${r.stderr || ""}`, /before-frame/i, "warns about the missing before-frame");
+    const md = fs.readFileSync(path.join(REVIEW_DIR(dir), "INDEX.md"), "utf8");
+    assert.ok(md.includes("![note 1](note-1.png)"), "single-frame block");
+    assert.doesNotMatch(md, /\| Before/, "no pair table");
+  }
+
+  // (c) BACK-COMPAT: a legacy note with NO provenance → single frame regardless of cache.
+  {
+    const dir = makeTempProject("ba-noprov");
+    const H1 = indexHashOf(dir);
+    writeNotes(dir, [{ id: 1, time: 1, scene: "intro", text: "legacy", status: "resolved" }]);
+    seed(dir, H1, 1);                 // after-frame cache hit (no drift since index.html is unchanged)
+    const r = run(dir);
+    assert.equal(r.status, 0, `legacy review exited ${r.status}: ${r.stderr}`);
+    assert.ok(exists(dir, "note-1.png"));
+    assert.ok(!exists(dir, "note-1-before.png"), "no before frame without provenance");
+    const md = fs.readFileSync(path.join(REVIEW_DIR(dir), "INDEX.md"), "utf8");
+    assert.ok(md.includes("![note 1](note-1.png)"));
+    assert.doesNotMatch(md, /\| Before/);
+  }
+}
+
+// The player is a single inline ES module in the HTML template — there's no browser harness here, but
+// a syntax error would silently break the whole reviewer UI. Parse-check it on every run, and assert
+// the desired-state (ghost-box / arrow) wiring this slice added is present and correctly ordered.
+function testTemplateDesiredState() {
+  const TEMPLATE = path.join(REPO, "scripts", "vellum-template.html");
+  const html = fs.readFileSync(TEMPLATE, "utf8");
+  const m = html.match(/<script type="module">([\s\S]*?)<\/script>/);
+  assert.ok(m, "template has an inline module script");
+  const js = m[1];
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vellum-template-"));
+  const file = path.join(dir, "inline.mjs");
+  fs.writeFileSync(file, js);
+  const r = spawnSync(process.execPath, ["--check", file], { encoding: "utf8" });
+  assert.equal(r.status, 0, `inline player script must parse: ${r.stderr}`);
+  fs.rmSync(dir, { recursive: true, force: true });
+
+  // Markup: ghost overlay (live box + SVG arrow layer + arrowhead marker) and the composer sub-row.
+  for (const id of ['id="ghostbox"', 'id="ghost-layer"', 'id="vellum-arrowhead"', 'id="composer-ghost"', 'id="composer-arrow"', 'id="composer-desired"']) {
+    assert.ok(html.includes(id), `template markup is missing ${id}`);
+  }
+  // The ghost sub-gesture must short-circuit each #pins handler — and the mousedown guard must sit
+  // ABOVE the pending bail so a ghost drag never makes a second note or clobbers the in-flight pending.
+  const md = js.indexOf("if (ghostCapture) { onGhostMouseDown(e); return; }");
+  const mm = js.indexOf("if (ghostCapture) { onGhostMouseMove(e); return; }");
+  const mu = js.indexOf("if (ghostCapture) { onGhostMouseUp(e); return; }");
+  assert.ok(md > 0 && mm > 0 && mu > 0, "each #pins handler guards on ghostCapture");
+  assert.ok(js.indexOf("if (pending) {", md) > md, "mousedown ghost guard precedes the pending bail");
+  // renderMarkers renders desiredBox + arrow independently of pin coords, and clears its own elements.
+  assert.ok(js.includes("if (n.desiredBox)") && js.includes("if (n.arrow)"), "renderMarkers branches on desiredBox/arrow");
+  assert.ok(js.includes('"note-arrow"') && js.includes('"ghost-box"'), "renderMarkers builds ghost-box + note-arrow");
+  assert.ok(/querySelectorAll\("\.pin, \.region, \.ghost-box"\)/.test(js), "renderMarkers clears ghost boxes too");
+  // Save threads the fields: POST adds them only when present; PATCH sends present-key replace/clear.
+  assert.ok(js.includes("payload.desiredBox = pending.desiredBox") && js.includes("payload.arrow = pending.arrow"), "POST payload threads desiredBox/arrow");
+  assert.ok(js.includes("desiredBox: pending.desiredBox ?? null") && js.includes("arrow: pending.arrow ?? null"), "PATCH sends present-key desiredBox/arrow");
+  // The SVG arrow viewBox is the comp size (single-uniform-scale invariant) so arrows stay resize-safe.
+  assert.ok(/ghostLayer\.setAttribute\("viewBox", `0 0 \$\{compW\} \$\{compH\}`\)/.test(js), "ghost-layer viewBox is compW×compH");
+}
+
 await testVersionSourcesAgree();
 await testSharedHelpers();
+testTemplateDesiredState();
 await testServerApi();
 await testWatchEndpoint();
 await testSeverityAndClustering();
@@ -1175,11 +1520,15 @@ await testBootReconcilesOfflineEdits();
 await testAgentResolutionWriteback();
 await testAgentJsonReconciledOnBoot();
 await testProvenanceStaleDetection();
+await testIndexHashOf();
 await testMetricsLedger();
 await testMetricsCorruptLedgerIsolation();
 await testMetricsTrimBound();
 testVellumDirGuard();
 testReviewResilience();
+await testReviewDesiredState();
+await testReviewBeforeAfterGate();
+await testReviewBeforeAfterPairing();
 testInstallerSkillSymlink();
 testInstallerSubdirScripts();
 testVellumShimFindsProject();

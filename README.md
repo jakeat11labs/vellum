@@ -171,7 +171,7 @@ When you're done reviewing:
 The agent then:
 
 1. **Reads** `notes/annotations.md` — each `note-<id>` links time, scene, and DOM target.
-2. **Sees what you saw** (optional) — `vellum-review` renders each frame with pins drawn on: `notes/review/note-<id>.png` + `INDEX.md`.
+2. **Sees what you saw** (optional) — `vellum-review` renders each frame with pins (and any desired-state ghost box / arrow) drawn on: `notes/review/note-<id>.png` + `INDEX.md`. Run it *before* editing and it caches a baseline frame per note, so a re-run after the edit pairs **before · after** in `INDEX.md` for self-checking.
 3. **Edits** the composition, snapshots to verify, and reports back note by note.
 
 | Skill / tool | Owns |

@@ -37,7 +37,11 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
    `- resolution by <agent> · <at> — <summary>` sub-line (plus a `- edit: …` line per file/selector you
    touched) recording your write-back. A `_(stale: …)_` tag means the composition's index.html changed
    since the note was pinned — re-verify before applying. A timecode written as `M:SS.ss–M:SS.ss` is an
-   in/out **time span** (a range to trim/retime), not a point. A `- ref images:` sub-line lists reviewer
+   in/out **time span** (a range to trim/retime), not a point. A `- desired:` sub-line (and/or a
+   `- direction:` sub-line) is the reviewer's **desired-state markup**: `- desired:` phrases where/how big
+   the element should be as a ready-to-apply delta from its current box (e.g. `move x 24→48%, resize
+   10×12% → 30×12%`), and `- direction:` is a from→to arrow (e.g. `arrow 10,10% → 60,40%`). Apply the
+   delta exactly — it is the explicit destination, not a hint. A `- ref images:` sub-line lists reviewer
    sketches under `notes/attachments/` — open them before acting. A trailing `## Metrics` section is
    self-measured review diagnostics (first-pass fix rate, etc.) — informational, not feedback to act on.
 
@@ -51,7 +55,18 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
    VELLUM_DIR=compositions/hero node scripts/vellum-review.mjs
    ```
    Then read `<comp>/notes/review/INDEX.md` and the `note-<id>.png` images — they show the
-   frame at the note's time with the pin/box overlaid.
+   frame at the note's time with the pin/box overlaid (plus, when the note carries desired-state
+   markup, an **amber ghost box / arrow** for where the reviewer wants it — see step 4).
+
+   **Before/after pairing — run `vellum-review` _before_ you edit.** The packet caches the frame
+   each note was pinned against, keyed by the note's content-hash. So the load-bearing rule is:
+   **run `vellum-review` once before touching `index.html`** to bank those baseline frames. Then,
+   after you edit and re-run it, any `addressed`/`resolved` note whose composition has since drifted
+   renders a **Before · After** pair in `INDEX.md` — a 2-column table (`note-<id>-before.png` beside
+   `note-<id>.png`) — so you can self-check the edit against what was there. Skip the pre-edit run and
+   the pair degrades gracefully to a single current frame (`INDEX.md` notes the missing baseline); it
+   never errors. The before-cache is local-only (gitignored under `notes/review/`), so the pairing
+   only appears on the machine that ran the pre-edit pass.
 
 4. **Translate each note to an edit.**
    - The note's `time` is composition-time in seconds. Map it to the owning scene's
@@ -67,6 +82,13 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
      reviewer's priority — they set it because it can't be inferred from the prose. Triage by it.
    - `note.timeEnd` (when present) makes the note an interval `[time, timeEnd]` — apply the change
      across that whole range (e.g. a trim/retime), not at a single instant.
+   - `note.desiredBox` (`{x,y,w,h}`, % of comp) and `note.arrow` (`{x1,y1,x2,y2}`, % of comp) in
+     `annotations.json` are the reviewer's **desired-state markup** — the explicit destination, not a
+     hint. `desiredBox` says where/how big the target element should be; `arrow` is a from→to direction
+     ("shift this way"). You don't have to compute the move yourself: the `- desired:`/`- direction:`
+     lines in `annotations.md` (and the review packet's where-line) already phrase it as the delta to
+     apply (e.g. `move x 24→48%, resize 10×12% → 30×12%`). Translate that delta into the element's own
+     units (the captured `target.box`/`target.style` give you the current values to scale from) and apply it.
    - `note.attachments[]` reference reviewer sketches saved under `notes/attachments/` — open the
      `file` paths to see the desired result before editing.
    - Older notes carry only tag + class + text — match those against `index.html` manually.
