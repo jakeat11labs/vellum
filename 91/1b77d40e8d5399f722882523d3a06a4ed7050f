@@ -1,0 +1,89 @@
+scripts/vellum-notes.mjs
+  s_7e650d5b741e91::t_fe9f08d8466ee4 1
+  s_7e650d5b741e91::t_1f20ca589d485f 2-19,22-25,27-28,31-71,75-77,79
+  s_7e650d5b741e91::t_6ff4c3a07ceb74 72-74,78
+  s_7e650d5b741e91::t_d92642b169fd9f 20-21,26,29-30
+package.json
+  s_7e650d5b741e91::t_cd5e1e55ce57ed 16-17
+  s_7e650d5b741e91::t_cb4c3a864ef5db 3
+  s_7e650d5b741e91::t_883b097dd143ba 51-54
+jsconfig.json
+  s_7e650d5b741e91::t_a3363614cd7695 1-16
+scripts/sync-version.mjs
+  s_7e650d5b741e91::t_a02d7ce8d4b864 2
+scripts/vellum-server.mjs
+  s_7e650d5b741e91::t_b0e151f0571ca6 1269
+  s_7e650d5b741e91::t_828050834f4ae8 1465
+  s_7e650d5b741e91::t_29b08f0e49d711 2
+  s_7e650d5b741e91::t_f7d16577d802d7 1195-1197,1202-1205
+  s_7e650d5b741e91::t_fc939febaa231d 1198-1199,1201
+  s_7e650d5b741e91::t_f8708c47b2acba 1200
+  s_7e650d5b741e91::t_23ca0904b342a3 31-33
+  s_7e650d5b741e91::t_79d9ef2fcef481 640
+  s_7e650d5b741e91::t_ca752e890e78c8 638-639
+  s_7e650d5b741e91::t_56cb2aa40e382f 30
+  s_7e650d5b741e91::t_8ef7a16c6d0bf2 1312-1329,1331-1335
+  s_7e650d5b741e91::t_b319e3a023a0a2 324-326,328
+CHANGELOG.md
+  s_7e650d5b741e91::t_f5629163498abc 10-24
+scripts/vellum-smoke-test.mjs
+  s_7e650d5b741e91::t_534cd6c9e1011e 1404-1408
+  s_7e650d5b741e91::t_5de378915fb2fb 876-900
+  s_7e650d5b741e91::t_e03fc182bebe50 1636-1641,1643-1694,1697
+  s_7e650d5b741e91::t_1c7d9fbacedadd 12
+  s_7e650d5b741e91::t_dbaa7505f0d8f8 1703
+  s_7e650d5b741e91::t_2776b5abd64e8c 1348-1350,1354-1364
+  s_7e650d5b741e91::t_3a135b998218c1 1300-1303
+  s_7e650d5b741e91::t_6c7c8b0540c11a 2-6
+  s_7e650d5b741e91::t_06aac165e309b5 1347,1351-1353,1365-1394
+  s_7e650d5b741e91::t_9a435542494003 1395-1403,1409-1424,1426-1436
+  s_7e650d5b741e91::t_e64135ad9749c4 1425
+  s_7e650d5b741e91::t_f964ef62bfece6 1642
+  s_7e650d5b741e91::t_94759f4a971d43 1698-1699
+scripts/vellum-ui.mjs
+  s_7e650d5b741e91::t_1106f431e12268 1
+scripts/vellum-shared.mjs
+  s_7e650d5b741e91::t_cb4c3a864ef5db 46
+  s_7e650d5b741e91::t_abde834e9b7ebc 7-12
+  s_7e650d5b741e91::t_9cb031b3d2eeed 81-95
+  s_7e650d5b741e91::t_6ff3e4dde42ad8 1,6,13-42
+  s_7e650d5b741e91::t_a0fa13222e9c8e 43
+scripts/vellum-update.mjs
+  s_7e650d5b741e91::t_398fd98a9c31e9 1
+  s_7e650d5b741e91::t_1c832551e78a31 106
+  s_7e650d5b741e91::t_80c73bd753d39d 34
+.github/workflows/test.yml
+  s_7e650d5b741e91::t_a9c417561f8da9 17-18
+.npmrc
+  s_7e650d5b741e91::t_ff8b357f4cd9b9 1-5
+scripts/vellum-review.mjs
+  s_7e650d5b741e91::t_0cd90a347888bf 46-48,50
+  s_7e650d5b741e91::t_e4e00ca419f33a 58-61
+  s_7e650d5b741e91::t_64a6373d88b3e6 64,75,197
+  s_7e650d5b741e91::t_4d1158e0902300 24-26
+  s_7e650d5b741e91::t_285a5fc8338ecd 51-53
+  s_7e650d5b741e91::t_137d186cf11bc3 2
+.github/workflows/release.yml
+  s_7e650d5b741e91::t_67475088f57d35 40-41
+docs/roadmap.html
+  s_7e650d5b741e91::t_4a77429e4d642f 261-265
+  s_7e650d5b741e91::t_7790a57d81ac99 259
+package-lock.json
+  s_7e650d5b741e91::t_ac475cb44d1959 3,9,18-21,1064-1067,1070,2793-2806,2808-2812
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.3",
+  "base_commit_sha": "911b77d40e8d5399f722882523d3a06a4ed7050f",
+  "prompts": {},
+  "sessions": {
+    "s_7e650d5b741e91": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "81d98667-f8c9-4e37-aeed-f31e5eb12f51",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
