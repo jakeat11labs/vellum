@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 /**
  * Vellum — build a visual review packet from the saved annotation notes.
  *
@@ -20,6 +21,9 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { compSize, fmtTime, resolveComposition, VERSION, describeDesiredDelta, indexHashOf, normalizeNoteStatus } from "./vellum-shared.mjs";
+// Same note store the server uses — so the packet sees the identical reconciled, non-object-filtered
+// array (an offline hand-edit can't make the server and the review packet disagree). See vellum-notes.mjs.
+import { readNotes as readNotesStore } from "./vellum-notes.mjs";
 import * as ui from "./vellum-ui.mjs";
 
 const { root: ROOT, compDir: COMP_DIR, compAbs: COMP } = resolveComposition();
@@ -39,27 +43,25 @@ const py = (pct) => Math.round((pct / 100) * H);
 
 function readNotes() {
   try {
-    const notes = JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
-    // Valid JSON of the wrong shape (a hand-edit that left an object/number) would crash main()'s
-    // .sort(); tolerate it the same way as a parse error — warn and continue with no notes.
-    if (!Array.isArray(notes)) {
-      console.warn(`${path.relative(ROOT, NOTES_JSON)} is not a JSON array — skipping`);
-      return [];
-    }
-    return notes;
+    // The store returns a reconciled, non-object-filtered array (ENOENT → []), so main()'s .sort()
+    // and the render path never see a stray null/number — the crash the old local reader risked.
+    return readNotesStore(NOTES_JSON);
   } catch (err) {
-    // A bad offline edit to annotations.json must not crash the review-packet build — agents
-    // hand-edit this file, so warn and continue with no notes rather than process.exit(1).
-    if (err && err.code !== "ENOENT") {
-      console.warn(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message} — skipping`);
-    }
+    // A bad offline edit (malformed JSON or wrong shape) must not crash the review-packet build —
+    // agents hand-edit this file, so warn and continue with no notes rather than process.exit(1). The
+    // store's message already names the file + reason, so don't re-prefix it.
+    console.warn(`${err.message} — skipping review notes`);
     return [];
   }
 }
 
+// spawnSync sets `.error` (a Node ErrnoException) when the binary is missing; @types/node types it
+// as a bare Error, so the three spawn sites share this one ENOENT check instead of casting at each.
+const spawnMissing = (r) => Boolean(r.error) && r.error.code === "ENOENT";
+
 function ensureCommand(name, args) {
   const r = spawnSync(name, args, { encoding: "utf8" });
-  if (r.error && r.error.code === "ENOENT") {
+  if (spawnMissing(r)) {
     console.error(`Missing required command: ${name}`);
     process.exit(1);
   }
@@ -70,7 +72,7 @@ function ensureCommand(name, args) {
 function snapshot(t) {
   const before = new Set(fs.existsSync(SNAP_DIR) ? fs.readdirSync(SNAP_DIR) : []);
   const r = spawnSync("npx", ["hyperframes", "snapshot", "--at", String(t)], { cwd: COMP, encoding: "utf8" });
-  if (r.error && r.error.code === "ENOENT") {
+  if (spawnMissing(r)) {
     console.error("Missing required command: npx");
     return null;
   }
@@ -192,7 +194,7 @@ function drawMarker(srcPng, note, outPng) {
     return true;
   }
   const r = spawnSync("ffmpeg", ["-y", "-i", srcPng, "-vf", filters.join(","), outPng], { encoding: "utf8" });
-  if (r.error && r.error.code === "ENOENT") {
+  if (spawnMissing(r)) {
     console.error("  ffmpeg is required to draw note markers. Install ffmpeg or run without review packets.");
     return false;
   }

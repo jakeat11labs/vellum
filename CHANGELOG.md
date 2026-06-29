@@ -7,7 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.8.0] - June 27, 2026
+## [0.9.0] - June 28, 2026
+
+The roadmap's "Architecture & hardening" tier — structural work that protects the moat (local-first, zero-dependency, single-download) and converges the note-read path. No new reviewer-facing features; notes stay a bare JSON array and every prior note is byte-identical.
+
+### Added
+- **Schema-versioned note store (`scripts/vellum-notes.mjs`).** One module now owns reading and writing `annotations.json`, so the server and the review packet share an identical read contract (drop non-object elements, then `reconcileNote`) instead of two readers that had drifted. The on-disk format stays a bare top-level array, written byte-identically (atomic temp+rename); `readNotes` additionally tolerates a forward-compat `{schema_version, notes:[…]}` envelope on the way in, so a newer file can't wedge an older reader.
+- **Localhost server hardening.** A loopback **Host-header allowlist** (`localhost`/`127.0.0.1`/`::1`) rejects cross-origin requests whose `Host` is a rebound domain (DNS-rebinding defense), and a **dotfile denylist** stops `serveStatic` from ever serving `/.env`, `/.git/config`, or any dot-segment path — split on both `/` and `\` so an encoded backslash can't bypass it on Windows.
+- **Zero-dependency guardrail tests.** Two smoke tests enforce the moat that nothing checked before: the shipped player loads **no external resource** (absolute *or* protocol-relative), and every local `import` across the tools resolves to a present file (a fresh install is complete).
+- **`@ts-check` + JSDoc typedefs + CI typecheck.** The library modules now run under `tsc --noEmit` (`npm run typecheck`, wired into both CI workflows) with shared typedefs for the note/markup shapes, catching cross-module signature drift. The player's inline `<script>` and the test harness stay unchecked by design.
+
+### Changed
+- The atomic-write primitive and the both-separator path split now live once in `vellum-shared.mjs` and are reused by the server and the note store. The review packet's "unreadable notes" warning no longer double-prefixes its message. `testWatchEndpoint` skips gracefully on platforms where recursive `fs.watch` delivers no events (it runs in CI).
+
+### Notes
+- **Re-anchoring notes to scene offsets remains deferred by design** (see 0.8.0). The headless capture contract test (Playwright) was also deferred to keep this tier free of a new test-time browser dependency.
 
 The roadmap's "Later" tier — turning feedback from a description into an instruction, and letting the agent check its own work. Notes stay a bare JSON array; every new field is absent-by-default, so older notes are byte-identical.
 

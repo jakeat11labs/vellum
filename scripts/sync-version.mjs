@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // Keep scripts/vellum-shared.mjs's VERSION constant in lockstep with package.json.
 //
 // The release workflow (.github/workflows/release.yml) refuses to publish unless the

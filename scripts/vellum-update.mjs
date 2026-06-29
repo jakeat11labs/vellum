@@ -1,3 +1,4 @@
+// @ts-check
 // `vellum update` — check the published version and refresh the installed tool in place.
 // Invoked by vellum-server.mjs when the first arg is "update". Usage:
 //   vellum update           check, then update if a newer version exists
@@ -30,7 +31,7 @@ function cmpVersion(a, b) {
 async function fetchLatestVersion() {
   const res = await fetch(`${BASE}/package.json`, { headers: { "cache-control": "no-cache" } });
   if (!res.ok) throw new Error(`HTTP ${res.status} fetching package.json`);
-  const pkg = await res.json();
+  const pkg = /** @type {any} */ (await res.json());
   if (!pkg.version) throw new Error("published package.json has no version field");
   return String(pkg.version);
 }
@@ -102,6 +103,7 @@ export async function runUpdate(args = []) {
   // Re-run the published installer in place. It is idempotent: it refreshes the tool
   // scripts, the agent skill, and the global shim, and never clobbers package.json
   // scripts. We pass the detected config through so nothing gets reset.
+  /** @type {Record<string, string | undefined>} */
   const env = { ...process.env, VELLUM_NO_PROMPT: "1", VELLUM_INSTALL_BIN: "1" };
   const skillTargets = detectSkillTargets(root);
   if (skillTargets) env.VELLUM_SKILL_TARGETS = skillTargets;

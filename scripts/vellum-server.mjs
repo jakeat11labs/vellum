@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 /**
  * Vellum — review/annotation server for HyperFrames compositions.
  *
@@ -26,7 +27,10 @@ import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 // sanitizeResolution is PATCH/offline-only — a note is NEVER born with a resolution at POST.
-import { computeMetrics, describeDesiredDelta, fmtDuration, fmtTime, indexHashOf, METRICS_KEEP, METRICS_MAX_LINES, normalizeNoteSeverity, normalizeNoteStatus, reconcileNote, resolveComposition, resolveInside, sanitizeResolution, VERSION } from "./vellum-shared.mjs";
+import { computeMetrics, describeDesiredDelta, fmtDuration, fmtTime, indexHashOf, METRICS_KEEP, METRICS_MAX_LINES, normalizeNoteSeverity, normalizeNoteStatus, pathSegments, resolveComposition, resolveInside, sanitizeResolution, VERSION, writeFileAtomic, writeJsonAtomic } from "./vellum-shared.mjs";
+// The note store (read/normalize + atomic bare-array write) lives in one module so the server and
+// the review packet share an identical read contract; see vellum-notes.mjs.
+import { readNotes as readNotesStore, writeNotes as writeNotesStore } from "./vellum-notes.mjs";
 import * as ui from "./vellum-ui.mjs";
 
 const ROOT = process.cwd(); // the HyperFrames project root (holds index.html + node_modules)
@@ -286,15 +290,6 @@ function sanitizeAttachments(raw) {
   return out;
 }
 
-// Write via a temp file + rename so a crash mid-write can't leave a half-written
-// annotations.json that wedges every subsequent /api/notes read. Rename is atomic
-// within the same directory.
-function writeFileAtomic(file, data) {
-  const tmp = `${file}.tmp-${process.pid}`;
-  fs.writeFileSync(tmp, data);
-  fs.renameSync(tmp, file);
-}
-const writeJsonAtomic = (file, obj) => writeFileAtomic(file, `${JSON.stringify(obj, null, 2)}\n`);
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TEMPLATE_FILE = path.join(HERE, "vellum-template.html");
@@ -326,20 +321,11 @@ const MIME = {
   ".ttf": "font/ttf",
 };
 
+// Read + normalize via the shared store: ENOENT → [], malformed/non-array → throws (withNotes turns
+// that into a 500; boot leaves the bad file untouched). The store drops non-object elements and runs
+// reconcileNote, so GET/PATCH/POST/boot all see the same coerced array.
 function readNotes() {
-  try {
-    const notes = JSON.parse(fs.readFileSync(NOTES_JSON, "utf8"));
-    if (!Array.isArray(notes)) throw new Error("annotations.json must contain an array");
-    // Normalize on read so offline agent edits (status/severity/resolution) are coerced and
-    // sanitized everywhere notes are consumed (GET/PATCH/POST/boot), without an envelope.
-    // Drop non-object array elements (a stray null/number/string from a hand-edit) BEFORE they
-    // reach any element-accessing path — otherwise the next POST id-calc / PATCH find / md
-    // render throws inside a request handler and takes the daemon down.
-    return notes.filter((n) => n && typeof n === "object").map(reconcileNote);
-  } catch (err) {
-    if (err && err.code === "ENOENT") return [];
-    throw new Error(`Could not read ${path.relative(ROOT, NOTES_JSON)}: ${err.message}`);
-  }
+  return readNotesStore(NOTES_JSON);
 }
 
 function withNotes(res, fn) {
@@ -649,8 +635,9 @@ function renderNoteUnit(unit, manifest) {
 }
 
 function writeNotes(notes) {
-  fs.mkdirSync(NOTES_DIR, { recursive: true });
-  writeJsonAtomic(NOTES_JSON, notes);
+  // writeNotesStore creates NOTES_DIR (path.dirname(NOTES_JSON)) before its write, which precedes the
+  // NOTES_MD write below — so the directory is guaranteed for both without a separate mkdir here.
+  writeNotesStore(NOTES_JSON, notes); // bare-array atomic write (the MD/footer render below stays here)
   // Severity-then-time ordering with same-element clustering (pure render-time; the JSON above
   // stays a bare chronological array). Loose notes and clusters share the one renderNoteBlock path.
   const units = clusterNoteUnits(notes);
@@ -1205,6 +1192,17 @@ function serveStatic(req, res) {
     return serveTemplate(res);
   }
 
+  // Deny any path containing a dotfile/dot-dir segment (/.env, /.git/config, /notes/.DS_Store).
+  // resolveInside already blocks ../ traversal; this closes the separate "happily serves a sensitive
+  // dotfile inside ROOT" gap. 404 (not 403) so a probe can't distinguish "denied" from "absent".
+  // Deny any dot-segment via the shared both-separator split: on Windows `path.resolve` treats `\` as
+  // a separator, so an encoded backslash (`GET /%5C.env` → `\.env`) would otherwise slip a `/`-only
+  // split and resolve to ROOT\.env.
+  if (pathSegments(pathname).some((seg) => seg.startsWith("."))) {
+    res.writeHead(404);
+    return res.end("not found");
+  }
+
   const full = resolveInside(ROOT, `.${pathname}`);
   if (!full) {
     res.writeHead(403);
@@ -1268,7 +1266,7 @@ function serveStatic(req, res) {
 // trees and editor/atomic-write noise. `filename` is the path relative to COMP_ABS (recursive watch)
 // or a bare basename (non-recursive fallback); split path.sep-aware and test the first segment.
 function shouldIgnoreWatchPath(filename) {
-  const parts = String(filename).split(/[\\/]/);
+  const parts = pathSegments(filename);
   const first = parts[0];
   const base = parts[parts.length - 1];
   if (first === "notes" || first === "snapshots" || first === "node_modules") return true;
@@ -1311,7 +1309,30 @@ function handleWatch(req, res) {
   return sendJson(res, 200, { rev: compRev });
 }
 
+// Anti-DNS-rebinding: this server binds 127.0.0.1, but a malicious page whose domain rebinds to
+// 127.0.0.1 still reaches it with `Host: evil.com`. Allowlist loopback hostnames (port-agnostic — a
+// real loopback request always carries a loopback Host regardless of the port we ended up on) and
+// reject the rest. An absent Host (raw HTTP/1.0, some local probes) can't carry a rebound domain, so
+// it's allowed; this is the same posture as Vite/webpack-dev-server host checks.
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "::1"]);
+function hostAllowed(req) {
+  const raw = req.headers.host;
+  if (!raw) return true;
+  let host = raw.trim().toLowerCase();
+  if (host.startsWith("[")) {
+    host = host.slice(1, host.indexOf("]")); // "[::1]:4848" / "[::1]" → "::1"
+  } else if (host.includes(":") && host.indexOf(":") === host.lastIndexOf(":")) {
+    host = host.slice(0, host.indexOf(":")); // "127.0.0.1:4848" / "localhost:4848" → strip :port
+  } // else: bare IPv6 ("::1", multiple colons, no brackets) → compare as-is
+  return LOOPBACK_HOSTS.has(host);
+}
+
 const server = http.createServer((req, res) => {
+  // Host allowlist runs before any routing so it covers static files AND every /api route.
+  if (!hostAllowed(req)) {
+    res.writeHead(403);
+    return res.end("forbidden host");
+  }
   const { pathname } = new URL(req.url, "http://localhost");
   if (pathname === RUNTIME_ENDPOINT) return serveRuntime(res);
   const noteMatch = /^\/api\/notes\/(\d+)$/.exec(pathname);
@@ -1441,7 +1462,7 @@ process.on("SIGINT", () => {
 });
 
 server.on("listening", onListen);
-server.on("error", (err) => {
+server.on("error", (/** @type {NodeJS.ErrnoException} */ err) => {
   if (err && err.code === "EADDRINUSE") {
     if (!EXPLICIT_PORT && activePort < PORT + 20) {
       activePort += 1;

@@ -1,0 +1,16 @@
+{
+  "//": "Dev-only typecheck config (never shipped — not in package.json 'files'). Checking is OPT-IN per file via a `// @ts-check` pragma (checkJs:false), so adding the pragma to a file enrolls it; files without it are parsed for their exported types but their own bodies aren't error-checked. The shipped player's inline <script> lives in vellum-template.html (.html, not matched here) and stays unchecked by design. Run: npm run typecheck.",
+  "compilerOptions": {
+    "module": "nodenext",
+    "moduleResolution": "nodenext",
+    "target": "es2022",
+    "lib": ["es2022"],
+    "types": ["node"],
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "noImplicitAny": false
+  },
+  "include": ["scripts/**/*.mjs"]
+}

@@ -1,6 +1,6 @@
 {
   "name": "vellum-hf",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "A visual feedback interface for AI-edited video — pin time-coded notes your coding agent can read.",
   "type": "module",
   "bin": {
@@ -13,7 +13,8 @@
     "annotate": "node scripts/vellum-server.mjs",
     "review": "node scripts/vellum-review.mjs",
     "version": "node scripts/sync-version.mjs && git add scripts/vellum-shared.mjs",
-    "test": "node scripts/vellum-smoke-test.mjs"
+    "test": "node scripts/vellum-smoke-test.mjs",
+    "typecheck": "tsc -p jsconfig.json"
   },
   "keywords": [
     "hyperframes",
@@ -47,5 +48,9 @@
   },
   "dependencies": {
     "hyperframes": "^0.6.91"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "typescript": "^5.7.3"
   }
 }

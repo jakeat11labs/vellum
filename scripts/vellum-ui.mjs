@@ -1,3 +1,4 @@
+// @ts-check
 /**
  * Vellum terminal UI toolkit — zero dependencies, Node built-ins only.
  *

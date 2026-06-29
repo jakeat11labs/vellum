@@ -1,10 +1,49 @@
+// @ts-check
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 
+// ---- Shared shapes (JSDoc typedefs) ------------------------------------------------------------
+// Documentation of the records that cross the .mjs module boundaries — they give editors hover/
+// autocomplete and a single written description of the note shape. (They are not applied as types at
+// call sites; @ts-check's value here is catching cross-module call-signature drift, undefined names,
+// and bad arg counts, not field-name typos on the dynamically-shaped, optional-spread note record —
+// reconcileNote is the runtime normalize-on-read seam for that.) Every Note field but `id` is
+// absent-by-default so legacy notes round-trip byte-identically.
+
+/** @typedef {{ x: number, y: number, w: number, h: number }} DesiredBox  Box bounds, % of frame. */
+/** @typedef {{ x1: number, y1: number, x2: number, y2: number }} Arrow  From→to direction, % of frame. */
+/** @typedef {{ commit?: string, indexHash?: string }} Provenance  Git HEAD + index.html hash a note was pinned against. */
+
+/**
+ * @typedef {{
+ *   id: number,
+ *   time?: number,
+ *   timeEnd?: number,
+ *   text?: string,
+ *   scene?: string,
+ *   status?: string,
+ *   severity?: string | null,
+ *   kind?: string,
+ *   x?: number, y?: number, w?: number, h?: number,
+ *   desiredBox?: DesiredBox,
+ *   arrow?: Arrow,
+ *   provenance?: Provenance,
+ *   attachments?: any[],
+ *   resolution?: Object,
+ *   target?: Object,
+ *   audio?: Object,
+ *   createdAt?: string,
+ *   updatedAt?: string,
+ *   firstAddressedAt?: string,
+ *   firstResolvedAt?: string,
+ *   reopenCount?: number,
+ * }} Note
+ */
+
 // Installed tool version. Keep in sync with package.json on release; `vellum update`
 // compares this against the published package.json version.
-export const VERSION = "0.8.0";
+export const VERSION = "0.9.0";
 
 export const NOTE_STATUSES = new Set(["open", "addressed", "resolved", "wontfix"]);
 
@@ -38,6 +77,21 @@ export function resolveInside(base, target) {
   if (full !== base && !full.startsWith(base + path.sep)) return null;
   return full;
 }
+
+// Split a path on BOTH separators. The single home for this primitive: `path.resolve` treats `\` as a
+// separator on Windows, so any security check on path SEGMENTS (the dotfile denylist, the watch-ignore
+// rule) must split on `\` too or an encoded backslash slips a `/`-only split. One definition, no drift.
+export const pathSegments = (p) => String(p).split(/[\\/]/);
+
+// Atomic write: temp file + rename so a crash mid-write can't leave a half-written file that wedges
+// every subsequent read (rename is atomic within a dir). The ONE definition both the server and the
+// note store call, so the temp-rename contract can't drift between them.
+export function writeFileAtomic(file, data) {
+  const tmp = `${file}.tmp-${process.pid}`;
+  fs.writeFileSync(tmp, data);
+  fs.renameSync(tmp, file);
+}
+export const writeJsonAtomic = (file, obj) => writeFileAtomic(file, `${JSON.stringify(obj, null, 2)}\n`);
 
 export function resolveComposition(cwd = process.cwd()) {
   const compDir = cleanCompDir(process.env.VELLUM_DIR);

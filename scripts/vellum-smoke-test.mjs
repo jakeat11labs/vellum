@@ -1,9 +1,15 @@
 #!/usr/bin/env node
+// Not // @ts-check'd: this harness deserializes dozens of dynamic /api JSON responses (res.json() is
+// typed `unknown`) and augments the spawned ChildProcess with capture fields — type-checking it would
+// mean ~170 casts that degrade the test for near-zero field-drift protection. Its correctness is
+// verified by RUNNING it (npm test), which is stronger than tsc for test code. The production library
+// modules (shared/notes/server/review/ui/update) ARE // @ts-check'd — that's where drift matters.
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import net from "node:net";
+import http from "node:http";
 import { spawn, spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
@@ -867,6 +873,31 @@ function ffmpegAvailable() {
   }
 }
 
+// Recursive fs.watch is the engine behind /api/watch live-reload. Some platforms don't deliver
+// recursive watch events at all (observed on certain macOS builds; also network filesystems), so a
+// rev-bump assertion would fail there for reasons unrelated to the code. Probe the real capability —
+// watch a temp dir, write into it, see if an event arrives — and let testWatchEndpoint skip when it
+// doesn't, mirroring the gitAvailable()/ffmpegAvailable() gates. CI on Linux/inotify still exercises it.
+async function recursiveWatchDelivers() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vellum-watchcap-"));
+  let watcher;
+  try {
+    return await new Promise((resolve) => {
+      let done = false;
+      const finish = (val) => { if (!done) { done = true; resolve(val); } };
+      try {
+        watcher = fs.watch(dir, { recursive: true }, () => finish(true));
+        watcher.on("error", () => finish(false));
+      } catch { return finish(false); }
+      setTimeout(() => { try { fs.writeFileSync(path.join(dir, "probe.txt"), "x"); } catch {} }, 50);
+      setTimeout(() => finish(false), 1500); // resolves fast when watch works; full wait only when broken
+    });
+  } finally {
+    try { watcher?.close(); } catch {}
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 // A 1×1 PNG — stand-in for a rendered composition frame in the before/after cache tests. drawMarker
 // just copyFileSync's it for a coord-less note, so its exact bytes don't matter, only that it exists.
 const TINY_PNG = Buffer.from(
@@ -1266,6 +1297,10 @@ async function testMetricsTrimBound() {
 // reload from self-triggering on every annotations.json rewrite. OPTIONS→204, non-GET→405, no CORS
 // headers (local-only). Nothing is persisted, so the note record + smoke JSON/MD stay unchanged.
 async function testWatchEndpoint() {
+  if (!(await recursiveWatchDelivers())) {
+    console.log("  (skipped testWatchEndpoint — recursive fs.watch not delivered on this platform)");
+    return;
+  }
   const dir = makeTempProject("watch");
   const watchRev = async (base) =>
     (await (await fetch(`${base}/api/watch`, { headers: { accept: "application/json" } })).json()).rev;
@@ -1306,6 +1341,96 @@ async function testWatchEndpoint() {
     fs.writeFileSync(path.join(dir, "notes", "scratch.txt"), "ignored");
     const rev2 = await settleRev(base, rev1, 600);
     assert.equal(rev2, rev1, "notes/ write did not bump rev");
+  });
+}
+
+// Zero-dependency guardrail A: the shipped player must load NO external resource — that offline /
+// single-download property IS the moat, and nothing else enforces it. Scan for absolute http(s) URLs
+// AND protocol-relative (//host) resource loads. This catches a stray <script src>, <link href>, CSS
+// url()/@import, OR a fetch() in the inline script alike.
+function testPlayerNoExternalResources() {
+  const template = path.join(REPO, "scripts", "vellum-template.html");
+  const html = fs.readFileSync(template, "utf8");
+  // Exact XML-namespace literals (used by createElementNS, never fetched). Matched exactly, NOT by
+  // host prefix — so a genuinely fetched asset like https://www.w3.org/StyleSheets/TR/base.css is
+  // still flagged rather than waved through.
+  const ALLOW = new Set(["http://www.w3.org/2000/svg", "http://www.w3.org/1999/xlink"]);
+  const absolute = [...new Set(html.match(/https?:\/\/[^\s"'`)<>]+/gi) || [])].filter((u) => !ALLOW.has(u));
+  assert.deepEqual(absolute, [], `player must load no external resources — found: ${absolute.join(", ")}`);
+  // Protocol-relative loads (`src="//cdn…"`, `url(//…)`) carry no scheme, so the absolute scan misses
+  // them. Scan ONLY resource-loading contexts so a JS `//` comment in the inline script can't false-positive.
+  const protoRel = [/(?:src|href)\s*=\s*["']\/\//gi, /url\(\s*["']?\/\//gi, /@import\s+["']?\/\//gi]
+    .flatMap((re) => html.match(re) || []);
+  assert.deepEqual(protoRel, [], `player must load no protocol-relative resources — found: ${protoRel.join(", ")}`);
+}
+
+// Zero-dependency guardrail B: a fresh install must be self-contained — every LOCAL import in every
+// shipped tool must resolve to a file that exists, so no dangling ./module smuggles in a missing
+// file. Globs scripts/*.mjs (auto-covers vellum-notes.mjs) and resolves static AND dynamic local
+// specifiers; node:/bare specifiers (the hyperframes runtime dep, resolved separately) are skipped.
+function testToolImportsResolve() {
+  const scriptsDir = path.join(REPO, "scripts");
+  const files = fs.readdirSync(scriptsDir).filter((f) => f.endsWith(".mjs"));
+  const STATIC = /(?:^|[\s;])(?:import|export)\b[^'"]*?\sfrom\s*["']([^"']+)["']/g;
+  const BARE = /(?:^|[\s;])import\s*["']([^"']+)["']/g; // side-effect import "x"
+  const DYN = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g; // dynamic import("x") with a string literal
+  let checked = 0;
+  for (const f of files) {
+    const src = fs.readFileSync(path.join(scriptsDir, f), "utf8");
+    const specs = new Set();
+    for (const re of [STATIC, BARE, DYN]) {
+      let m;
+      while ((m = re.exec(src))) specs.add(m[1]);
+    }
+    for (const spec of specs) {
+      if (!spec.startsWith("./") && !spec.startsWith("../")) continue; // skip node: / bare deps
+      const resolved = path.resolve(scriptsDir, spec);
+      assert.ok(fs.existsSync(resolved), `${f} imports "${spec}" which does not resolve (${path.relative(REPO, resolved)})`);
+      checked++;
+    }
+  }
+  assert.ok(checked > 0, "expected to resolve at least one local import across the tools");
+}
+
+// Server hardening (a-harden): the dotfile denylist + the loopback Host allowlist. Uses raw
+// http.request so the Host header can be forged (fetch/undici won't let it be overridden) — the TCP
+// connection still lands on 127.0.0.1, only the Host header is a foreign / rebound domain.
+async function testServerHardening() {
+  const dir = makeTempProject("harden");
+  // Plant sensitive dotfiles in the served ROOT — without the denylist serveStatic would 200 them.
+  fs.writeFileSync(path.join(dir, ".env"), "SECRET=xyz");
+  fs.mkdirSync(path.join(dir, ".git"), { recursive: true });
+  fs.writeFileSync(path.join(dir, ".git", "config"), "[core]\n");
+  // A file literally named "\.env": on POSIX `\` is NOT a path separator, so `GET /%5C.env` decodes
+  // to `/\.env` and resolves to THIS real file — which the denylist must still reject by splitting on
+  // `\` too. Planting the file makes the assertion go red if the split regresses to "/"-only (the
+  // Windows-bypass class), instead of passing vacuously because the file is absent.
+  fs.writeFileSync(path.join(dir, "\\.env"), "SECRET=backslash");
+
+  await withServer(dir, {}, async (base) => {
+    const port = Number(new URL(base).port);
+    const reqStatus = (pathname, hostHeader) =>
+      new Promise((resolve, reject) => {
+        const r = http.request(
+          { host: "127.0.0.1", port, path: pathname, method: "GET", headers: hostHeader ? { host: hostHeader } : {} },
+          (res) => { res.resume(); resolve(res.statusCode); }
+        );
+        r.on("error", reject);
+        r.end();
+      });
+
+    // Dotfile denylist: sensitive dotfiles → 404 (even though they exist); a normal file still 200s.
+    assert.equal(await reqStatus("/.env", `127.0.0.1:${port}`), 404, "/.env denied");
+    assert.equal(await reqStatus("/.git/config", `127.0.0.1:${port}`), 404, "/.git/config denied");
+    assert.equal(await reqStatus("/%5C.env", `127.0.0.1:${port}`), 404, "encoded-backslash dotfile denied (Windows-bypass class)");
+    assert.equal(await reqStatus("/index.html", `127.0.0.1:${port}`), 200, "normal file served");
+
+    // Host allowlist: loopback names pass (any port); a foreign / rebound Host → 403 on static AND api.
+    assert.equal(await reqStatus("/index.html", `localhost:${port}`), 200, "localhost Host allowed");
+    assert.equal(await reqStatus("/index.html", `[::1]:${port}`), 200, "[::1] Host allowed");
+    assert.equal(await reqStatus("/api/notes", `127.0.0.1:${port}`), 200, "api allowed from loopback");
+    assert.equal(await reqStatus("/index.html", "evil.com"), 403, "foreign Host rejected (static)");
+    assert.equal(await reqStatus("/api/notes", "attacker.example:1234"), 403, "foreign Host rejected (api)");
   });
 }
 
@@ -1508,11 +1633,74 @@ function testTemplateDesiredState() {
   assert.ok(/ghostLayer\.setAttribute\("viewBox", `0 0 \$\{compW\} \$\{compH\}`\)/.test(js), "ghost-layer viewBox is compW×compH");
 }
 
+// The note store (vellum-notes.mjs) is the single read/write seam for annotations.json. Its read
+// contract (ENOENT→[], malformed/non-array→throw, drop non-object elements, reconcile) is what both
+// the server and the review packet now depend on; its writer must keep the on-disk format a bare
+// array, byte-identical to legacy, NEVER an envelope.
+async function testNoteStore() {
+  const store = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-notes.mjs")));
+  const { readNotes, writeNotes, SCHEMA_VERSION } = store;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vellum-store-"));
+  const file = path.join(dir, "notes", "annotations.json");
+  try {
+    // SCHEMA_VERSION is a code-only integer, decoupled from the tool VERSION (never serialized).
+    assert.equal(typeof SCHEMA_VERSION, "number");
+
+    // Missing file → [] (created on first write), never throws.
+    assert.deepEqual(readNotes(file), []);
+
+    // writeNotes emits a BARE top-level array (writer mkdirs the notes/ dir): first non-ws byte "[",
+    // a trailing newline, and never the substring "schema_version" — the on-disk contract agents edit.
+    writeNotes(file, [{ id: 1, time: 1, text: "hi", status: "open" }]);
+    const onDisk = fs.readFileSync(file, "utf8");
+    assert.equal(onDisk.trimStart()[0], "[", "first non-whitespace byte is '['");
+    assert.ok(onDisk.endsWith("]\n"), "trailing newline preserved");
+    assert.ok(!onDisk.includes("schema_version"), "writer never emits an envelope");
+    assert.ok(Array.isArray(JSON.parse(onDisk)));
+    // The tmp+rename write leaves no .tmp- file behind.
+    assert.deepEqual(fs.readdirSync(path.dirname(file)).filter((f) => f.includes(".tmp-")), []);
+
+    // BACK-COMPAT INVARIANT: read (which reconciles) → write is byte-identical. A legacy note with no
+    // new fields round-trips with the same bytes (severity:undefined from the spread is dropped by
+    // JSON.stringify), so legacy projects are never silently rewritten.
+    writeNotes(file, [{ id: 5, time: 2, x: 10, y: 20, w: 30, h: 40, text: "rt", status: "resolved", createdAt: "2026-01-01T00:00:00.000Z" }]);
+    const first = fs.readFileSync(file, "utf8");
+    writeNotes(file, readNotes(file));
+    assert.equal(fs.readFileSync(file, "utf8"), first, "read→write is byte-identical (no envelope, no field churn)");
+
+    // Malformed JSON and a wrong-shape (non-array, non-envelope) file both THROW — the server turns
+    // that into a 500 and boot leaves the bad file untouched; the review packet warns and continues.
+    fs.writeFileSync(file, "{not json");
+    assert.throws(() => readNotes(file), /parse/i);
+    fs.writeFileSync(file, JSON.stringify({ foo: 1 }));
+    assert.throws(() => readNotes(file), /must contain a JSON array/);
+
+    // Forward-compat: a future {schema_version, notes:[…]} envelope is accepted on read (never written).
+    fs.writeFileSync(file, JSON.stringify({ schema_version: 2, notes: [{ id: 7, time: 1, text: "env", status: "open" }] }));
+    const fromEnvelope = readNotes(file);
+    assert.equal(fromEnvelope.length, 1);
+    assert.equal(fromEnvelope[0].id, 7);
+
+    // Non-object array elements are dropped BEFORE anything indexes them, and each survivor is
+    // reconciled (an unknown status coerces to "open") — the exact divergence the store closes.
+    fs.writeFileSync(file, JSON.stringify([null, 5, "x", { id: 8, time: 1, text: "ok", status: "donezo" }]));
+    const cleaned = readNotes(file);
+    assert.equal(cleaned.length, 1, "non-object elements dropped");
+    assert.equal(cleaned[0].status, "open", "unknown status coerced via reconcileNote");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
 await testVersionSourcesAgree();
 await testSharedHelpers();
+await testNoteStore();
+testPlayerNoExternalResources();
+testToolImportsResolve();
 testTemplateDesiredState();
 await testServerApi();
 await testWatchEndpoint();
+await testServerHardening();
 await testSeverityAndClustering();
 await testAttachments();
 await testMalformedNotesArePreserved();
