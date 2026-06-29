@@ -33,7 +33,15 @@ actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>
    element are grouped under a `- **N notes on \`tag.cls\`** · at \`selector\`` header — address every note in a
    cluster together rather than reopening the scene once per note.
    Statuses are `open` / `addressed` (you edited it, awaiting the human's verify) / `resolved` / `wontfix` — skip
-   `resolved`/`wontfix` unless the user asks you to revisit them. An `addressed` note also renders a
+   `resolved`/`wontfix` unless the user asks you to revisit them.
+   Some notes were **proposed by Vellum and confirmed by the reviewer** — its mount-time linter flags
+   layout issues (the first detector checks captions crossing the title-safe margin) that the human
+   accepts or dismisses with one key. A confirmed proposal is a normal note carrying an
+   `"origin":{"by":"vellum","detector":"…"}` field (the review packet tags it `_(auto: …)_`); treat it
+   exactly like any other note — it needs no special handling. These are best-effort heuristics: a
+   caption that intentionally hugs the bottom (a lower-third) may be flagged but is usually fine — the
+   reviewer only confirms the real ones, so anything that reached `annotations.md` is a genuine ask.
+   An `addressed` note also renders a
    `- resolution by <agent> · <at> — <summary>` sub-line (plus a `- edit: …` line per file/selector you
    touched) recording your write-back. A `_(stale: …)_` tag means the composition's index.html changed
    since the note was pinned — re-verify before applying. A timecode written as `M:SS.ss–M:SS.ss` is an

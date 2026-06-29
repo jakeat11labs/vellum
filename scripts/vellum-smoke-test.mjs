@@ -1593,11 +1593,93 @@ async function testReviewBeforeAfterPairing() {
     assert.ok(md.includes("![note 1](note-1.png)"));
     assert.doesNotMatch(md, /\| Before/);
   }
+
+  // (d) AUTO BADGE: an origin-bearing note (a confirmed proposal) is tagged `(auto: …)` in INDEX.md;
+  // a human note is not — transparency without disturbing legacy notes.
+  {
+    const dir = makeTempProject("ba-auto");
+    const H1 = indexHashOf(dir);
+    writeNotes(dir, [
+      { id: 1, time: 1, scene: "intro", text: "caption past bottom safe-area", status: "open", origin: { by: "vellum", detector: "caption-safe-area", at: "2026-06-28T00:00:00.000Z" } },
+      { id: 2, time: 2, scene: "intro", text: "human note", status: "open" },
+    ]);
+    seed(dir, H1, 1);
+    seed(dir, H1, 2);
+    const r = run(dir);
+    assert.equal(r.status, 0, `auto-badge review exited ${r.status}: ${r.stderr}`);
+    const md = fs.readFileSync(path.join(REVIEW_DIR(dir), "INDEX.md"), "utf8");
+    assert.match(md, /### note-1 .*_\(auto: caption-safe-area\)_/, "origin note tagged (auto)");
+    assert.doesNotMatch(md, /### note-2 .*_\(auto/, "human note not tagged");
+  }
 }
 
 // The player is a single inline ES module in the HTML template — there's no browser harness here, but
 // a syntax error would silently break the whole reviewer UI. Parse-check it on every run, and assert
 // the desired-state (ghost-box / arrow) wiring this slice added is present and correctly ordered.
+// Drift-guard for the auto-lint rule: the standalone player can't import vellum-shared, so it inline-
+// mirrors detectCaptionSafeArea. Extract the marked mirror, eval it (pure — no DOM), and assert it
+// agrees with the canonical rule across a synthetic battery — plus that the proposer is wired in.
+async function testAutolintInlineMirror() {
+  const shared = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
+  const html = fs.readFileSync(path.join(REPO, "scripts", "vellum-template.html"), "utf8");
+
+  const mirror = html.match(/\/\/ <vellum-detector-mirror>([\s\S]*?)\/\/ <\/vellum-detector-mirror>/);
+  assert.ok(mirror, "inline detector mirror markers present");
+  const inlineFn = new Function(`${mirror[1]}\nreturn detectCaptionSafeArea;`)();
+  const boxes = [
+    { x: 20, y: 20, w: 40, h: 10 }, { x: 20, y: 5, w: 40, h: 10 }, { x: 5, y: 40, w: 10, h: 10 },
+    { x: 20, y: 60, w: 40, h: 35 }, { x: 60, y: 40, w: 35, h: 10 }, { x: 10, y: 10, w: 80, h: 80 },
+    { x: 10, y: 9.9, w: 80, h: 80 }, { x: -5, y: -5, w: 50, h: 50 }, { x: 15, y: 15, w: 30, h: 10 },
+    { x: 0, y: 45, w: 100, h: 8 }, { x: 0, y: 94, w: 100, h: 5 }, { x: 0, y: 2, w: 100, h: 5 }, // full-bleed
+  ];
+  // Compare the FULL result (incl. the reason string that becomes the stored note text), and exercise
+  // the default-inset (one-arg) path too, so the inline copy can't drift from shared on any axis.
+  for (const inset of [0, 5, 10, 20]) {
+    for (const box of boxes) {
+      assert.deepEqual(inlineFn(box, inset), shared.detectCaptionSafeArea(box, inset), `inline/shared drift on ${JSON.stringify(box)} @${inset}`);
+    }
+  }
+  for (const box of boxes) {
+    assert.deepEqual(inlineFn(box), shared.detectCaptionSafeArea(box), `default-inset drift on ${JSON.stringify(box)}`);
+  }
+
+  // Wiring: mount-time scan, origin-bearing confirm, session dismissal, escape hatches, scoped hotkeys,
+  // and the lift beacon are all present in the inline player.
+  const js = (html.match(/<script type="module">([\s\S]*?)<\/script>/) || [])[1] || "";
+  assert.match(js, /function scanProposals\(/);
+  assert.match(js, /origin: \{ by: "vellum", detector: CAPTION_DETECTOR/); // confirm builds an origin-bearing note
+  assert.match(js, /data-vellum-safe/); // per-element escape hatch
+  assert.match(js, /data-safe-area-inset/); // comp-level override
+  assert.match(js, /e\.code === "KeyY" && proposals\.length/); // scoped confirm hotkey (inert otherwise)
+  assert.match(js, /e\.code === "KeyX" && proposals\.length/); // scoped dismiss hotkey
+  assert.match(js, /proposalsShown: drainUnreportedProposals\(\)/); // reported once-per-session inside the composition POST
+  assert.match(html, /<div id="proposals" hidden><\/div>/); // the dock element exists in static markup
+  // Re-mount/duplicate hardening (the review's must-fixes): both confirm AND dismiss suppress the key,
+  // shown is reported once per session, confirmed captions are de-duped against existing notes, and the
+  // dedupe key is position-independent (selector / tag.cls:text — never live box coords).
+  assert.equal((js.match(/actedProposals\.add\(/g) || []).length >= 2, true, "confirm AND dismiss suppress the key");
+  assert.match(js, /reportedProposals\.has\(p\.key\)/); // shown counted once per session
+  assert.match(js, /function alreadyNoted\(/); // cross-session dedup vs existing origin notes
+  assert.match(js, /target\.selector \|\| `\$\{target\.tag\}\.\$\{target\.cls\}:\$\{target\.text\}`/); // position-independent key
+  assert.doesNotMatch(js, /dismissedProposals/); // old name fully removed
+
+  // safeAreaInset regression guard: an ABSENT data-safe-area-inset must default to 10, NOT 0 — because
+  // getAttribute → null and Number(null) === 0 would silently disable the detector on every comp that
+  // doesn't set it. Eval the real function with a stub root/doc and pin every branch.
+  const fn = html.match(/\/\/ <vellum-safearea-fn>([\s\S]*?)\/\/ <\/vellum-safearea-fn>/);
+  assert.ok(fn, "safeAreaInset marker present");
+  const insetOf = (attr) => {
+    const stubDoc = { root: { getAttribute: () => attr } };
+    const compRoot = (doc) => doc.root;
+    return new Function("compRoot", "compDoc", `${fn[1]}\nreturn safeAreaInset();`)(compRoot, stubDoc);
+  };
+  assert.equal(insetOf(null), 10, "absent attribute → default 10 (not 0)");
+  assert.equal(insetOf(""), 10, "empty attribute → default 10");
+  assert.equal(insetOf("0"), 0, "explicit 0 → disabled");
+  assert.equal(insetOf("15"), 15, "explicit value honored");
+  assert.equal(insetOf("junk"), 10, "garbage → default 10");
+}
+
 function testTemplateDesiredState() {
   const TEMPLATE = path.join(REPO, "scripts", "vellum-template.html");
   const html = fs.readFileSync(TEMPLATE, "utf8");
@@ -1635,6 +1717,99 @@ function testTemplateDesiredState() {
 
 // The note store (vellum-notes.mjs) is the single read/write seam for annotations.json. Its read
 // contract (ENOENT→[], malformed/non-array→throw, drop non-object elements, reconcile) is what both
+// Tier 4 auto-lint: the pure caption-safe-area rule + the note `origin` sanitizer/reconcile guard.
+// The rule is browser-free so it unit-tests directly here; the player's inline mirror is drift-guarded
+// against it in testAutolintInlineMirror.
+async function testAutolintRule() {
+  const shared = await import(pathToFileURL(path.join(REPO, "scripts", "vellum-shared.mjs")));
+  const { detectCaptionSafeArea, DEFAULT_SAFE_AREA, CAPTION_DETECTOR, sanitizeOrigin, reconcileNote } = shared;
+
+  assert.equal(DEFAULT_SAFE_AREA, 10);
+  assert.equal(CAPTION_DETECTOR, "caption-safe-area");
+
+  // A caption fully inside the title-safe box → no proposal.
+  assert.equal(detectCaptionSafeArea({ x: 20, y: 20, w: 40, h: 10 }).violates, false);
+  // Each edge crossing → a violation with the correct edge label (default 10% inset).
+  assert.equal(detectCaptionSafeArea({ x: 20, y: 5, w: 40, h: 10 }).edge, "top"); // y=5 < 10
+  assert.equal(detectCaptionSafeArea({ x: 5, y: 40, w: 10, h: 10 }).edge, "left"); // x=5 < 10
+  assert.equal(detectCaptionSafeArea({ x: 20, y: 60, w: 40, h: 35 }).edge, "bottom"); // y+h=95 > 90
+  assert.equal(detectCaptionSafeArea({ x: 60, y: 40, w: 35, h: 10 }).edge, "right"); // x+w=95 > 90
+  // Boundary pinned at exactly 10%: flush against the line passes; 0.1% past violates.
+  assert.equal(detectCaptionSafeArea({ x: 10, y: 10, w: 80, h: 80 }).violates, false);
+  assert.equal(detectCaptionSafeArea({ x: 10, y: 9.9, w: 80, h: 80 }).edge, "top");
+  // Inset 0 disables the detector even for an off-frame box; custom inset shifts the boundary.
+  assert.equal(detectCaptionSafeArea({ x: -5, y: -5, w: 50, h: 50 }, 0).violates, false);
+  assert.equal(detectCaptionSafeArea({ x: 15, y: 15, w: 30, h: 10 }, 10).violates, false);
+  assert.equal(detectCaptionSafeArea({ x: 15, y: 15, w: 30, h: 10 }, 20).violates, true);
+  // Garbage never throws / never violates.
+  assert.equal(detectCaptionSafeArea(null).violates, false);
+  assert.equal(detectCaptionSafeArea({ x: "a", y: 1, w: 1, h: 1 }).violates, false);
+
+  // Full-bleed (centered left:0;right:0) captions must NOT false-flag left/right — the headline false-
+  // positive. They're judged on top/bottom only; a genuinely left-edge (non-full-bleed) caption still flags.
+  assert.equal(detectCaptionSafeArea({ x: 0, y: 45, w: 100, h: 8 }).violates, false, "centered full-width caption is clean");
+  assert.equal(detectCaptionSafeArea({ x: 0, y: 94, w: 100, h: 5 }).edge, "bottom", "full-width past bottom → bottom (not 'left')");
+  assert.equal(detectCaptionSafeArea({ x: 0, y: 2, w: 100, h: 5 }).edge, "top", "full-width past top → top");
+  assert.equal(detectCaptionSafeArea({ x: 2, y: 45, w: 30, h: 8 }).edge, "left", "a real left-edge caption still flags left");
+
+  // sanitizeOrigin: known detector, default `by`, fixed key order, stamp a bad `at`, bound `by`, idempotent.
+  const o = sanitizeOrigin({ detector: "caption-safe-area", at: "2026-01-01T00:00:00.000Z" });
+  assert.deepEqual(Object.keys(o), ["by", "detector", "at"]); // fixed order → stable bytes
+  assert.equal(o.by, "vellum");
+  assert.equal(o.at, "2026-01-01T00:00:00.000Z");
+  assert.equal(sanitizeOrigin({ detector: "made-up" }), null); // unknown detector → not an origin
+  assert.equal(sanitizeOrigin("nope"), null);
+  assert.ok(Number.isFinite(Date.parse(sanitizeOrigin({ detector: "caption-safe-area", at: "garbage" }).at)));
+  assert.equal(sanitizeOrigin({ detector: "caption-safe-area", by: "x".repeat(99) }).by.length, 40);
+  assert.deepEqual(sanitizeOrigin(o), o); // idempotent
+
+  // reconcileNote drops a malformed origin, preserves a well-formed one unchanged.
+  assert.ok(!("origin" in reconcileNote({ id: 1, origin: "oops" })));
+  assert.ok(!("origin" in reconcileNote({ id: 1, origin: { detector: "unknown" } })));
+  assert.deepEqual(reconcileNote({ id: 1, origin: o }).origin, o);
+}
+
+// Server half of the proposer loop: origin passes through POST validated (spoofed detector stripped),
+// is immutable on PATCH, never persisted into composition.json, and lift (accepted/shown) is computed
+// from `propose` (reported in the composition POST) + `create`-with-detector events.
+async function testProposalServer() {
+  const dir = makeTempProject("proposals");
+  await withServer(dir, {}, async (base) => {
+    const post = (body) => fetch(`${base}/api/notes`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }).then((r) => r.json());
+
+    // Mount + report two SHOWN caption-safe-area proposals inside the existing composition POST; an
+    // unknown-detector entry is dropped server-side.
+    await fetch(`${base}/api/composition`, {
+      method: "POST", headers: { "content-type": "application/json" },
+      body: JSON.stringify({ width: 1080, height: 1920, duration: 5, proposalsShown: [
+        { detector: "caption-safe-area", selector: "#cap1", edge: "bottom" },
+        { detector: "caption-safe-area", selector: "#cap2", edge: "top" },
+        { detector: "made-up", selector: "#x", edge: "top" },
+      ] }),
+    });
+    const comp = await (await fetch(`${base}/api/composition`)).json();
+    assert.equal(comp.proposalsShown, undefined, "proposalsShown never persisted to composition.json");
+
+    // Accept one proposal: a note with a valid origin → origin persisted + round-tripped.
+    const accepted = await post({ time: 1, x: 10, y: 92, w: 40, h: 6, text: "caption past bottom safe-area", origin: { by: "vellum", detector: "caption-safe-area", at: "2026-06-28T00:00:00.000Z" } });
+    assert.deepEqual(accepted.origin, { by: "vellum", detector: "caption-safe-area", at: "2026-06-28T00:00:00.000Z" });
+    // A spoofed/unknown detector is stripped (origin never trusted verbatim).
+    const spoof = await post({ time: 2, x: 5, y: 5, w: 5, h: 5, text: "spoof", origin: { by: "evil", detector: "rm -rf", at: "x" } });
+    assert.equal(spoof.origin, undefined, "unknown-detector origin stripped by sanitizeOrigin");
+    // A human note carries no origin (byte-identical to a pre-0.10.0 note).
+    const human = await post({ time: 3, x: 20, y: 20, w: 10, h: 10, text: "human" });
+    assert.equal(human.origin, undefined);
+
+    // origin is immutable on PATCH (like provenance).
+    const patched = await fetch(`${base}/api/notes/${accepted.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ status: "resolved" }) }).then((r) => r.json());
+    assert.deepEqual(patched.origin, accepted.origin, "origin immutable on PATCH");
+
+    // Lift: 2 shown, 1 accepted (the create stamped with detector) → acceptRate 0.5.
+    const m = await (await fetch(`${base}/api/metrics?events=1`)).json();
+    assert.deepEqual(m.summary.proposals, { shown: 2, accepted: 1, acceptRate: 0.5 });
+  });
+}
+
 // the server and the review packet now depend on; its writer must keep the on-disk format a bare
 // array, byte-identical to legacy, NEVER an envelope.
 async function testNoteStore() {
@@ -1668,6 +1843,14 @@ async function testNoteStore() {
     writeNotes(file, readNotes(file));
     assert.equal(fs.readFileSync(file, "utf8"), first, "read→write is byte-identical (no envelope, no field churn)");
 
+    // Same invariant for an origin-bearing note (a confirmed proposal): origin round-trips intact, in
+    // fixed {by,detector,at} order, with no churn — so an accepted-proposal note is provably stable.
+    writeNotes(file, [{ id: 6, time: 1, text: "cap", status: "open", origin: { by: "vellum", detector: "caption-safe-area", at: "2026-01-01T00:00:00.000Z" } }]);
+    const withOrigin = fs.readFileSync(file, "utf8");
+    writeNotes(file, readNotes(file));
+    assert.equal(fs.readFileSync(file, "utf8"), withOrigin, "origin-bearing note read→write is byte-identical");
+    assert.equal(readNotes(file)[0].origin.detector, "caption-safe-area", "origin preserved through the store");
+
     // Malformed JSON and a wrong-shape (non-array, non-envelope) file both THROW — the server turns
     // that into a 500 and boot leaves the bad file untouched; the review packet warns and continues.
     fs.writeFileSync(file, "{not json");
@@ -1694,10 +1877,12 @@ async function testNoteStore() {
 
 await testVersionSourcesAgree();
 await testSharedHelpers();
+await testAutolintRule();
 await testNoteStore();
 testPlayerNoExternalResources();
 testToolImportsResolve();
 testTemplateDesiredState();
+await testAutolintInlineMirror();
 await testServerApi();
 await testWatchEndpoint();
 await testServerHardening();
@@ -1710,6 +1895,7 @@ await testAgentJsonReconciledOnBoot();
 await testProvenanceStaleDetection();
 await testIndexHashOf();
 await testMetricsLedger();
+await testProposalServer();
 await testMetricsCorruptLedgerIsolation();
 await testMetricsTrimBound();
 testVellumDirGuard();

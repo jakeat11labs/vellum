@@ -281,7 +281,7 @@
       </ul>
     </div>
     <div class="tasks" style="margin-top:14px">
-      <label class="task" data-id="b-autolint"><input type="checkbox"><div><div class="t-top"><span class="t-title">Ship the first auto-lint proposer</span><span class="ve hi">Value 5</span><span class="ve">Effort 4</span></div><p class="t-why">Pick one detector (e.g. VO cue vs. on-screen text desync, or caption past safe-area), surface proposed notes the reviewer accepts/dismisses with a keystroke, and measure lift against the metrics ledger before adding more.</p></div></label>
+      <label class="task" data-id="b-autolint"><input type="checkbox" checked><div><div class="t-top"><span class="t-title">Ship the first auto-lint proposer</span><span class="ve hi">Value 5</span><span class="ve">Effort 4</span><span class="ver">v0.10.0</span></div><p class="t-why"><strong>Shipped in v0.10.0 — the caption-safe-area detector.</strong> At mount Vellum flags captions crossing the title-safe margin and surfaces them as a dock + markers the reviewer confirms (<code>Y</code> → a note carrying <code>origin:{by,detector,at}</code>) or dismisses (<code>X</code>); a <code>proposals:{shown,accepted,acceptRate}</code> lift block in the ledger gates whether a second detector is worth it. Pure rule (unit-tested) + drift-guarded inline mirror; precision-first (full-bleed/centered captions and hidden-frame captions don't false-flag), de-duped against existing notes, idempotent confirm. Proposing isn't editing — it never touches the composition. Built design → implement → browser-verified → adversarial review (15 findings fixed) → simplify.</p></div></label>
     </div>
   </section>
 

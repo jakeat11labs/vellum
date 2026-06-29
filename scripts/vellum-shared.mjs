@@ -38,12 +38,13 @@ import crypto from "node:crypto";
  *   firstAddressedAt?: string,
  *   firstResolvedAt?: string,
  *   reopenCount?: number,
+ *   origin?: { by: string, detector: string, at: string },
  * }} Note
  */
 
 // Installed tool version. Keep in sync with package.json on release; `vellum update`
 // compares this against the published package.json version.
-export const VERSION = "0.9.0";
+export const VERSION = "0.10.0";
 
 export const NOTE_STATUSES = new Set(["open", "addressed", "resolved", "wontfix"]);
 
@@ -244,6 +245,11 @@ export function computeMetrics(notes, events = []) {
   const timeToNotes = [];
   const anchorBySid = new Map();
   let lastAnchor = null;
+  // Auto-lint lift: a `propose` event per proposal SHOWN, a `create` event carrying `detector` per
+  // proposal ACCEPTED. acceptRate = accepted/shown tells whether proposing beats hunting — the gate
+  // before adding detector #2.
+  let proposalsShown = 0;
+  let proposalsAccepted = 0;
   for (const e of (Array.isArray(events) ? events : [])) {
     if (!e || typeof e !== "object") continue;
     const at = Date.parse(e.at);
@@ -254,6 +260,9 @@ export function computeMetrics(notes, events = []) {
     } else if (e.type === "create") {
       const anchor = e.sid != null && anchorBySid.has(e.sid) ? anchorBySid.get(e.sid) : lastAnchor;
       if (anchor != null && at - anchor >= 0) timeToNotes.push(at - anchor);
+      if (e.detector) proposalsAccepted += 1;
+    } else if (e.type === "propose") {
+      proposalsShown += 1;
     }
   }
   return {
@@ -261,6 +270,9 @@ export function computeMetrics(notes, events = []) {
     firstPass: { fixed, reopened, rate: fixed ? Math.max(0, Math.min(1, (fixed - reopened) / fixed)) : null },
     resolveLatencyMs: metricStats(resolveLatencies),
     timeToNoteMs: metricStats(timeToNotes),
+    // Absent (null) when nothing was ever proposed, so a review with no auto-lint activity has a
+    // byte-identical metrics footer to before.
+    proposals: proposalsShown ? { shown: proposalsShown, accepted: proposalsAccepted, acceptRate: Math.max(0, Math.min(1, proposalsAccepted / proposalsShown)) } : null,
     generatedAt: new Date().toISOString(),
   };
 }
@@ -280,6 +292,74 @@ const validArrow = (a) => hasFiniteKeys(a, ["x1", "y1", "x2", "y2"]);
 // sanitize an agent-written resolution. The single seam any future envelope migration would
 // rewrite — keeps offline-edited annotations.json safe and back-compatible (every new field
 // is absent-by-default, so a legacy note serializes byte-identically).
+// ---- Auto-lint: caption-safe-area detector + note origin -----------------------------------------
+// "Invert the sensor": Vellum proposes notes the reviewer confirms. The detection RULE is pure and
+// lives here (browser-free, @ts-checked, smoke-tested); box EXTRACTION is client-side (geometry needs
+// layout). The player inline-mirrors this rule and the smoke suite drift-guards the two copies.
+
+// Title-safe margin — % inset on every edge, the broadcast standard for on-screen TEXT (action-safe
+// 5% is for picture; title-safe 10% is for captions). A caption box crossing INTO this margin is
+// proposed. An inset of 0 (or invalid) disables the detector for that composition.
+export const DEFAULT_SAFE_AREA = 10;
+
+// The detectors Vellum is allowed to stamp into a note's `origin`. One entry for v0.10.0 — widening is
+// gated on measured precision, not added speculatively.
+export const CAPTION_DETECTOR = "caption-safe-area";
+const ORIGIN_DETECTORS = new Set([CAPTION_DETECTOR]);
+
+/**
+ * Pure caption-safe-area rule. `box` is {x,y,w,h} in % of the composition; `inset` is the title-safe
+ * margin %. Returns {violates, edge, reason} where `edge` is the most-overshot crossed side. No DOM,
+ * no IO — the smoke suite unit-tests it and the player's inline copy is drift-guarded against it.
+ * @param {{x:number,y:number,w:number,h:number}} box
+ * @param {number} [inset]
+ */
+export function detectCaptionSafeArea(box, inset = DEFAULT_SAFE_AREA) {
+  const clear = { violates: false, edge: null, reason: null };
+  if (!box || typeof box !== "object") return clear;
+  const x = Number(box.x), y = Number(box.y), w = Number(box.w), h = Number(box.h);
+  if (![x, y, w, h].every(Number.isFinite)) return clear;
+  const m = Number(inset);
+  if (!Number.isFinite(m) || m <= 0) return clear; // inset 0 / invalid → detector disabled
+  // A box spanning BOTH side margins (a centered left:0;right:0 caption bar) is full-bleed by layout,
+  // not text running off the left/right edge — judging it on left/right would flag EVERY normal
+  // centered full-width caption (the headline false-positive). For a full-bleed box, judge top/bottom
+  // only. Overshoot past each edge is positive when it crosses into the margin; flush at the line (strict >) is clean.
+  const fullBleed = x <= m && x + w >= 100 - m;
+  const over = {
+    top: m - y,
+    bottom: y + h - (100 - m),
+    left: fullBleed ? 0 : m - x,
+    right: fullBleed ? 0 : x + w - (100 - m),
+  };
+  // Vertical edges first so a real top/bottom crossing wins a tie over a horizontal one.
+  let edge = null;
+  let worst = 0;
+  for (const e of ["top", "bottom", "left", "right"]) {
+    if (over[e] > worst) { worst = over[e]; edge = e; }
+  }
+  if (!edge) return clear;
+  return { violates: true, edge, reason: `Caption crosses the ${edge} title-safe margin by ${worst.toFixed(1)}%` };
+}
+
+/**
+ * Bounded sanitizer for a note's `origin` — the provenance of a Vellum-PROPOSED note the reviewer
+ * confirmed. Unlike server-authored `provenance`, `origin` is CLIENT-supplied on POST, so it's
+ * validated: `detector` against the allowlist (unknown → null, i.e. not a real proposal origin),
+ * `by` length-clamped, `at` ISO-validated-or-stamped. Keys emitted in fixed {by,detector,at} order so
+ * server-written and read-reconciled bytes agree. Idempotent.
+ */
+export function sanitizeOrigin(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const detector = String(raw.detector || "");
+  if (!ORIGIN_DETECTORS.has(detector)) return null;
+  return {
+    by: raw.by != null ? String(raw.by).slice(0, 40) : "vellum",
+    detector,
+    at: raw.at != null && Number.isFinite(Date.parse(raw.at)) ? String(raw.at).slice(0, 40) : new Date().toISOString(),
+  };
+}
+
 export function reconcileNote(note) {
   if (!note || typeof note !== "object") return note;
   const out = {
@@ -291,6 +371,13 @@ export function reconcileNote(note) {
     const resolution = sanitizeResolution(note.resolution);
     if (resolution) out.resolution = resolution;
     else delete out.resolution;
+  }
+  // `origin` marks a note Vellum PROPOSED (the reviewer confirmed). Sanitize on read so an offline
+  // hand-edit can't render-break and read→write stays byte-stable — mirrors the resolution branch.
+  if ("origin" in note) {
+    const origin = sanitizeOrigin(note.origin);
+    if (origin) out.origin = origin;
+    else delete out.origin;
   }
   // Drop a non-array attachments (a hand-edit like "attachments":"sketch.png") on read so the
   // render path's .map can never throw — mirrors the severity/resolution coercion above.

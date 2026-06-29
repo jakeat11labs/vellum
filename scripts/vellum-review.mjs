@@ -305,7 +305,9 @@ function main() {
     // (one shared phrasing via describeDesiredDelta), alongside the amber ghost drawn on the frame.
     const delta = describeDesiredDelta(n);
     const want = delta ? ` · ${[delta.box, delta.arrow].filter(Boolean).join("; ")}` : "";
-    index.push(`### note-${n.id} · ${span ? `${fmtTime(n.time)}–${fmtTime(n.timeEnd)}` : fmtTime(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}`);
+    // `(auto)` flags a note Vellum proposed and the reviewer confirmed (origin.detector), for transparency.
+    const auto = n.origin && n.origin.detector ? ` _(auto: ${n.origin.detector})_` : "";
+    index.push(`### note-${n.id} · ${span ? `${fmtTime(n.time)}–${fmtTime(n.timeEnd)}` : fmtTime(n.time)} ${n.scene ? `\`${n.scene}\`` : ""}${auto}`);
     index.push("");
     index.push(`${n.text}`);
     index.push("");

@@ -27,7 +27,7 @@ import { spawn, spawnSync } from "node:child_process";
 import crypto from "node:crypto";
 import { fileURLToPath } from "node:url";
 // sanitizeResolution is PATCH/offline-only — a note is NEVER born with a resolution at POST.
-import { computeMetrics, describeDesiredDelta, fmtDuration, fmtTime, indexHashOf, METRICS_KEEP, METRICS_MAX_LINES, normalizeNoteSeverity, normalizeNoteStatus, pathSegments, resolveComposition, resolveInside, sanitizeResolution, VERSION, writeFileAtomic, writeJsonAtomic } from "./vellum-shared.mjs";
+import { CAPTION_DETECTOR, computeMetrics, describeDesiredDelta, fmtDuration, fmtTime, indexHashOf, METRICS_KEEP, METRICS_MAX_LINES, normalizeNoteSeverity, normalizeNoteStatus, pathSegments, resolveComposition, resolveInside, sanitizeOrigin, sanitizeResolution, VERSION, writeFileAtomic, writeJsonAtomic } from "./vellum-shared.mjs";
 // The note store (read/normalize + atomic bare-array write) lives in one module so the server and
 // the review packet share an identical read contract; see vellum-notes.mjs.
 import { readNotes as readNotesStore, writeNotes as writeNotesStore } from "./vellum-notes.mjs";
@@ -999,6 +999,10 @@ function handleNotes(req, res) {
       // without them byte-identical.
       const desiredBox = scopedKind ? null : sanitizeDesiredBox(parsed.desiredBox);
       const arrow = scopedKind ? null : sanitizeArrow(parsed.arrow);
+      // Provenance of a Vellum-PROPOSED note the reviewer confirmed (origin:{by,detector,at}). Client-
+      // supplied, so validated by sanitizeOrigin (detector allowlist, bounded by, ISO-or-stamped at) —
+      // never trusted verbatim. Optional spread keeps human-authored notes byte-identical.
+      const origin = sanitizeOrigin(parsed.origin);
       // Server-authored baseline this note is pinned against (commit + index.html hash).
       // Stamped here, never read from parsed (a client cannot spoof it); immutable on PATCH.
       const prov = computeProvenance();
@@ -1019,6 +1023,7 @@ function handleNotes(req, res) {
           ...(audio ? { audio } : {}),
           ...(attachments.length ? { attachments } : {}),
           ...(severity ? { severity } : {}),
+          ...(origin ? { origin } : {}),
           text,
           status: "open",
           ...(prov ? { provenance: prov } : {}),
@@ -1028,8 +1033,9 @@ function handleNotes(req, res) {
         if (!recoverableWriteNotes(res, notes)) return;
         logEvent(ui.glyph.add, `${noteLabel(note)} ${ui.dim(`— "${ui.truncate(note.text, 48)}"`)}`);
         // Ledger AFTER the confirmed write — a 500 (e.g. malformed existing JSON) leaves no phantom
-        // create event. No note text is stored, only id/time/scene/kind.
-        recordMetric({ type: "create", id: note.id, t: note.time, scene: note.scene, kind: note.kind || null });
+        // create event. No note text is stored, only id/time/scene/kind (+ detector for an accepted
+        // proposal, so lift = accepted/shown is computable).
+        recordMetric({ type: "create", id: note.id, t: note.time, scene: note.scene, kind: note.kind || null, ...(origin ? { detector: origin.detector } : {}) });
         return sendJson(res, 201, note);
       });
     });
@@ -1140,6 +1146,16 @@ function handleComposition(req, res) {
       }
       // The real "review player opened" signal — the primary time-to-note anchor in the ledger.
       recordMetric({ type: "mount" });
+      // Lift telemetry: the player reports the caption-safe-area proposals it SHOWED this mount, inside
+      // this existing POST (no separate metrics endpoint, so the ledger stays server-authored). Each
+      // entry is bounded and the detector allowlisted; acceptance is the `create` event stamped with
+      // the same detector, so accepted/shown is computable. Best-effort — never blocks the mount.
+      if (Array.isArray(parsed.proposalsShown)) {
+        for (const p of parsed.proposalsShown.slice(0, 50)) {
+          if (!p || typeof p !== "object" || p.detector !== CAPTION_DETECTOR) continue;
+          recordMetric({ type: "propose", detector: CAPTION_DETECTOR, selector: p.selector != null ? String(p.selector).slice(0, 200) : null, edge: p.edge != null ? String(p.edge).slice(0, 12) : null });
+        }
+      }
       // Return the baseline in the round-trip the player already makes so it can capture the
       // current content hash without a second GET.
       return sendJson(res, 201, { ok: true, scenes: manifest.scenes.length, provenance: manifest.provenance });
@@ -1452,6 +1468,7 @@ process.on("SIGINT", () => {
       if (m.firstPass.rate != null) bits.push(`first-pass ${Math.round(m.firstPass.rate * 100)}%`);
       if (m.resolveLatencyMs) bits.push(`median fix ${fmtDuration(m.resolveLatencyMs.median)}`);
       if (m.timeToNoteMs) bits.push(`median time-to-note ${fmtDuration(m.timeToNoteMs.median)}`);
+      if (m.proposals) bits.push(`auto-lint ${m.proposals.accepted}/${m.proposals.shown} confirmed`);
       if (bits.length) console.log(`  ${ui.dim(bits.join(" · "))}`);
     } catch {}
   } else {

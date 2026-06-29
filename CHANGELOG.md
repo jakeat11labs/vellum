@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-## [0.9.0] - June 28, 2026
+## [0.10.0] - June 28, 2026
+
+The roadmap's "bold bet" — **invert the sensor**. Until now the human was the sole detector and Vellum the scribe. This flips it: Vellum pre-lints the mounted composition and **proposes** candidate notes you confirm or dismiss with one key. Ships one detector first, measures whether it's worth it, then decides on more. Notes stay a bare JSON array; a confirmed proposal is a normal note carrying one optional field, so older notes are byte-identical.
+
+### Added
+- **Caption-safe-area auto-lint proposer.** At mount, Vellum scans on-screen captions (`[data-caption]`, `.caption`, `.subtitle`, `[role=caption]`) and flags any whose box crosses the title-safe margin (10% inset default; per-composition `data-safe-area-inset`, per-element `data-vellum-safe="off"` escape hatch). Proposals render as a dismissible amber dock + markers; **one key confirms** (`Y` → a real note carrying `origin:{by:"vellum",detector,at}` and a pre-filled reason) or **dismisses** (`X`). Vellum never edits the composition — proposing isn't editing. The detection rule is pure and unit-tested; the player mirrors it inline (it can't import a Node module) and a smoke drift-guard keeps the two byte-identical.
+- **Lift measurement.** A `proposals:{shown,accepted,acceptRate}` block in `GET /api/metrics` and the shutdown summary, fed by `propose`/`create`-with-detector events in the local ledger — so you can see whether proposing beats hunting before adding a second detector. The review packet tags confirmed proposals `_(auto: …)_`.
+
+### Precision (why it's trustworthy, not noisy)
+- Full-bleed/centered captions are judged on top/bottom only (a `left:0;right:0` bar isn't "off the left edge"), so a normal centered subtitle never false-flags. Only captions actually presented at the scanned frame are linted (ancestor opacity/visibility + off-frame gated), so mid-entrance and hidden-scene captions don't cry wolf. Confirmed/dismissed captions are de-duplicated against existing notes and within the session, and `shown` is counted once per session — so the lift metric stays honest across live-reloads, and confirm is idempotent against key-repeat (no duplicate notes).
+
+### Notes
+- One detector by design — `.lower-third` and other layouts are opt-in via `data-caption` until the dismiss rate says otherwise. Known limitations for a follow-up: the scan covers the loaded frame (not yet a per-cue sweep of every scene), and proposal markers aren't time-scoped to their caption's window.
 
 The roadmap's "Architecture & hardening" tier — structural work that protects the moat (local-first, zero-dependency, single-download) and converges the note-read path. No new reviewer-facing features; notes stay a bare JSON array and every prior note is byte-identical.
 

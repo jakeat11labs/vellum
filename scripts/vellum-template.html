@@ -35,6 +35,24 @@
       .ghost-box:hover { background: color-mix(in srgb, #fbbf24 18%, transparent); box-shadow: 0 0 10px color-mix(in srgb, #fbbf24 50%, transparent); }
       .ghost-box .gbadge { position: absolute; top: -13px; left: -2px; background: #fbbf24; color: #3a2c00; font-size: 11px; font-weight: 700; border-radius: 6px 6px 6px 0; padding: 1px 6px; opacity: 0.95; }
       #ghost-layer { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; overflow: visible; }
+      /* Auto-lint proposal markers (Tier 4): amber DOTTED (vs the dashed desired-state ghost-box) so a
+         Vellum-proposed caption issue reads as a distinct, awaiting-confirmation suggestion. Purely
+         visual (pointer-events:none) so they never eat a pin click. The `.current` one (the next in
+         the one-key queue) glows. */
+      .proposal { position: absolute; pointer-events: none; border: 2px dotted #f59e0b; border-radius: 4px; background: color-mix(in srgb, #f59e0b 8%, transparent); box-shadow: 0 0 0 1px rgba(245,158,11,0.22); }
+      .proposal.current { border-color: #fbbf24; background: color-mix(in srgb, #fbbf24 14%, transparent); animation: vellum-prop-pulse 1.8s ease-in-out infinite; }
+      @keyframes vellum-prop-pulse { 0%,100% { box-shadow: 0 0 8px color-mix(in srgb, #fbbf24 40%, transparent); } 50% { box-shadow: 0 0 16px color-mix(in srgb, #fbbf24 70%, transparent); } }
+      @media (prefers-reduced-motion: reduce) { .proposal.current { animation: none; } }
+      /* The proposal dock — a top-center banner listing what Vellum sees, with ✓/✕ per row. */
+      #proposals { position: absolute; z-index: 7; top: 14px; left: 50%; transform: translateX(-50%); max-width: min(560px, 80%); background: #1a1407; border: 1px solid #6b4f12; border-radius: 10px; padding: 8px 10px; box-shadow: 0 6px 24px rgba(0,0,0,0.5); font-size: 12px; color: #fcd9a3; }
+      #proposals .prop-head { font-weight: 700; color: #fbbf24; margin-bottom: 6px; }
+      #proposals .prop-row { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+      #proposals .prop-row + .prop-row { border-top: 1px solid rgba(107,79,18,0.5); }
+      #proposals .prop-row.current .prop-txt { color: #ffe9c4; }
+      #proposals .prop-txt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      #proposals button { flex: none; cursor: pointer; border-radius: 6px; border: 1px solid #6b4f12; background: #2a2008; color: #fcd9a3; font-size: 11px; padding: 3px 8px; }
+      #proposals .prop-add { border-color: #2f7d6e; background: #0f2e29; color: #5eead4; }
+      #proposals button:hover { filter: brightness(1.2); }
       /* While capturing a ghost target the overlay must take the mouse, but the saved markers under it
          must not swallow the drag (or fire their seek-on-click). */
       #pins.capturing { pointer-events: auto; cursor: crosshair; }
@@ -233,6 +251,7 @@
           </div>
           <button id="dock-toggle" title="Collapse / expand feedback targets">‹</button>
         </div>
+        <div id="proposals" hidden></div>
         <div id="composer">
           <div id="composer-drag" title="Drag to move"><span class="grip">⠿</span><div class="meta" id="composer-meta"></div></div>
           <div class="tgt" id="composer-tgt"></div>
@@ -587,8 +606,6 @@
         voiceEls = allAudioEls.filter((a) => a !== musicEl);
         await loadCaptions(); // VO transcript for audio-note enrichment (best-effort; absent in many comps)
         if (vttCues.length) { ccToggle.style.display = ""; updateCcBtn(); } // reveal the captions toggle only when there are captions
-        postComposition(compDoc); // persist the scene/timing map for the consuming agent (best-effort)
-
         // Seed mix sliders from the saved mix, falling back to the composition's data-volume.
         let savedMix = {};
         try { savedMix = await (await fetch("/api/mix", { cache: "no-cache" })).json(); } catch (e) {}
@@ -610,7 +627,14 @@
         if (persistTimer) clearInterval(persistTimer);
         persistTimer = setInterval(() => { try { localStorage.setItem(timeKey, String(player.getTime())); } catch (e) {} }, 500);
         if (!tickStarted) { tickStarted = true; tick(); }
-        loadNotes();
+        // Notes BEFORE the proposal scan so scanProposals can skip captions a confirmed proposal already
+        // filed (cross-session dedup). The scan runs here — AFTER the resume-seek + pause — so it lints the
+        // frame the reviewer is actually looking at (not the pre-seek t=0 frame), and the visibility gate
+        // then sees real per-scene opacity.
+        await loadNotes();
+        scanProposals();
+        postComposition(compDoc); // persist the scene/timing map + report shown proposals for lift (best-effort)
+        renderProposals();
         startWatchPoll(); // begin polling /api/watch for live edits (guarded — first mount only)
         flash(savedT > 0 ? `Resumed at ${fmt(savedT)}` : "Ready — scrub, then toggle Note mode (N) and click or drag to pin feedback");
       }
@@ -809,6 +833,10 @@
         else if (e.code === "KeyC") { if (vttCues.length) setSubtitles(!subtitlesOn); }
         else if (e.code === "ArrowUp") { e.preventDefault(); jumpScene(-1); }
         else if (e.code === "ArrowDown") { e.preventDefault(); jumpScene(1); }
+        // Auto-lint: one-key confirm/dismiss of the top (current) proposal — inert unless a proposal
+        // is showing, so these keys collide with nothing in the default flow.
+        else if (e.code === "KeyY" && proposals.length) { e.preventDefault(); confirmProposal(0); }
+        else if (e.code === "KeyX" && proposals.length) { e.preventDefault(); dismissProposal(0); }
       });
 
       // ---- audio mix ----
@@ -1499,6 +1527,9 @@
             scenes: scenes.map((s) => ({ id: s.id, start: round2(s.start), duration: s.duration != null ? round2(s.duration) : null })),
             audio: { voice: voiceEls.map(clip), music: musicEl ? [clip(musicEl)] : [] },
             captions: vttCues.length > 0,
+            // Lift telemetry — the caption proposals shown this mount. The server records them as
+            // `propose` events and never persists them into the manifest (shape stays unchanged).
+            ...(proposals.length ? { proposalsShown: drainUnreportedProposals() } : {}),
           };
           // Capture the server-stamped baseline hash from the round-trip so renderNoteDots/
           // renderList can flag notes pinned against an older index.html (content drift).
@@ -1868,6 +1899,185 @@
         renderMarkers();
         renderList();
       }
+      // ---- auto-lint proposals: Vellum proposes, the reviewer confirms (Tier 4) ----------------
+      // The player is a standalone module and can't import the node:fs-using vellum-shared, so the pure
+      // caption-safe-area rule is MIRRORED inline; the smoke suite drift-guards the two copies against a
+      // synthetic battery (testAutolintInlineMirror). NEVER edit this copy without the shared one.
+      // <vellum-detector-mirror>
+      function detectCaptionSafeArea(box, inset = 10) {
+        const clear = { violates: false, edge: null, reason: null };
+        if (!box || typeof box !== "object") return clear;
+        const x = Number(box.x), y = Number(box.y), w = Number(box.w), h = Number(box.h);
+        if (![x, y, w, h].every(Number.isFinite)) return clear;
+        const m = Number(inset);
+        if (!Number.isFinite(m) || m <= 0) return clear;
+        const fullBleed = x <= m && x + w >= 100 - m;
+        const over = { top: m - y, bottom: y + h - (100 - m), left: fullBleed ? 0 : m - x, right: fullBleed ? 0 : x + w - (100 - m) };
+        let edge = null, worst = 0;
+        for (const e of ["top", "bottom", "left", "right"]) { if (over[e] > worst) { worst = over[e]; edge = e; } }
+        if (!edge) return clear;
+        return { violates: true, edge, reason: `Caption crosses the ${edge} title-safe margin by ${worst.toFixed(1)}%` };
+      }
+      // </vellum-detector-mirror>
+
+      // Narrow, opt-in caption set — the PRIMARY false-positive control (a broad p/span/div sweep would
+      // flag titles + body copy). data-caption is already a HyperFrames convention. `.lower-third` is
+      // deliberately OUT: a lower-third is bottom-anchored by design, so it would be a standing false
+      // positive — require explicit [data-caption] opt-in for those. Widen later, guided by the measured
+      // dismiss rate, not speculatively.
+      const CAPTION_SELECTORS = '[data-caption], [data-vellum-caption], .caption, .subtitle, [role="caption"]';
+      const CAPTION_DETECTOR = "caption-safe-area";
+      let proposals = [];
+      // Session-only sets, both keyed by a position-INDEPENDENT key (selector, else tag.cls:text) so a
+      // re-measure at a different animation frame can't resurrect an acted/reported proposal:
+      //  · actedProposals — confirmed OR dismissed this run → never re-shown (no duplicate notes on remount)
+      //  · reportedProposals — already counted as `shown` → proposalsShown() reports each only once, so a
+      //    live-reload re-mount can't re-inflate the lift denominator (acceptRate = accepted/shown).
+      const actedProposals = new Set();
+      const reportedProposals = new Set();
+      const proposalsDock = document.getElementById("proposals");
+      // Title-safe inset %: root data-safe-area-inset overrides the 10% default; an explicit "0" (or
+      // invalid) disables. NOTE: an ABSENT attribute reads back as null and Number(null) === 0 (not
+      // NaN!), so guard the null/"" case explicitly or the detector would silently disable on every
+      // composition that doesn't set the attribute. (smoke-tested via testAutolintInlineMirror)
+      // <vellum-safearea-fn>
+      function safeAreaInset() {
+        const root = compRoot(compDoc);
+        const raw = root ? root.getAttribute("data-safe-area-inset") : null;
+        if (raw == null || raw === "") return 10; // absent → default 10% title-safe
+        const v = Number(raw);
+        return Number.isFinite(v) ? v : 10; // garbage → default; explicit "0" → 0 (disabled)
+      }
+      // </vellum-safearea-fn>
+
+      // Position-independent identity for a caption (selector, else tag.cls:text) — NEVER live geometry,
+      // so the acted/reported/dedupe gates survive an animation re-measure on a later mount.
+      function proposalKey(target) {
+        return target.selector || `${target.tag}.${target.cls}:${target.text}`;
+      }
+      // A caption a confirmed proposal already covers (a note with our origin on the same selector) — so
+      // it isn't re-proposed across a fresh page load (where the session sets are empty).
+      function alreadyNoted(target) {
+        return !!target.selector && notes.some((n) =>
+          n && n.origin && n.origin.detector === CAPTION_DETECTOR && n.target && n.target.selector === target.selector);
+      }
+      function scanProposals() {
+        proposals = [];
+        if (!compDoc) return proposals;
+        const inset = safeAreaInset();
+        if (!(inset > 0)) return proposals; // disabled for this comp
+        let els;
+        try { els = [...compDoc.querySelectorAll(CAPTION_SELECTORS)]; } catch { return proposals; }
+        for (const el of els) {
+          if (el.getAttribute("data-vellum-safe") === "off") continue; // per-element escape hatch
+          if (!shortText(el)) continue; // captions carry text
+          // Only lint captions actually PRESENTED at the scanned frame: skip ones hidden by an ancestor's
+          // opacity/visibility (a non-active scene) or mid-entrance animation — else an off-screen caption
+          // sliding in (y≈110) would false-flag, and a later-scene caption would be measured wrong.
+          try { if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true, contentVisibilityAuto: true })) continue; } catch (e) {}
+          // Run the cheap pure rule FIRST off a bare box — only a real violator pays for toCandidate's
+          // getComputedStyle + unique-selector querySelectorAll (the style/selector only matter once it
+          // becomes a note on confirm).
+          const b = el.getBoundingClientRect();
+          if (!(b.width > 0 && b.height > 0)) continue;
+          const box = { x: pctOf(b.x, compW), y: pctOf(b.y, compH), w: pctOf(b.width, compW), h: pctOf(b.height, compH) };
+          if (box.x >= 100 || box.y >= 100 || box.x + box.w <= 0 || box.y + box.h <= 0) continue; // wholly off-frame
+          const hit = detectCaptionSafeArea(box, inset);
+          if (!hit.violates) continue;
+          const cand = toCandidate(el, null); // full candidate (selector/style) only for a violation
+          const key = proposalKey(cand.target);
+          if (actedProposals.has(key)) continue; // confirmed/dismissed this session — don't re-show or re-count
+          if (alreadyNoted(cand.target)) continue; // a confirmed proposal already filed a note for this caption
+          proposals.push({ key, target: cand.target, box, edge: hit.edge, reason: hit.reason });
+        }
+        return proposals;
+      }
+      // The bounded list reported to the server (inside the existing composition POST) so lift =
+      // accepted/shown is measurable — no separate metrics endpoint, ledger stays server-authored. Reports
+      // each proposal only ONCE per page-session (a live-reload re-mount re-shows the same caption, but it
+      // must not re-inflate the `shown` denominator), and marks them reported.
+      function drainUnreportedProposals() {
+        const fresh = proposals.filter((p) => !reportedProposals.has(p.key));
+        fresh.forEach((p) => reportedProposals.add(p.key)); // one-shot: marks them reported (consumes)
+        return fresh.map((p) => ({ detector: CAPTION_DETECTOR, selector: p.target.selector, edge: p.edge }));
+      }
+      // Place a %-of-comp box {x,y,w,h} onto an absolutely-positioned overlay element.
+      const placeBox = (el, b) => { el.style.left = `${b.x}%`; el.style.top = `${b.y}%`; el.style.width = `${b.w}%`; el.style.height = `${b.h}%`; };
+      function renderProposals() {
+        pins.querySelectorAll(".proposal").forEach((p) => p.remove());
+        proposalsDock.innerHTML = "";
+        if (!proposals.length) { proposalsDock.hidden = true; return; }
+        proposalsDock.hidden = false;
+        const head = document.createElement("div");
+        head.className = "prop-head";
+        head.textContent = `Vellum sees ${proposals.length} possible caption issue${proposals.length > 1 ? "s" : ""} — confirm or dismiss`;
+        proposalsDock.appendChild(head);
+        const mkBtn = (cls, label, title, onClick) => {
+          const b = document.createElement("button");
+          b.className = cls; b.textContent = label; b.title = title; b.onclick = onClick;
+          return b;
+        };
+        proposals.forEach((p, i) => {
+          const marker = document.createElement("div"); // purely visual (pointer-events:none) so it never eats a pin click
+          marker.className = "proposal" + (i === 0 ? " current" : "");
+          placeBox(marker, p.box);
+          marker.title = p.reason;
+          pins.appendChild(marker);
+          const row = document.createElement("div");
+          row.className = "prop-row" + (i === 0 ? " current" : "");
+          row.onmouseenter = () => flashTarget(p.target, "#fbbf24");
+          const txt = document.createElement("div");
+          txt.className = "prop-txt";
+          txt.textContent = p.reason;
+          row.append(
+            txt,
+            mkBtn("prop-add", "✓ Add note", i === 0 ? "Add as a note (Y)" : "Add as a note", () => confirmProposal(i)),
+            mkBtn("prop-dis", "✕ Dismiss", i === 0 ? "Dismiss (X)" : "Dismiss", () => dismissProposal(i)),
+          );
+          proposalsDock.appendChild(row);
+        });
+      }
+      async function confirmProposal(i) {
+        const p = proposals[i];
+        if (!p) return;
+        // Remove + suppress BEFORE awaiting the POST so KeyY auto-repeat / a double-click can't POST the
+        // same proposal twice (which would mint a duplicate note and double-count `accepted`). Restore it
+        // on failure.
+        actedProposals.add(p.key); // never re-show this caption (the note covers it now)
+        proposals.splice(i, 1);
+        renderProposals();
+        // Confirm = a normal note POST carrying origin as provenance — Vellum never edits the comp.
+        const time = round2(player ? player.getTime() : 0);
+        const payload = {
+          time,
+          x: p.box.x, y: p.box.y, w: p.box.w, h: p.box.h,
+          scene: sceneAt(time) || null, // canonical time→scene (same helper every other note path uses)
+          target: p.target,
+          text: p.reason,
+          origin: { by: "vellum", detector: CAPTION_DETECTOR, at: new Date().toISOString() },
+        };
+        let ok = false;
+        try {
+          ok = (await fetch(API, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(payload) })).ok;
+        } catch (e) { ok = false; }
+        if (!ok) {
+          actedProposals.delete(p.key); // let the reviewer retry
+          proposals.splice(i, 0, p);
+          renderProposals();
+          flash("Could not add note");
+          return;
+        }
+        flash("Proposal added as a note");
+        loadNotes();
+      }
+      function dismissProposal(i) {
+        const p = proposals[i];
+        if (!p) return;
+        actedProposals.add(p.key); // session-only — gates re-show AND the shown count on live-reload re-mount
+        proposals.splice(i, 1);
+        renderProposals();
+      }
+
       function renderMarkers() {
         pins.querySelectorAll(".pin, .region, .ghost-box").forEach((p) => p.remove());
         ghostLayer.querySelectorAll(".note-arrow").forEach((p) => p.remove());
