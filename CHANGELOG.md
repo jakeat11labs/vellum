@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - July 2, 2026
+
+A layout-hardening patch for the transport bar. No behavior change, no note-format change.
+
+### Fixed
+- **Scrubber no longer slips while scrubbing.** The scene-name label (`#scene-tag`) on the right of the transport bar had a `max-width` but no fixed width, so its footprint grew and shrank with each scene's name length. Because the label is rewritten every tick during playback/scrubbing and the scrubber wrapper is `flex: 1`, that variance reflowed the whole bar and slid the scrubber under the cursor. The label now occupies a constant-width slot (`flex: 0 0 88px`), so scene changes never reflow the bar. Long names still truncate with an ellipsis and now surface the full name on hover (`title`); the label's DOM is only rewritten when the name actually changes.
+
 ## [0.10.0] - June 28, 2026
 
 The roadmap's "bold bet" — **invert the sensor**. Until now the human was the sole detector and Vellum the scribe. This flips it: Vellum pre-lints the mounted composition and **proposes** candidate notes you confirm or dismiss with one key. Ships one detector first, measures whether it's worth it, then decides on more. Notes stay a bare JSON array; a confirmed proposal is a normal note carrying one optional field, so older notes are byte-identical.

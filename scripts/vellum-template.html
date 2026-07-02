@@ -165,7 +165,9 @@
       #note-tip .tip-text { font-size: 13px; color: #e8e8ea; line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; word-break: break-word; }
       #note-tip .tip-text.empty { color: #6f6f78; font-style: italic; }
       #tc { font-variant-numeric: tabular-nums; font-size: 12px; color: #b9b9c0; white-space: nowrap; flex-shrink: 0; letter-spacing: 0.02em; }
-      #scene-tag { font-size: 11px; color: #5eead4; max-width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex-shrink: 1; margin: 0 6px; }
+      /* Fixed-width slot: the scene name changes every tick while scrubbing; a constant footprint
+         (flex-basis + width, never shrinking) stops the name's length from reflowing the bar and sliding the scrubber. */
+      #scene-tag { font-size: 11px; color: #5eead4; flex: 0 0 88px; width: 88px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin: 0 6px; }
       #copy-scene { padding: 4px 6px; color: #4a4a54; background: transparent; border-color: transparent; font-size: 13px; flex-shrink: 0; }
       #copy-scene:hover { color: #b9b9c0; }
       /* Audio mix */
@@ -669,7 +671,8 @@
           const t = player.getTime();
           if (!scrub.matches(":active")) scrub.value = t;
           tc.textContent = `${fmt(t)} / ${fmt(duration)}`;
-          sceneTag.textContent = sceneAt(t) || "";
+          const sceneName = sceneAt(t) || "";
+          if (sceneTag.textContent !== sceneName) { sceneTag.textContent = sceneName; sceneTag.title = sceneName; }
           playBtn.textContent = player.isPlaying() ? "❚❚" : "▶";
           updateMarkerVisibility(t);
           applyMix();
