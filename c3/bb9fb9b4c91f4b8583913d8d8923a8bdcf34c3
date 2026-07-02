@@ -1,0 +1,21 @@
+dev-sandbox.sh
+  s_096305f75c5a2b::t_6886a64c75d049 68-72
+  s_096305f75c5a2b::t_0bbd308119a238 1-39,41-67,73-100
+  s_096305f75c5a2b::t_130bcb9e182c05 40
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.8",
+  "base_commit_sha": "c3bb9fb9b4c91f4b8583913d8d8923a8bdcf34c3",
+  "prompts": {},
+  "sessions": {
+    "s_096305f75c5a2b": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "df217517-992e-430d-bde9-105853cb8807",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
