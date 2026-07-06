@@ -1392,6 +1392,44 @@ function testToolImportsResolve() {
   assert.ok(checked > 0, "expected to resolve at least one local import across the tools");
 }
 
+// Zero-dependency guardrail C: the installer's TOOL_FILES manifest must be CLOSED under local
+// imports. testToolImportsResolve only proves imports resolve in THIS repo; a file split (like
+// vellum-notes.mjs in v0.9.0) can pass that while install.sh still ships a subset that crashes at
+// import time on a fresh install (the shipped server imports a module the installer never
+// downloaded). Parse TOOL_FILES out of install.sh and walk each shipped .mjs: every ./x.mjs it
+// imports must itself be listed in the manifest.
+function testInstallerManifestClosure() {
+  const installer = fs.readFileSync(INSTALLER, "utf8");
+  const m = /^TOOL_FILES="([^"]+)"/m.exec(installer);
+  assert.ok(m, "install.sh must define TOOL_FILES=\"…\"");
+  const manifest = new Set(m[1].trim().split(/\s+/));
+  const scriptsDir = path.join(REPO, "scripts");
+  const STATIC = /(?:^|[\s;])(?:import|export)\b[^'"]*?\sfrom\s*["']([^"']+)["']/g;
+  const BARE = /(?:^|[\s;])import\s*["']([^"']+)["']/g;
+  const DYN = /\bimport\s*\(\s*["']([^"']+)["']\s*\)/g;
+  let checked = 0;
+  for (const f of manifest) {
+    assert.ok(fs.existsSync(path.join(scriptsDir, f)), `TOOL_FILES lists "${f}" but scripts/${f} does not exist`);
+    if (!f.endsWith(".mjs") && f !== "vellum" && f !== "vellum-shim") continue;
+    const src = fs.readFileSync(path.join(scriptsDir, f), "utf8");
+    const specs = new Set();
+    for (const re of [STATIC, BARE, DYN]) {
+      let sm;
+      while ((sm = re.exec(src))) specs.add(sm[1]);
+    }
+    for (const spec of specs) {
+      if (!spec.startsWith("./")) continue; // node: / bare deps resolved separately
+      const dep = spec.slice(2);
+      assert.ok(
+        manifest.has(dep),
+        `install.sh TOOL_FILES is missing "${dep}" — shipped ${f} imports it, so a fresh install crashes with ERR_MODULE_NOT_FOUND`
+      );
+      checked++;
+    }
+  }
+  assert.ok(checked > 0, "expected to check at least one local import against TOOL_FILES");
+}
+
 // Server hardening (a-harden): the dotfile denylist + the loopback Host allowlist. Uses raw
 // http.request so the Host header can be forged (fetch/undici won't let it be overridden) — the TCP
 // connection still lands on 127.0.0.1, only the Host header is a foreign / rebound domain.
@@ -1881,6 +1919,7 @@ await testAutolintRule();
 await testNoteStore();
 testPlayerNoExternalResources();
 testToolImportsResolve();
+testInstallerManifestClosure();
 testTemplateDesiredState();
 await testAutolintInlineMirror();
 await testServerApi();

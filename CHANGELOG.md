@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.2] - July 6, 2026
+
+An installer fix. No player, server, or note-format changes.
+
+### Fixed
+- **Fresh installs boot again.** `vellum-notes.mjs` was split out of the server in v0.9.0, but `install.sh`'s `TOOL_FILES` manifest was never updated — so every fresh install since then downloaded a `vellum-server.mjs` that crashed at import time with `ERR_MODULE_NOT_FOUND`. The note store now ships with the tool. Existing installs pick it up via `vellum update` (the updater re-runs the published installer).
+- **Manifest-closure guardrail.** A new smoke test (`testInstallerManifestClosure`) parses `TOOL_FILES` out of `install.sh` and asserts the shipped set is closed under local imports — the guardrail the v0.9.0 split slipped past (`testToolImportsResolve` only proves imports resolve in the repo, not that the installer ships them).
+
 ## [0.10.1] - July 2, 2026
 
 A layout-hardening patch for the transport bar. No behavior change, no note-format change.

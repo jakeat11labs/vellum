@@ -753,7 +753,7 @@ else
   warn "node_modules/hyperframes not found; run npm install in your HyperFrames project before reviewing"
 fi
 
-TOOL_FILES="vellum vellum-shim vellum-shared.mjs vellum-ui.mjs vellum-server.mjs vellum-template.html vellum-review.mjs vellum-update.mjs"
+TOOL_FILES="vellum vellum-shim vellum-shared.mjs vellum-ui.mjs vellum-notes.mjs vellum-server.mjs vellum-template.html vellum-review.mjs vellum-update.mjs"
 
 if [ "$WANT_TOOL" -eq 1 ]; then
   section "Review tool"
@@ -772,8 +772,8 @@ if [ "$WANT_TOOL" -eq 1 ]; then
   if [ -t 1 ]; then printf '\r%s[K' "$ESC"; fi
   chmod +x "$SCRIPTS_DIR/vellum" "$SCRIPTS_DIR/vellum-shim" 2>/dev/null || true
   ok "review tool → $SCRIPTS_DIR/ ($tool_count files)"
-  info "${dim}vellum · vellum-shim · vellum-shared.mjs · vellum-ui.mjs · vellum-server.mjs${reset}"
-  info "${dim}vellum-template.html · vellum-review.mjs · vellum-update.mjs${reset}"
+  info "${dim}vellum · vellum-shim · vellum-shared.mjs · vellum-ui.mjs · vellum-notes.mjs${reset}"
+  info "${dim}vellum-server.mjs · vellum-template.html · vellum-review.mjs · vellum-update.mjs${reset}"
 fi
 
 if [ "$WANT_TOOL" -eq 1 ]; then
