@@ -4,4 +4,14 @@
 set -e
 ROOT="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
+# Load project defaults (e.g. VELLUM_DIR) so ./scripts/vellum resolves the same
+# composition as `npm run vellum` and the global vellum shim. set -a exports the
+# file's plain `VELLUM_DIR=...` assignments into the exec'd node's environment —
+# sourcing alone only sets shell vars the child process never sees.
+if [ -f "$ROOT/.vellum.env" ]; then
+  set -a
+  # shellcheck disable=SC1090
+  . "$ROOT/.vellum.env"
+  set +a
+fi
 exec node "$(dirname "$0")/vellum-server.mjs" "$@"

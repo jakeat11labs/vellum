@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.3] - July 6, 2026
+
+A launcher fix so `VELLUM_DIR` from `.vellum.env` is actually honored. No player, server, or note-format changes.
+
+### Fixed
+- **`.vellum.env` is now exported, not just sourced.** The `vellum-shim` sourced `.vellum.env` but without `set -a`, so a plain `VELLUM_DIR=…` assignment became a shell variable the exec'd `node` child never saw — the shim could serve the empty project root instead of the configured composition subfolder (surfacing as a blank player or a "no composition root" mount error). Both launchers now wrap the source in `set -a` / `set +a` so `VELLUM_DIR` reaches the server.
+- **`./scripts/vellum` loads `.vellum.env` too.** The in-project launcher previously ignored `.vellum.env` entirely, so `./scripts/vellum` and `npm run vellum` could resolve different compositions. It now loads (and exports) the same env, so every entry point — `npm run vellum`, `./scripts/vellum`, and the global `vellum` shim — resolves one composition.
+
 ## [0.10.2] - July 6, 2026
 
 An installer fix. No player, server, or note-format changes.

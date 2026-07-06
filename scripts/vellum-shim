@@ -18,8 +18,12 @@ while [ "$dir" != "/" ]; do
   target="$dir/scripts/$script_name"
   if [ -f "$target" ]; then
     if [ -f "$dir/.vellum.env" ]; then
+      # set -a so plain `VELLUM_DIR=...` assignments are EXPORTED into node's
+      # environment (sourcing alone only sets shell vars the exec'd child can't see).
+      set -a
       # shellcheck disable=SC1090
       . "$dir/.vellum.env"
+      set +a
     fi
     cd "$dir"
     exec node "$target" "$@"
