@@ -1,0 +1,35 @@
+package.json
+  s_e77877694e0938::t_55e030b901ff26 3
+scripts/vellum-shim
+  s_954f10d710cc32::t_c240a9fd1dddf2 21-23,26
+scripts/vellum-shared.mjs
+  s_e77877694e0938::t_92bea73d7b6969 47
+scripts/vellum
+  s_954f10d710cc32::t_7987610e275af1 7-16
+CHANGELOG.md
+  s_e77877694e0938::t_b634e513484de3 10-17
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.10",
+  "base_commit_sha": "dc73283a1652a35afd6b2b558cfaef1e6ac4776e",
+  "prompts": {},
+  "sessions": {
+    "s_954f10d710cc32": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "c2766006-4e1d-4e59-8b4a-ada10a0a72ef",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    },
+    "s_e77877694e0938": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "439c2f30-dfdf-4a92-a894-d15c4fae9bdd",
+        "model": "claude-opus-4-8"
+      },
+      "human_author": "Jake Rains <jake@elevenlabs.io>"
+    }
+  }
+}
