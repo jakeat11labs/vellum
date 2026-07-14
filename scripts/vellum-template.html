@@ -138,7 +138,20 @@
       #bar #play { width: 36px; height: 36px; font-size: 14px; background: #1f1f25; border-color: #2c2c32; }
       /* Scrubber + time + scene */
       #scrubwrap { position: relative; flex: 1; min-width: 80px; margin: 0 10px; display: flex; align-items: center; }
-      #scrub { width: 100%; accent-color: #5eead4; height: 4px; margin: 0; cursor: pointer; position: relative; z-index: 1; }
+      /* The input is a tall (18px), transparent hit area so scrubbing doesn't need pixel-perfect vertical aim;
+         the visible track (5px) and grabbable thumb (15px) are drawn on the slider pseudo-elements. z-index:3
+         puts the seek surface above the note-dots (z:2) so a press anywhere on the bar — even under a dot — seeks. */
+      #scrub { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; margin: 0; padding: 0; background: transparent; cursor: pointer; position: relative; z-index: 3; touch-action: none; }
+      #scrub:focus { outline: none; }
+      #scrub::-webkit-slider-runnable-track { height: 5px; border-radius: 3px; background: linear-gradient(to right, #5eead4 0 var(--scrub-fill, 0%), #3a3a42 var(--scrub-fill, 0%) 100%); }
+      #scrub::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 15px; height: 15px; margin-top: -5px; border-radius: 50%; background: #5eead4; border: 2px solid #0d0d10; box-shadow: 0 1px 4px rgba(0,0,0,0.5); transition: transform .12s ease, box-shadow .12s ease; }
+      #scrub:hover::-webkit-slider-thumb, #scrub:active::-webkit-slider-thumb { transform: scale(1.25); box-shadow: 0 0 0 6px rgba(94,234,212,0.18), 0 1px 4px rgba(0,0,0,0.5); }
+      #scrub:active::-webkit-slider-thumb { cursor: grabbing; }
+      /* Firefox */
+      #scrub::-moz-range-track { height: 5px; border-radius: 3px; background: #3a3a42; }
+      #scrub::-moz-range-progress { height: 5px; border-radius: 3px; background: #5eead4; }
+      #scrub::-moz-range-thumb { width: 15px; height: 15px; border-radius: 50%; background: #5eead4; border: 2px solid #0d0d10; box-shadow: 0 1px 4px rgba(0,0,0,0.5); }
+      #scrub:hover::-moz-range-thumb, #scrub:active::-moz-range-thumb { transform: scale(1.25); box-shadow: 0 0 0 6px rgba(94,234,212,0.18), 0 1px 4px rgba(0,0,0,0.5); }
       /* Faint vertical ghost lines marking scene breaks (where ⏮/⏭ land) */
       .scene-ticks { position: absolute; left: 0; right: 0; top: 50%; height: 16px; transform: translateY(-50%); pointer-events: none; z-index: 0; }
       .scene-tick { position: absolute; top: 0; width: 1px; height: 100%; background: rgba(255,255,255,0.16); }
@@ -147,9 +160,11 @@
       .span-sel.single { border-right: 0; width: 0; }
       /* Colored dots above the bar, one per note, at its point on the timeline */
       .note-dots { position: absolute; left: 0; right: 0; top: 50%; height: 0; pointer-events: none; z-index: 2; }
-      .note-dot { position: absolute; top: -11px; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); background: var(--c, #5eead4); border: 1.5px solid #121216; box-shadow: 0 0 4px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; transition: transform .12s ease, filter .12s ease; }
-      /* Invisible padded hit area so the cursor catches the dot without pixel-perfect aim */
-      .note-dot::before { content: ""; position: absolute; left: 50%; top: 50%; width: 30px; height: 26px; transform: translate(-50%, -50%); }
+      .note-dot { position: absolute; top: -14px; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); background: var(--c, #5eead4); border: 1.5px solid #121216; box-shadow: 0 0 4px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; transition: transform .12s ease, filter .12s ease; }
+      /* Invisible padded hit area so the cursor catches the dot without pixel-perfect aim. Bounded UPWARD only
+         (bottom edge = the dot's own bottom) so it never overlaps the scrub track below — near a note the bar
+         stays fully scrubbable, and the dot still catches an easy hover/click above the bar. */
+      .note-dot::before { content: ""; position: absolute; left: -11px; right: -11px; top: -9px; bottom: 0; }
       .note-dot:hover { transform: translateX(-50%) scale(1.4); filter: brightness(1.2); }
       /* Scoped notes read differently at a glance: scene dots are square, audio dots are hollow rings */
       .note-dot.dot-scene { border-radius: 2px; }
@@ -670,6 +685,9 @@
         if (player) {
           const t = player.getTime();
           if (!scrub.matches(":active")) scrub.value = t;
+          // Paint the played portion of the track (teal fill). Read from scrub.value so it tracks the thumb
+          // while dragging and the playhead otherwise; scrub.max === duration.
+          scrub.style.setProperty("--scrub-fill", (scrub.max > 0 ? (scrub.value / scrub.max) * 100 : 0) + "%");
           tc.textContent = `${fmt(t)} / ${fmt(duration)}`;
           const sceneName = sceneAt(t) || "";
           if (sceneTag.textContent !== sceneName) { sceneTag.textContent = sceneName; sceneTag.title = sceneName; }
@@ -776,7 +794,11 @@
 
       // ---- transport ----
       playBtn.onclick = () => (player.isPlaying() ? player.pause() : player.play());
-      scrub.oninput = () => { player.pause(); player.seek(Number(scrub.value)); };
+      scrub.oninput = () => {
+        player.pause();
+        player.seek(Number(scrub.value));
+        scrub.style.setProperty("--scrub-fill", (scrub.max > 0 ? (scrub.value / scrub.max) * 100 : 0) + "%");
+      };
 
       function jumpScene(dir) {
         const starts = scenes.map((s) => s.start);

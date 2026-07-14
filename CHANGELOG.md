@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.4] - July 14, 2026
+
+A scrubber-feel patch for the transport bar. No server or note-format changes — CSS/interaction only.
+
+### Fixed
+- **The scrubber is easy to grab now.** The seek `<input>` was only 4px tall, so the entire clickable zone was a 4px strip — a click even slightly off vertically did nothing. The input is now an 18px-tall transparent hit area (the visible track stays a thin 5px), so a press anywhere along the bar's height seeks. The thumb is a larger 15px ball that grows with a soft ring on hover/drag, so grabbing it no longer needs pixel-perfect aim, and the played portion of the track now carries a teal fill (`--scrub-fill`, updated in `tick()` and on input).
+- **Notes no longer block scrubbing.** Each timeline note dot carried an invisible 30×26px hit box that extended *down over the track*, so pressing near a note grabbed the (drag-dead) dot instead of the scrubber. The dot hit area is now bounded upward-only (never over the track) and the dots sit a few px higher, above the taller seek surface — so a scrub can start anywhere, including directly under a dot. Dot hover-preview and click-to-jump are unchanged.
+
 ## [0.10.3] - July 6, 2026
 
 A launcher fix so `VELLUM_DIR` from `.vellum.env` is actually honored. No player, server, or note-format changes.
