@@ -1,0 +1,79 @@
+{
+  "version": "0.7.76",
+  "engines": {
+    "node": ">=22"
+  },
+  "runtimeFile": "hyperframe.runtime.iife.js",
+  "distTop": [
+    "beat-analyzer.global.js",
+    "cli.js",
+    "commands/",
+    "docker/",
+    "docs/",
+    "hyperframe-runtime.js",
+    "hyperframe.manifest.json",
+    "hyperframe.runtime.iife.js",
+    "hyperframes-player.global.js",
+    "hyperframes-slideshow.global.js",
+    "runtimeVersion.js",
+    "shaderTransitionWorker.js",
+    "skills/",
+    "studio/",
+    "templates/"
+  ],
+  "skills": {
+    "hyperframes": [
+      "SKILL.md",
+      "references/capability-menu.md",
+      "references/intent-interview.md",
+      "references/pitch-round.md",
+      "references/route-briefs.md",
+      "references/routes/embedded-captions.md",
+      "references/routes/faceless-explainer.md",
+      "references/routes/general-video.md",
+      "references/routes/motion-graphics.md",
+      "references/routes/music-to-video.md",
+      "references/routes/pr-to-video.md",
+      "references/routes/product-launch-video.md",
+      "references/routes/remotion-to-hyperframes.md",
+      "references/routes/slideshow.md",
+      "references/routes/talking-head-recut.md",
+      "references/skill-lifecycle.md",
+      "references/workflow-catalog.md"
+    ],
+    "hyperframes-cli": [
+      "SKILL.md",
+      "references/beats.md",
+      "references/cloud.md",
+      "references/cloudrun.md",
+      "references/compare-and-batch.md",
+      "references/doctor-browser.md",
+      "references/init-and-scaffold.md",
+      "references/lambda.md",
+      "references/lint-validate-inspect.md",
+      "references/preview-render.md",
+      "references/upgrade-info-misc.md"
+    ]
+  },
+  "runtimeContract": {
+    "__playerReady": true,
+    "__player": true,
+    "getDuration": true,
+    "__timelines": true,
+    "data-composition-id": true,
+    "data-start": true,
+    "data-duration": true,
+    "__HF_PICKER_API": true,
+    "getCandidatesAtPoint": true
+  },
+  "cliContract": {
+    "snapshot": true,
+    "init": true,
+    "skills": true,
+    "--non-interactive": true,
+    "skip-skills": true,
+    "skip-transcribe": true
+  },
+  "cliSkillDescription": "Use the HyperFrames CLI development loop: init, add, catalog, capture, lint, check, snapshot, compare, grade-compare, preview, play, present, beats, keyframes, single or batch render, publish, cloud, cloudrun, feedback, lambda, doctor, browser, info, upgrade, skills, compositions, docs, benchmark, telemetry, transcribe, auth, tts, and remove-background. Also use when diagnosing build or render failures. validate, inspect, and layout are deprecated aliases; use check. Covers local, HeyGen-hosted cloud, AWS Lambda, and Google Cloud Run rendering.",
+  "verifiedAgainstVellum": "^0.7.76"
+}

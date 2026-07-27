@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.5] - July 27, 2026
+
+A maintenance patch: clearer timeline markers, and Vellum caught up to the current HyperFrames line after its dependency pin had silently frozen 85 releases back. No server or note-format changes.
+
+### Added
+- **`vellum-hf-sync`, a maintainer skill for tracking HyperFrames upstream** (`.claude/skills/`, not shipped to users). Vellum has no compile-time link to HyperFrames, so drift stayed invisible until a user hit it. `hf-probe.mjs` fingerprints the published package — runtime globals, CLI flags, `dist/` layout, the shipped skill set — and diffs it against the last human-verified baseline, separating upstream drift from standing (sometimes deliberate) advisories. The skill wraps it with triage guidance and a rubric for judging new HyperFrames capabilities against Vellum's four load-bearing properties. `references/coupling-map.md` documents every Vellum↔HyperFrames touchpoint with file and line, including the three that are decoupled on purpose.
+
+### Changed
+- **Timeline note markers rotate shape as well as color.** Every marker was a small square or circle distinguished only by color, so a row of notes read as an undifferentiated band — and the shapes that *were* in use encoded note scope, not identity. Markers now cycle `square → triangle → circle → diamond` on the same id-driven cycle as the palette, so two adjacent notes always differ on two channels at once and the row stays readable without color vision. Scope moved to channels that don't fight the rotation: audio notes render hollow (the silhouette punched out), scene notes carry an underline. The silhouette is drawn on an inner `.glyph` element rather than on the marker itself — `clip-path` also clips an element's pseudo-elements, and `::before` is the padded hit area added in 0.10.4, so clipping the wrapper would have silently shrunk the grab zone back to the visible 11px.
+- **HyperFrames dependency moved to `^0.7.76`** (from `^0.6.91`). A caret range on a `0.x` version locks the *minor*, so `npm install` could never cross 0.6 → 0.7 and the pin had frozen 85 releases back while `install.sh` scaffolded new projects with `hyperframes@latest` — Vellum's tests and its users were on different major runtimes. Verified against 0.7.76: every runtime global Vellum depends on (`__playerReady`, `__player`, `__timelines`, `__HF_PICKER_API.getCandidatesAtPoint`), the `[data-start]` scene attributes, the `dist/` runtime glob, and all `hyperframes` CLI flags used by `install.sh` and `vellum-review` are unchanged. No code changes were needed.
+
+### Fixed
+- **Docs no longer promise a HyperFrames skill that was deleted.** The README and `install.sh` advertised a GSAP agent skill; HyperFrames dropped `skills/gsap` in 0.7.x, so the installer could never have delivered it. The `hyperframes-cli` tables in the README and the shipped `skills/vellum/SKILL.md` also listed `inspect`, now a deprecated alias — both now name `check`, the current audit gate. `skills/vellum/SKILL.md` ships to users' coding agents, so a stale command name there sent agents at a CLI verb that no longer exists.
+- **Node requirements are stated precisely.** The README said "Node ≥ 18" flatly, but the `hyperframes` CLI hard-errors below Node 22 — so the optional `vellum-review` packet and the installer's scaffolding needed 22 all along. The player itself is pure Node built-ins and genuinely runs on 18, so `engines` stays at `>=18` and the README now names the split rather than locking out working installs.
+
 ## [0.10.4] - July 14, 2026
 
 A scrubber-feel patch for the transport bar. No server or note-format changes — CSS/interaction only.

@@ -342,7 +342,7 @@ scaffold_hyperframes() {
   fi
   ok "created HyperFrames project (index.html, package.json)"
 
-  info "${t3}▸${reset} Installing HyperFrames + GSAP agent skills…"
+  info "${t3}▸${reset} Installing the HyperFrames agent skills…"
   if npx hyperframes@latest skills </dev/null; then
     ok "installed the /hyperframes skill set"
   else

@@ -74,7 +74,7 @@ vellum
 
 The installer drops the review tool into `scripts/`, adds a global `vellum` command to `~/.local/bin`, wires npm scripts when you have a `package.json`, and installs the agent skill to `.agents/skills/vellum/`. Pick Claude Code during install and `.claude/skills/vellum/` becomes a **symlink** to the same skill — one copy, both agents stay in sync.
 
-**No HyperFrames project yet?** Run the installer in an empty folder and it offers to scaffold one in place — `hyperframes init` for the composition, the full `/hyperframes` + GSAP agent skill set, and `npm install` — then layers Vellum on top. Force it with `--init` (or `VELLUM_INIT=1`), skip it with `--no-init`.
+**No HyperFrames project yet?** Run the installer in an empty folder and it offers to scaffold one in place — `hyperframes init` for the composition, the full `/hyperframes` agent skill set, and `npm install` — then layers Vellum on top. Force it with `--init` (or `VELLUM_INIT=1`), skip it with `--no-init`.
 
 Composition in a subfolder? Pass `--dir` during install:
 
@@ -82,7 +82,7 @@ Composition in a subfolder? Pass `--dir` during install:
 curl -fsSL https://tryvellum.vercel.app/install | sh -s -- --dir compositions/hero
 ```
 
-> **Requirements:** a HyperFrames project (an `index.html` composition) and Node ≥ 18. The HyperFrames runtime is resolved automatically — from a local `node_modules/hyperframes` if present, otherwise the npx cache or the CDN — so `npx`-style projects work without a local install. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
+> **Requirements:** a HyperFrames project (an `index.html` composition) and Node ≥ 18 for the review player itself. The optional extras — the `vellum-review` packet and the installer's project scaffolding — shell out to the `hyperframes` CLI, which requires **Node ≥ 22**. The HyperFrames runtime is resolved automatically — from a local `node_modules/hyperframes` if present, otherwise the npx cache or the CDN — so `npx`-style projects work without a local install. `ffmpeg` and the `hyperframes` CLI are only needed for the optional visual review packet.
 
 <details>
 <summary>Installer flags &amp; other install paths</summary>
@@ -177,7 +177,7 @@ The agent then:
 | Skill / tool | Owns |
 | --- | --- |
 | `hyperframes` | building & editing the composition |
-| `hyperframes-cli` | `lint` · `preview` · `snapshot` · `render` |
+| `hyperframes-cli` | `lint` · `check` · `preview` · `snapshot` · `render` |
 | **`vellum`** | turning human review notes into those edits |
 
 ## Try the demo

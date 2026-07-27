@@ -13,11 +13,15 @@ feedback onto frames. **Your job is to read that feedback and make the edits.**
 | Skill | Owns |
 |---|---|
 | `hyperframes` | building/editing the composition (scenes, captions, animation) |
-| `hyperframes-cli` | CLI: `lint`, `inspect`, `preview`, `snapshot`, `render` |
+| `hyperframes-cli` | CLI: `lint`, `check`, `preview`, `snapshot`, `render` |
 | **`vellum`** (this) | receiving human review notes and turning them into edits |
 
 When a note requires a composition change, follow the `hyperframes` skill's patterns for the
-actual edit. Use `hyperframes-cli` to verify (`lint`, then `snapshot --at <time>`).
+actual edit. Use `hyperframes-cli` to verify: `lint` for fast feedback while editing, then
+`snapshot --at <time>` to see the fixed frame. `check` is the fuller gate (it reruns lint,
+then audits runtime errors, layout, and contrast in a browser) — worth running once before
+you report back, rather than after every individual note. `inspect`, `validate`, and
+`layout` are deprecated aliases for `check`; don't use them.
 
 ## The workflow
 

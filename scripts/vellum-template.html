@@ -158,18 +158,33 @@
       /* Live in/out selection band on the track (behind the native slider, like .scene-ticks) */
       .span-sel { position: absolute; top: 50%; transform: translateY(-50%); height: 14px; z-index: 0; pointer-events: none; border-radius: 2px; background: color-mix(in srgb, #5eead4 18%, transparent); border-left: 2px solid #5eead4; border-right: 2px solid #5eead4; display: none; }
       .span-sel.single { border-right: 0; width: 0; }
-      /* Colored dots above the bar, one per note, at its point on the timeline */
+      /* Markers above the bar, one per note, at its point on the timeline. Shape and color both
+         cycle with the note id, so two neighbours never share either — twice the separation of
+         color alone, and the row stays readable without color vision. */
       .note-dots { position: absolute; left: 0; right: 0; top: 50%; height: 0; pointer-events: none; z-index: 2; }
-      .note-dot { position: absolute; top: -14px; width: 9px; height: 9px; border-radius: 50%; transform: translateX(-50%); background: var(--c, #5eead4); border: 1.5px solid #121216; box-shadow: 0 0 4px rgba(0,0,0,0.55); pointer-events: auto; cursor: pointer; transition: transform .12s ease, filter .12s ease; }
+      .note-dot { position: absolute; top: -16px; width: 11px; height: 11px; transform: translateX(-50%); pointer-events: auto; cursor: pointer; transition: transform .12s ease, filter .12s ease; }
+      /* The silhouette lives on an inner .glyph rather than on .note-dot itself, because clip-path
+         also clips an element's pseudo-elements — and ::before below is the padded hit area. Clipping
+         the wrapper would quietly shrink the grab zone back to the visible 11px. */
+      .note-dot .glyph { position: absolute; inset: 0; background: var(--c, #5eead4); clip-path: var(--shape, circle(50%));
+        filter: drop-shadow(1px 0 0 #121216) drop-shadow(-1px 0 0 #121216) drop-shadow(0 1px 0 #121216) drop-shadow(0 -1px 0 #121216) drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
+      /* Silhouettes are traced as clip-paths so the dark separator (a 4-way drop-shadow above)
+         follows the outline instead of boxing it. Order here is cosmetic only — JS picks by id. */
+      .note-dot.shape-square   { --shape: inset(0 round 2px); }
+      .note-dot.shape-triangle { --shape: polygon(50% 2%, 100% 100%, 0% 100%); }
+      .note-dot.shape-circle   { --shape: circle(50%); }
+      .note-dot.shape-diamond  { --shape: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); }
       /* Invisible padded hit area so the cursor catches the dot without pixel-perfect aim. Bounded UPWARD only
          (bottom edge = the dot's own bottom) so it never overlaps the scrub track below — near a note the bar
          stays fully scrubbable, and the dot still catches an easy hover/click above the bar. */
       .note-dot::before { content: ""; position: absolute; left: -11px; right: -11px; top: -9px; bottom: 0; }
       .note-dot:hover { transform: translateX(-50%) scale(1.4); filter: brightness(1.2); }
-      /* Scoped notes read differently at a glance: scene dots are square, audio dots are hollow rings */
-      .note-dot.dot-scene { border-radius: 2px; }
-      .note-dot.dot-audio { background: #121216; border-color: var(--c, #5eead4); box-shadow: 0 0 0 1.5px var(--c, #5eead4), 0 0 4px rgba(0,0,0,0.55); }
-      .note-dot.dot-stale { box-shadow: 0 0 0 2px #d9a23a, 0 0 5px rgba(0,0,0,0.55); }
+      /* Scope still reads at a glance, but on channels that don't fight the shape rotation: audio
+         notes are hollow (the silhouette punched out), scene notes carry an underline. */
+      .note-dot.dot-audio .glyph::after { content: ""; position: absolute; inset: 0; background: #121216; clip-path: var(--shape, circle(50%)); transform: scale(0.46); }
+      .note-dot.shape-triangle.dot-audio .glyph::after { transform-origin: 50% 66%; }
+      .note-dot.dot-scene::after { content: ""; position: absolute; left: -2px; right: -2px; bottom: -4px; height: 2px; border-radius: 1px; background: var(--c, #5eead4); opacity: .8; }
+      .note-dot.dot-stale .glyph { filter: drop-shadow(1.5px 0 0 #d9a23a) drop-shadow(-1.5px 0 0 #d9a23a) drop-shadow(0 1.5px 0 #d9a23a) drop-shadow(0 -1.5px 0 #d9a23a) drop-shadow(0 1px 2px rgba(0,0,0,0.55)); }
       /* Per-note interval bar from a note's dot to its timeEnd point */
       .note-span { position: absolute; top: -6px; height: 4px; border-radius: 2px; background: color-mix(in srgb, var(--c, #5eead4) 55%, transparent); pointer-events: none; }
       /* Hover preview for a timeline dot — fixed so it floats above the viewer, accented in the note's color (--c).
@@ -424,16 +439,22 @@
       let subtitlesOn = true;
       try { subtitlesOn = localStorage.getItem("vellum-cc") !== "0"; } catch (e) {}
 
-      // Per-note colors. Notes carry stable incrementing integer ids, so map id → palette
-      // by (id-1) so adjacent notes always differ and a note keeps its color for life.
-      const NOTE_PALETTE = ["#5eead4","#f472b6","#facc15","#a78bfa","#fb923c","#60a5fa","#4ade80","#f87171","#22d3ee","#e879f9","#fcd34d","#34d399"];
-      function colorFor(id) {
+      // Per-note look. Notes carry stable incrementing integer ids, so map id → cycle position
+      // by (id-1): adjacent notes always differ and a note keeps its look for life. Ids that
+      // aren't positive integers (legacy or hand-edited files) fall back to a string hash.
+      function noteIndex(id) {
         const n = Number(id);
-        if (Number.isInteger(n) && n > 0) return NOTE_PALETTE[(n - 1) % NOTE_PALETTE.length];
+        if (Number.isInteger(n) && n > 0) return n - 1;
         let h = 0; const s = String(id);
         for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
-        return NOTE_PALETTE[h % NOTE_PALETTE.length];
+        return h;
       }
+      const NOTE_PALETTE = ["#5eead4","#f472b6","#facc15","#a78bfa","#fb923c","#60a5fa","#4ade80","#f87171","#22d3ee","#e879f9","#fcd34d","#34d399"];
+      // Timeline markers rotate shape alongside color. Both step by one per note, so consecutive
+      // markers differ on two channels at once — the point is telling neighbours apart at 11px.
+      const NOTE_SHAPES = ["square","triangle","circle","diamond"];
+      const colorFor = (id) => NOTE_PALETTE[noteIndex(id) % NOTE_PALETTE.length];
+      const shapeFor = (id) => NOTE_SHAPES[noteIndex(id) % NOTE_SHAPES.length];
 
       let player = null;       // the HyperFrames player living inside the iframe
       let compDoc = null;      // iframe.contentDocument
@@ -2191,9 +2212,11 @@
           const verified = status === "addressed" || status === "resolved";
           const contentStale = n.provenance && baselineHash && n.provenance.indexHash && n.provenance.indexHash !== baselineHash;
           const stale = !verified && (contentStale || (n.target && compDoc && !resolveTargetEl(n.target)));
-          dot.className = `note-dot${n.kind === "scene" ? " dot-scene" : n.kind === "audio" ? " dot-audio" : n.kind === "span" ? " dot-span" : ""}${stale ? " dot-stale" : ""}`;
+          dot.className = `note-dot shape-${shapeFor(n.id)}${n.kind === "scene" ? " dot-scene" : n.kind === "audio" ? " dot-audio" : n.kind === "span" ? " dot-span" : ""}${stale ? " dot-stale" : ""}`;
           dot.style.left = `${pct}%`;
           dot.style.setProperty("--c", colorFor(n.id));
+          // The silhouette is a child, not the marker itself — see .glyph in the stylesheet.
+          dot.appendChild(Object.assign(document.createElement("div"), { className: "glyph" }));
           dot.onclick = (ev) => { ev.stopPropagation(); player.pause(); player.seek(n.time); };
           dot.addEventListener("mouseenter", () => showNoteTip(n, dot));
           dot.addEventListener("mouseleave", hideNoteTip);
